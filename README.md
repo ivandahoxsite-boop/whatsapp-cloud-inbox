@@ -43,6 +43,10 @@ WHATSAPP_API_URL=https://api.kapso.ai/meta/whatsapp  # Optional: custom API endp
 # Optional: only needed when your platform API is on a different host
 KAPSO_API_BASE_URL=https://api.kapso.ai
 
+# Required: password for the browser login prompt (username defaults to "admin")
+INBOX_PASSWORD=choose_a_strong_password
+INBOX_USERNAME=admin  # Optional
+
 # Optional: backwards-compatible single-number fallback
 PHONE_NUMBER_ID=your_phone_number_id
 WABA_ID=your_business_account_id
