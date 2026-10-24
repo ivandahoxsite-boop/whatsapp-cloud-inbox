@@ -144,16 +144,10 @@ EOF
 chmod 755 /usr/local/bin/crm-backup
 echo "15 3 * * * crm /usr/local/bin/crm-backup >/dev/null 2>&1" > /etc/cron.d/crm-backup
 
-cat > /usr/local/bin/crm-update <<EOF
-#!/usr/bin/env bash
-set -euo pipefail
-# git must run as the owner of the checkout (root gets "dubious ownership")
-sudo -u crm -H git -C "$APP" fetch -q origin "$BRANCH"
-sudo -u crm -H git -C "$APP" checkout -q -B "$BRANCH" "origin/$BRANCH"
-sudo -u crm -H env PATH="$NODE_DIR:/usr/bin:/bin" bash -c "cd '$APP' && npm ci --no-audit --no-fund && npm run build"
-/usr/local/bin/crm-backup || true
-systemctl restart crm
-echo "CRM actualizado."
+# Thin wrapper: the real update logic lives in the repo, so it improves with every update.
+cat > /usr/local/bin/crm-update <<'EOF'
+#!/bin/sh
+exec bash /opt/crm/deploy/update.sh "$@"
 EOF
 chmod 755 /usr/local/bin/crm-update
 

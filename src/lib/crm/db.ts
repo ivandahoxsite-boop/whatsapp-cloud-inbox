@@ -129,6 +129,20 @@ function migrate(d: DatabaseSync) {
     -- Data imported before these fixes: media placeholders and phone numbers used as names.
     UPDATE activities SET text = '📎 Archivo' WHERE text LIKE '[Media%]';
     UPDATE contacts SET name = '' WHERE name <> '' AND trim(name, '0123456789+ ()-') = '';
+    -- Result of each WhatsApp history import, so it survives restarts and updates.
+    CREATE TABLE IF NOT EXISTS sync_runs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      mode TEXT NOT NULL,
+      started_at TEXT NOT NULL,
+      finished_at TEXT,
+      pages INTEGER NOT NULL DEFAULT 0,
+      messages_seen INTEGER NOT NULL DEFAULT 0,
+      activities_added INTEGER NOT NULL DEFAULT 0,
+      contacts_created INTEGER NOT NULL DEFAULT 0,
+      names_filled INTEGER NOT NULL DEFAULT 0,
+      oldest_message_at TEXT,
+      error TEXT
+    );
     CREATE TABLE IF NOT EXISTS segments (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,

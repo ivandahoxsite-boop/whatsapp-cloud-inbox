@@ -9,9 +9,12 @@ export async function GET() {
 }
 
 // Starts importing the WhatsApp history stored in Kapso (read-only, sends nothing).
-export async function POST() {
+// Body { "mode": "incremental" } only fetches what arrived since the last import.
+export async function POST(request: Request) {
+  const body = (await request.json().catch(() => ({}))) as { mode?: string };
+  const mode = body.mode === 'incremental' ? 'incremental' : 'full';
   const phoneNumberId = process.env.PHONE_NUMBER_ID?.trim();
   if (!process.env.KAPSO_API_KEY?.trim()) return NextResponse.json({ error: 'Falta KAPSO_API_KEY en el servidor' }, { status: 503 });
   if (!phoneNumberId) return NextResponse.json({ error: 'Falta PHONE_NUMBER_ID en el servidor' }, { status: 503 });
-  return NextResponse.json(startSync(phoneNumberId));
+  return NextResponse.json(startSync(phoneNumberId, mode));
 }

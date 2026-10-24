@@ -9,8 +9,12 @@ import { normalizePhone } from './customers';
 // to messages that arrive after the webhook was created. Read-only on Kapso's side:
 // it never sends anything, so it cannot affect the number's quality or get it restricted.
 
+export type SyncMode = 'full' | 'incremental';
+
 export type SyncState = {
   running: boolean;
+  /** full: whole history + names. incremental: newest pages until one is already imported. */
+  mode: SyncMode | null;
   startedAt: string | null;
   finishedAt: string | null;
   pages: number;
@@ -25,6 +29,11 @@ export type SyncState = {
   error: string | null;
 };
 
+export type SyncStatus = SyncState & {
+  /** What the CRM holds right now, so it is obvious nothing was lost after an update. */
+  totals: { contacts: number; messages: number; sales: number };
+};
+
 const PAGE_SIZE = 100;
 const PAUSE_MS = 400; // between pages, well under Kapso's per-minute API limits
 const MAX_PAGES = 1000; // safety stop: 100k messages
@@ -34,6 +43,7 @@ const SKIP_TYPES = new Set(['reaction', 'sticker', 'system', 'unsupported', 'edi
 
 const state: SyncState = {
   running: false,
+  mode: null,
   startedAt: null,
   finishedAt: null,
   pages: 0,
@@ -47,7 +57,60 @@ const state: SyncState = {
   error: null
 };
 
-export const getSyncState = (): SyncState => ({ ...state });
+type RunRow = {
+  mode: SyncMode; started_at: string; finished_at: string | null; pages: number; messages_seen: number; activities_added: number;
+  contacts_created: number; names_filled: number; oldest_message_at: string | null; error: string | null;
+};
+
+/** Live state while running; otherwise the last run stored in the database (survives restarts). */
+export function getSyncState(): SyncStatus {
+  const d = getDb();
+  const count = (sql: string) => (d.prepare(sql).get() as { n: number }).n;
+  const totals = {
+    contacts: count('SELECT COUNT(*) AS n FROM contacts'),
+    messages: count("SELECT COUNT(*) AS n FROM activities WHERE kind IN ('whatsapp_in', 'whatsapp_out')"),
+    sales: count('SELECT COUNT(*) AS n FROM sales')
+  };
+  if (state.running || state.startedAt) return { ...state, totals };
+  const last = d.prepare('SELECT * FROM sync_runs ORDER BY id DESC LIMIT 1').get() as RunRow | undefined;
+  if (!last) return { ...state, totals };
+  return {
+    running: false,
+    mode: last.mode,
+    startedAt: last.started_at,
+    finishedAt: last.finished_at,
+    pages: last.pages,
+    messagesSeen: last.messages_seen,
+    activitiesAdded: last.activities_added,
+    contactsCreated: last.contacts_created,
+    skipped: 0,
+    namesFilled: last.names_filled,
+    phase: null,
+    oldestMessageAt: last.oldest_message_at,
+    error: last.error,
+    totals
+  };
+}
+
+function saveRun() {
+  getDb()
+    .prepare(
+      `INSERT INTO sync_runs (mode, started_at, finished_at, pages, messages_seen, activities_added, contacts_created, names_filled, oldest_message_at, error)
+       VALUES (?,?,?,?,?,?,?,?,?,?)`
+    )
+    .run(
+      state.mode ?? 'full',
+      state.startedAt ?? new Date().toISOString(),
+      state.finishedAt,
+      state.pages,
+      state.messagesSeen,
+      state.activitiesAdded,
+      state.contactsCreated,
+      state.namesFilled,
+      state.oldestMessageAt,
+      state.error
+    );
+}
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const sqlTime = (unixSeconds: number) => new Date(unixSeconds * 1000).toISOString().slice(0, 19).replace('T', ' ');
@@ -104,8 +167,9 @@ async function fillNamesFromContacts(phoneNumberId: string) {
   }
 }
 
-/** Stores one page of messages, skipping ones that are already in the CRM. */
-function storePage(messages: Msg[], phoneNumberId: string) {
+/** Stores one page of messages, skipping ones that are already in the CRM. Returns how many were new. */
+function storePage(messages: Msg[], phoneNumberId: string): number {
+  const addedBefore = state.activitiesAdded;
   const d = getDb();
   // Outbound messages are sent from the business number; never turn it into a customer.
   const ownNumbers = new Set(messages.filter((m) => kv(m, 'direction', 'direction') === 'outbound' && m.from).map((m) => normalizePhone(m.from!)));
@@ -150,13 +214,15 @@ function storePage(messages: Msg[], phoneNumberId: string) {
     d.exec('ROLLBACK');
     throw e;
   }
+  return state.activitiesAdded - addedBefore;
 }
 
 /** Starts the import in the background; a second call while running is a no-op. */
-export function startSync(phoneNumberId: string): SyncState {
+export function startSync(phoneNumberId: string, mode: SyncMode = 'full'): SyncStatus {
   if (state.running) return getSyncState();
   Object.assign(state, {
     running: true,
+    mode,
     startedAt: new Date().toISOString(),
     finishedAt: null,
     pages: 0,
@@ -177,20 +243,29 @@ export function startSync(phoneNumberId: string): SyncState {
         const page = await fetchPage(phoneNumberId, after);
         const data = (page.data ?? []) as unknown as Msg[];
         state.pages++;
-        if (data.length) storePage(data, phoneNumberId);
+        const added = data.length ? storePage(data, phoneNumberId) : 0;
         const next = page.paging?.cursors?.after;
         if (!data.length || !next || !page.paging?.next) break;
+        // Pages come newest first: a page with nothing new means the rest is already imported.
+        if (mode === 'incremental' && added === 0) break;
         after = next;
         await sleep(PAUSE_MS);
       }
-      state.phase = 'nombres';
-      await fillNamesFromContacts(phoneNumberId);
+      if (mode === 'full') {
+        state.phase = 'nombres';
+        await fillNamesFromContacts(phoneNumberId);
+      }
     } catch (e) {
       state.error = e instanceof Error ? e.message : String(e);
     } finally {
       state.phase = null;
       state.running = false;
       state.finishedAt = new Date().toISOString();
+      try {
+        saveRun();
+      } catch {
+        // The summary is informational; never let it hide the import result.
+      }
     }
   })();
 
