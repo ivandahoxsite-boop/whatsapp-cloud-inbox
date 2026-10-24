@@ -48,6 +48,8 @@ Use it directly in commands (`curl -H "Authorization: Bearer $CRM_AGENT_TOKEN" .
    - `externalId` = invoice number (or `invoice-line` if you send one row per product). **Always send it**: sales already stored with that id are skipped, so re-running is safe.
    - `soldAt`: `YYYY-MM-DD` or `DD/MM/YYYY`. `amount`: number in pesos (no symbols needed).
    - Customers that don't exist yet are created and moved to the stage "Cliente".
+   - Optional per sale: `data` (kept with the sale, e.g. `{"seller":"IVAN HOYOS","zone":"ANTIOQUIA","qty":72}`) and `tags` added to the customer (e.g. `["Zona Antioquia","Vendedor Ivan Hoyos"]`).
+   - Monthly data (no exact day): use the first day of the month as `soldAt` and a stable id such as `ANX-<client>-<year>-<month>-<product>` as `externalId`.
 - Phones: any format works; Colombian mobiles without 57 (`3001234567`) are matched to the WhatsApp contact `573001234567`.
 - Send at most 2000 items per request (500 is a good batch). Each response returns `created`, `duplicates`/`updated` and `skipped` with the reason per row: report those numbers to the user.
 - Start with a small test (10 rows), show the user the result, then load the rest.

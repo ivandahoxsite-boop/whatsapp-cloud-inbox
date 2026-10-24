@@ -347,6 +347,10 @@ export type SaleUpsert = {
   externalId?: string;
   name?: string;
   city?: string;
+  /** Extra details kept with the sale, e.g. { seller, zone, qty }. */
+  data?: Record<string, unknown>;
+  /** Tags added to the customer, e.g. ["Zona Antioquia"]. */
+  tags?: string[];
 };
 
 type Skip = { index: number; reason: string };
@@ -429,13 +433,16 @@ export function upsertSales(items: SaleUpsert[]) {
         );
         res.contactsCreated++;
       }
-      d.prepare('INSERT INTO sales (contact_id, sold_at, amount, product, external_id) VALUES (?,?,?,?,?)').run(
+      d.prepare('INSERT INTO sales (contact_id, sold_at, amount, product, external_id, data) VALUES (?,?,?,?,?,?)').run(
         contactId,
         soldAt,
         amount,
         String(it.product ?? '').trim().slice(0, 120),
-        externalId
+        externalId,
+        JSON.stringify(it.data && typeof it.data === 'object' ? it.data : {})
       );
+      const tags = (Array.isArray(it.tags) ? it.tags : []).map(String).filter((t) => t.trim());
+      if (tags.length) addTags([contactId], tags.map(ensureTag));
       res.created++;
     });
     d.exec('COMMIT');
