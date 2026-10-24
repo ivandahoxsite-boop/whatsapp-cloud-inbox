@@ -91,6 +91,8 @@ export function getDb(): DatabaseSync {
     );
   `);
 
+  migrate(db);
+
   const stageCount = db.prepare('SELECT COUNT(*) AS n FROM stages').get() as { n: number };
   if (stageCount.n === 0) {
     const insert = db.prepare('INSERT INTO stages (name, position) VALUES (?, ?)');
@@ -98,6 +100,37 @@ export function getDb(): DatabaseSync {
   }
 
   return db;
+}
+
+// Additive, idempotent schema changes for databases created by earlier versions.
+function migrate(d: DatabaseSync) {
+  const contactCols = d.prepare('PRAGMA table_info(contacts)').all() as unknown as { name: string }[];
+  if (!contactCols.some((c) => c.name === 'city')) {
+    d.exec("ALTER TABLE contacts ADD COLUMN city TEXT NOT NULL DEFAULT ''");
+    // City used to be a custom field; promote it to a real column so it can be grouped and filtered.
+    d.exec(`UPDATE contacts SET city = trim(COALESCE(json_extract(data, '$.ciudad'), json_extract(data, '$.city'), ''))`);
+    d.exec("DELETE FROM fields WHERE entity = 'contact' AND key IN ('ciudad', 'city')");
+  }
+  d.exec(`
+    CREATE INDEX IF NOT EXISTS contacts_city_idx ON contacts(city);
+    CREATE TABLE IF NOT EXISTS tags (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+      color TEXT NOT NULL DEFAULT ''
+    );
+    CREATE TABLE IF NOT EXISTS contact_tags (
+      contact_id INTEGER NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
+      tag_id INTEGER NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
+      PRIMARY KEY (contact_id, tag_id)
+    );
+    CREATE INDEX IF NOT EXISTS contact_tags_tag_idx ON contact_tags(tag_id);
+    CREATE TABLE IF NOT EXISTS segments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      filter TEXT NOT NULL DEFAULT '{}',
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+  `);
 }
 
 export function slugifyKey(label: string): string {

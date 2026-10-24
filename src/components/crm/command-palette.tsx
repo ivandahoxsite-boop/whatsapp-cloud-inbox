@@ -2,24 +2,34 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { CornerDownLeft, Search } from 'lucide-react';
-import { SEGMENT_INFO, type Segment } from '@/lib/crm/scoring';
+import { RECURRENCE_INFO, SEGMENT_INFO, type Recurrence, type Segment } from '@/lib/crm/scoring';
+import type { CustomerFilter } from '@/lib/crm/filters';
 import type { Customer } from '@/lib/crm/customers';
+import { cityOptions } from './shared';
 
-export type CrmTab = 'resumen' | 'clientes' | 'aprobaciones' | 'importar' | 'estructura';
+export type CrmTab = 'resumen' | 'clientes' | 'segmentos' | 'aprobaciones' | 'importar' | 'estructura';
 
 type Item = { id: string; group: string; label: string; hint?: string; run: () => void };
 
-const norm = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+const norm = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 
 // Plain-language shortcuts so you can type what you want instead of finding a filter.
-const SYNONYMS: Record<Segment, string[]> = {
+const RFM_WORDS: Record<Segment, string[]> = {
   campeon: ['campeon', 'vip', 'mejores', 'top'],
-  leal: ['leal', 'fiel', 'recurrente'],
-  potencial: ['potencial', 'nuevo', 'oportunidad', 'vender'],
+  leal: ['leal'],
+  potencial: ['potencial', 'oportunidad', 'vender'],
   en_riesgo: ['riesgo', 'enfria', 'perder'],
   dormido_valioso: ['dormido', 'reactivar', 'inactivo', 'valioso', 'recuperar'],
   perdido: ['perdido'],
-  sin_compras: ['sin compra', 'prospecto']
+  sin_compras: ['sin compra']
+};
+const RECURRENCE_WORDS: Record<Recurrence, string[]> = {
+  prospecto: ['prospecto', 'lead', 'no ha comprado'],
+  primera_compra: ['primera', 'nuevo', 'segunda compra'],
+  una_vez: ['una vez', 'una compra', 'no volvio'],
+  recurrente: ['recurrente', 'fiel', 'frecuente', 'repite'],
+  por_recomprar: ['toca', 'recomprar', 'atrasad', 'renovar', 'pendiente'],
+  recurrente_perdido: ['dejo de', 'perdido']
 };
 
 export function CommandPalette({
@@ -27,15 +37,15 @@ export function CommandPalette({
   onClose,
   customers,
   onTab,
-  onSegment,
-  onSearch
+  onFilter,
+  onOpenCustomer
 }: {
   open: boolean;
   onClose: () => void;
   customers: Customer[];
   onTab: (t: CrmTab) => void;
-  onSegment: (s: Segment) => void;
-  onSearch: (q: string) => void;
+  onFilter: (f: CustomerFilter) => void;
+  onOpenCustomer: (id: number) => void;
 }) {
   const [text, setText] = useState('');
   const [active, setActive] = useState(0);
@@ -59,40 +69,63 @@ export function CommandPalette({
       [
         ['resumen', 'Ir a Resumen'],
         ['clientes', 'Ir a Clientes'],
+        ['segmentos', 'Ir a Segmentos'],
         ['aprobaciones', 'Aprobar mensajes del agente'],
         ['importar', 'Importar ventas'],
-        ['estructura', 'Editar estructura (campos y etapas)']
+        ['estructura', 'Editar estructura (campos, etapas, etiquetas)']
       ] as [CrmTab, string][]
     ).map(([t, label]) => ({ id: `nav-${t}`, group: 'Ir a', label, run: done(() => onTab(t)) }));
 
+    const recs: Item[] = (Object.keys(RECURRENCE_INFO) as Recurrence[]).map((r) => ({
+      id: `rec-${r}`,
+      group: 'Tipo',
+      label: `Mostrar: ${RECURRENCE_INFO[r].label}`,
+      hint: RECURRENCE_INFO[r].hint,
+      run: done(() => onFilter({ recurrence: [r] }))
+    }));
     const segs: Item[] = (Object.keys(SEGMENT_INFO) as Segment[]).map((s) => ({
       id: `seg-${s}`,
-      group: 'Segmentos',
+      group: 'Valor',
       label: `Mostrar: ${SEGMENT_INFO[s].label}`,
       hint: SEGMENT_INFO[s].hint,
-      run: done(() => onSegment(s))
+      run: done(() => onFilter({ rfm: [s] }))
+    }));
+    const cities: Item[] = cityOptions(customers).map((c) => ({
+      id: `city-${c.name}`,
+      group: 'Ciudad',
+      label: `Clientes de ${c.name}`,
+      hint: `${c.count} clientes`,
+      run: done(() => onFilter({ cities: [c.name] }))
     }));
 
-    if (!q) return [...nav, ...segs];
+    if (!q) return [...nav, recs.find((r) => r.id === 'rec-por_recomprar')!, ...recs.filter((r) => r.id !== 'rec-por_recomprar'), ...segs];
 
-    const bySynonym = (Object.keys(SYNONYMS) as Segment[])
-      .filter((s) => SYNONYMS[s].some((w) => q.includes(w) || w.includes(q)))
-      .map((s) => segs.find((x) => x.id === `seg-${s}`)!);
+    const byWords = [
+      ...(Object.keys(RECURRENCE_WORDS) as Recurrence[])
+        .filter((r) => RECURRENCE_WORDS[r].some((w) => q.includes(w) || (q.length >= 3 && w.startsWith(q))))
+        .map((r) => recs.find((x) => x.id === `rec-${r}`)!),
+      ...(Object.keys(RFM_WORDS) as Segment[])
+        .filter((s) => RFM_WORDS[s].some((w) => q.includes(w) || (q.length >= 3 && w.startsWith(q))))
+        .map((s) => segs.find((x) => x.id === `seg-${s}`)!)
+    ];
+    const cityHits = cities.filter((c) => norm(c.label).includes(q)).slice(0, 3);
 
+    const digits = q.replace(/\D/g, '');
     const people: Item[] = customers
-      .filter((c) => norm(c.name).includes(q) || c.phone.includes(q.replace(/\D/g, '') || '§'))
+      .filter((c) => norm(c.name).includes(q) || (digits.length >= 3 && c.phone.includes(digits)))
       .slice(0, 5)
       .map((c) => ({
         id: `c-${c.id}`,
-        group: 'Clientes',
+        group: 'Cliente',
         label: c.name || `+${c.phone}`,
-        hint: `${SEGMENT_INFO[c.segment].label} · potencial ${c.score}`,
-        run: done(() => onSearch(c.name || c.phone))
+        hint: `${RECURRENCE_INFO[c.recurrence].label}${c.city ? ` · ${c.city}` : ''} · potencial ${c.score}`,
+        run: done(() => onOpenCustomer(c.id))
       }));
 
-    const rest = [...nav, ...segs].filter((i) => norm(i.label).includes(q) && !bySynonym.includes(i));
-    return [...bySynonym, ...people, ...rest];
-  }, [text, customers, onClose, onTab, onSegment, onSearch]);
+    const shown = new Set([...byWords, ...cityHits].map((i) => i.id));
+    const rest = [...nav, ...recs, ...segs].filter((i) => norm(i.label).includes(q) && !shown.has(i.id));
+    return [...byWords, ...people, ...cityHits, ...rest];
+  }, [text, customers, onClose, onTab, onFilter, onOpenCustomer]);
 
   if (!open) return null;
 
@@ -126,7 +159,7 @@ export function CommandPalette({
               setText(e.target.value);
               setActive(0);
             }}
-            placeholder="Escribe: “reactivar”, “vip”, un nombre o un teléfono…"
+            placeholder="Escribe: “le toca”, “fieles”, “Bogotá”, un nombre…"
             className="h-12 w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
           />
         </div>

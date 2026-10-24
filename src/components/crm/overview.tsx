@@ -1,166 +1,364 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { ArrowDownRight, ArrowUpRight, MessageCircle, Sparkles } from 'lucide-react';
-import { SEGMENT_INFO, type Segment } from '@/lib/crm/scoring';
-import type { Customer } from '@/lib/crm/customers';
-import { buildActions } from '@/lib/crm/actions';
-import type { MonthlyRevenue } from '@/app/api/crm/summary/route';
+import { ArrowDownRight, ArrowUpRight, MapPin, MessageCircle, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { RECURRENCE_INFO, SEGMENT_INFO, type Recurrence, type Segment } from '@/lib/crm/scoring';
+import { buildActions } from '@/lib/crm/actions';
+import { cityKey, type CustomerFilter } from '@/lib/crm/filters';
+import type { Summary } from '@/app/api/crm/summary/route';
+import { RECURRENCE_COLOR, SEGMENT_COLOR, TagPill, api, card, cityOptions, money, type CrmData } from './shared';
 
-const money = (n: number) => n.toLocaleString('es', { maximumFractionDigits: 0, useGrouping: 'always' });
 const MONTHS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 const monthLabel = (ym: string) => `${MONTHS[Number(ym.slice(5)) - 1]} ${ym.slice(2, 4)}`;
-const card = 'rounded-2xl border border-border/60 bg-card/60 p-4 backdrop-blur-xl';
+const pct = (a: number, b: number) => (b > 0 ? Math.round((a / b) * 100) : 0);
 
-const SEGMENT_COLOR: Record<Segment, string> = {
-  campeon: '#34d399',
-  leal: '#38bdf8',
-  potencial: '#fbbf24',
-  en_riesgo: '#fb923c',
-  dormido_valioso: '#e879f9',
-  perdido: '#71717a',
-  sin_compras: '#52525b'
-};
-
-export function Overview({
-  customers,
-  onSegment
-}: {
-  customers: Customer[];
-  onSegment: (s: Segment) => void;
-}) {
-  const { data } = useQuery({
-    queryKey: ['crm-summary', customers.length],
-    queryFn: async () => (await (await fetch('/api/crm/summary')).json()) as { months: MonthlyRevenue[] }
+export function Overview({ data, onFilter }: { data: CrmData; onFilter: (f: CustomerFilter) => void }) {
+  const [city, setCity] = useState('');
+  const { data: summary } = useQuery({
+    queryKey: ['crm-summary', data.customers.length],
+    queryFn: () => api<Summary>('/api/crm/summary')
   });
-  const months = data?.months ?? [];
 
-  const stats = useMemo(() => {
-    const withSales = customers.filter((c) => c.salesCount > 0);
-    const revenue = withSales.reduce((a, c) => a + c.totalSpent, 0);
-    const atRisk = customers.filter((c) => c.segment === 'dormido_valioso' || c.segment === 'en_riesgo');
-    const counts = new Map<Segment, number>();
-    customers.forEach((c) => counts.set(c.segment, (counts.get(c.segment) ?? 0) + 1));
+  const customers = useMemo(
+    () => (city ? data.customers.filter((c) => cityKey(c.city) === cityKey(city)) : data.customers),
+    [data.customers, city]
+  );
+  // Every drill-down keeps the dashboard's city filter.
+  const go = (f: CustomerFilter) => onFilter(city ? { ...f, cities: [city] } : f);
+
+  const s = useMemo(() => {
+    const buyers = customers.filter((c) => c.salesCount > 0);
+    const repeaters = buyers.filter((c) => c.avgIntervalDays != null);
+    const revenue = buyers.reduce((a, c) => a + c.totalSpent, 0);
+    const salesCount = buyers.reduce((a, c) => a + c.salesCount, 0);
+    const due = customers.filter((c) => c.recurrence === 'por_recomprar');
+    const rec = new Map<Recurrence, number>();
+    const seg = new Map<Segment, number>();
+    customers.forEach((c) => {
+      rec.set(c.recurrence, (rec.get(c.recurrence) ?? 0) + 1);
+      seg.set(c.segment, (seg.get(c.segment) ?? 0) + 1);
+    });
     return {
-      customers: customers.length,
+      total: customers.length,
+      buyers: buyers.length,
+      prospects: customers.length - buyers.length,
+      repeaters: repeaters.length,
       revenue,
-      avgTicket: withSales.length ? revenue / withSales.reduce((a, c) => a + c.salesCount, 0) : 0,
-      recoverable: atRisk.reduce((a, c) => a + c.avgTicket, 0),
-      atRisk: atRisk.length,
-      counts,
+      avgTicket: salesCount ? revenue / salesCount : 0,
+      due: due.length,
+      dueValue: due.reduce((a, c) => a + c.avgTicket, 0),
+      rec,
+      seg,
       actions: buildActions(customers)
     };
   }, [customers]);
 
-  const last = months[months.length - 1];
-  const prev = months[months.length - 2];
-  const delta = last && prev && prev.revenue > 0 ? ((last.revenue - prev.revenue) / prev.revenue) * 100 : null;
-  const max = Math.max(1, ...months.map((m) => m.revenue));
-  const order = (Object.keys(SEGMENT_INFO) as Segment[]).filter((s) => stats.counts.get(s));
+  const cities = useMemo(() => {
+    return cityOptions(data.customers)
+      .slice(0, 8)
+      .map((o) => {
+        const list = data.customers.filter((c) => cityKey(c.city) === cityKey(o.name));
+        const buyers = list.filter((c) => c.salesCount > 0);
+        return {
+          name: o.name,
+          customers: list.length,
+          revenue: list.reduce((a, c) => a + c.totalSpent, 0),
+          repeatRate: pct(buyers.filter((c) => c.avgIntervalDays != null).length, buyers.length)
+        };
+      });
+  }, [data.customers]);
+  const noCity = data.customers.filter((c) => !c.city).length;
+  const maxCityRevenue = Math.max(1, ...cities.map((c) => c.revenue));
+
+  const months = summary?.months ?? [];
+  const maxMonth = Math.max(1, ...months.map((m) => m.revenue));
+  const delta = summary && summary.prev30 > 0 ? ((summary.last30 - summary.prev30) / summary.prev30) * 100 : null;
+  const recOrder = (Object.keys(RECURRENCE_INFO) as Recurrence[]).filter((r) => s.rec.get(r));
+  const segOrder = (Object.keys(SEGMENT_INFO) as Segment[]).filter((x) => s.seg.get(x));
+  const maxProduct = Math.max(1, ...(summary?.products ?? []).map((p) => p.revenue));
+
+  if (data.customers.length === 0) {
+    return (
+      <div className={cn(card, 'space-y-2 text-sm')}>
+        <p className="font-medium">Tu CRM está vacío.</p>
+        <p className="text-muted-foreground">
+          Ve a <b>Importar</b> y sube tus ventas pasadas (CSV). Con eso verás aquí quién es recurrente, a quién le toca comprar y qué ciudades te
+          compran más. Los nuevos contactos de WhatsApp aparecen solos.
+        </p>
+      </div>
+    );
+  }
 
   return (
-    <div className="grid grid-cols-1 gap-4 md:grid-cols-6">
-      <Kpi className="md:col-span-2" label="Ingresos históricos" value={money(stats.revenue)} sub={`${stats.customers} clientes${delta === null ? '' : ` · ${delta >= 0 ? '+' : ''}${delta.toFixed(0)}% último mes vs anterior`}`} trend={delta} />
-      <Kpi
-        className="md:col-span-2"
-        label="Ticket promedio"
-        value={money(stats.avgTicket)}
-        sub="por venta" />
-      <Kpi
-        className="md:col-span-2"
-        label="Ingreso recuperable"
-        value={money(stats.recoverable)}
-        sub={`${stats.atRisk} clientes dormidos o en riesgo (estimado: 1 compra de ticket promedio c/u)`}
-        glow
-      />
+    <div className="space-y-4">
+      <div className="flex items-center gap-2">
+        <MapPin className="h-4 w-4 text-muted-foreground" />
+        <select value={city} onChange={(e) => setCity(e.target.value)} className="h-9 rounded-full border border-border/60 bg-card/50 px-3 text-sm">
+          <option value="">Todas las ciudades</option>
+          {cityOptions(data.customers).map((c) => (
+            <option key={c.name} value={c.name}>
+              {c.name} ({c.count})
+            </option>
+          ))}
+        </select>
+      </div>
 
-      <section className={cn(card, 'md:col-span-4')}>
-        <h2 className="mb-3 text-sm font-medium text-muted-foreground">Ingresos por mes</h2>
-        {months.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Sin datos todavía.</p>
-        ) : (
-          <div className="flex h-40 items-end gap-2">
-            {months.map((m) => (
-              <div key={m.month} className="group flex h-full min-w-0 flex-1 flex-col items-center gap-1" title={`${m.month}: ${money(m.revenue)} · ${m.sales} ventas`}>
-                <div className="flex w-full flex-1 items-end">
-                  <div
-                    className="w-full rounded-t-md bg-gradient-to-t from-emerald-500/30 to-emerald-400 transition-opacity group-hover:opacity-80"
-                    style={{ height: `${Math.max(3, (m.revenue / max) * 100)}%` }}
-                  />
-                </div>
-                <span className="whitespace-nowrap text-[10px] text-muted-foreground">{monthLabel(m.month)}</span>
-              </div>
-            ))}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+        <Kpi label="Clientes" value={String(s.buyers)} sub={`${s.prospects} prospectos sin compra`} onClick={() => go({})} />
+        <Kpi
+          label="Tasa de recompra"
+          value={`${pct(s.repeaters, s.buyers)}%`}
+          sub={`${s.repeaters} compraron 2+ veces`}
+          onClick={() => go({ recurrence: ['recurrente', 'por_recomprar', 'recurrente_perdido'] })}
+        />
+        <Kpi
+          label="Ventas 30 días"
+          value={money(summary?.last30 ?? 0)}
+          sub={delta == null ? 'todas las ciudades' : `${delta >= 0 ? '+' : ''}${delta.toFixed(0)}% vs 30 días antes`}
+          trend={delta}
+        />
+        <Kpi label="Ticket promedio" value={money(s.avgTicket)} sub={`${money(s.revenue)} en total`} />
+        <Kpi
+          label="Les toca recomprar"
+          value={String(s.due)}
+          sub={s.due ? `≈ ${money(s.dueValue)} si vuelven hoy` : 'nadie atrasado'}
+          glow={s.due > 0}
+          onClick={() => go({ recurrence: ['por_recomprar'] })}
+          className="col-span-2 lg:col-span-1"
+        />
+      </div>
+
+      {/* grid-cols-1 = minmax(0,1fr): lets wide content (the chart) shrink instead of overflowing on phones */}
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-6">
+        <section className={cn(card, 'md:col-span-4')}>
+          <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1">
+            <h2 className="text-sm font-medium text-muted-foreground">Ingresos por mes</h2>
+            <Legend color="#38bdf8" label="Primera compra" />
+            <Legend color="#34d399" label="Recompras" />
           </div>
-        )}
-      </section>
-
-      <section className={cn(card, 'md:col-span-2')}>
-        <h2 className="mb-3 text-sm font-medium text-muted-foreground">Tu base por segmento</h2>
-        <div className="mb-3 flex h-3 overflow-hidden rounded-full bg-muted">
-          {order.map((s) => (
-            <div key={s} style={{ width: `${((stats.counts.get(s) ?? 0) / Math.max(1, stats.customers)) * 100}%`, background: SEGMENT_COLOR[s] }} />
-          ))}
-        </div>
-        <ul className="space-y-1">
-          {order.map((s) => (
-            <li key={s}>
-              <button onClick={() => onSegment(s)} className="flex w-full items-center gap-2 rounded-md px-1 py-0.5 text-sm hover:bg-accent">
-                <span className="h-2.5 w-2.5 rounded-full" style={{ background: SEGMENT_COLOR[s] }} />
-                {SEGMENT_INFO[s].label}
-                <span className="ml-auto tabular-nums text-muted-foreground">{stats.counts.get(s)}</span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      </section>
-
-      <section className={cn(card, 'md:col-span-6')}>
-        <h2 className="mb-3 flex items-center gap-2 text-sm font-medium text-muted-foreground">
-          <Sparkles className="h-4 w-4 text-fuchsia-400" /> Acciones recomendadas para hoy
-        </h2>
-        {stats.actions.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Importa tus ventas para recibir recomendaciones.</p>
-        ) : (
-          <ul className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-            {stats.actions.map((a) => (
-              <li key={a.customer.id} className="flex flex-col gap-2 rounded-xl border border-border/60 bg-background/40 p-3">
-                <div className="flex items-start gap-2">
-                  <span className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: SEGMENT_COLOR[a.customer.segment] }} />
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium">{a.customer.name || `+${a.customer.phone}`}</p>
-                    <p className="text-xs font-medium text-foreground/80">{a.title}</p>
-                    <p className="text-xs text-muted-foreground">{a.reason}</p>
-                  </div>
-                </div>
-                <a
-                  href={`https://wa.me/${a.customer.phone}?text=${encodeURIComponent(a.message)}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="mt-auto inline-flex items-center justify-center gap-1.5 rounded-lg bg-emerald-500/15 px-3 py-1.5 text-xs font-medium text-emerald-500 hover:bg-emerald-500/25"
+          {months.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Sin ventas todavía.</p>
+          ) : (
+            <div className="flex h-44 items-end gap-1.5">
+              {months.map((m, i) => (
+                <div
+                  key={m.month}
+                  // Phones show the last 6 months so labels stay readable.
+                  className={cn('group h-full min-w-0 flex-1 flex-col items-center gap-1', i < months.length - 6 ? 'hidden sm:flex' : 'flex')}
+                  title={`${monthLabel(m.month)}: ${money(m.revenue)} (${money(m.repeatRevenue)} recompras) · ${m.sales} ventas`}
                 >
-                  <MessageCircle className="h-3.5 w-3.5" /> Escribir con mensaje sugerido
-                </a>
-              </li>
+                  <div className="flex w-full flex-1 flex-col justify-end overflow-hidden rounded-t-md">
+                    <div className="w-full bg-emerald-400/90" style={{ height: `${(m.repeatRevenue / maxMonth) * 100}%` }} />
+                    <div className="w-full bg-sky-400/80" style={{ height: `${(m.newRevenue / maxMonth) * 100}%` }} />
+                  </div>
+                  <span className="whitespace-nowrap text-[10px] text-muted-foreground">{monthLabel(m.month)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <section className={cn(card, 'md:col-span-2')}>
+          <h2 className="mb-3 text-sm font-medium text-muted-foreground">Tipo de cliente</h2>
+          <StackBar parts={recOrder.map((r) => ({ value: s.rec.get(r) ?? 0, color: RECURRENCE_COLOR[r] }))} />
+          <ul className="mt-3 space-y-0.5">
+            {recOrder.map((r) => (
+              <Row
+                key={r}
+                color={RECURRENCE_COLOR[r]}
+                label={RECURRENCE_INFO[r].label}
+                value={s.rec.get(r) ?? 0}
+                hint={RECURRENCE_INFO[r].hint}
+                onClick={() => go({ recurrence: [r] })}
+              />
             ))}
           </ul>
-        )}
-      </section>
+        </section>
+
+        <section className={cn(card, 'md:col-span-6')}>
+          <h2 className="mb-3 flex items-center gap-2 text-sm font-medium text-muted-foreground">
+            <Sparkles className="h-4 w-4 text-fuchsia-400" /> Acciones recomendadas para hoy
+          </h2>
+          {s.actions.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Sin acciones pendientes. Importa más ventas para recibir recomendaciones.</p>
+          ) : (
+            <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {s.actions.map((a) => (
+                <li key={a.customer.id} className="flex flex-col gap-2 rounded-xl border border-border/60 bg-background/40 p-3">
+                  <div className="flex items-start gap-2">
+                    <span className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: RECURRENCE_COLOR[a.customer.recurrence] }} />
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium">{a.customer.name || `+${a.customer.phone}`}</p>
+                      <p className="text-xs font-medium text-foreground/80">{a.title}</p>
+                      <p className="text-xs text-muted-foreground">{a.reason}</p>
+                    </div>
+                  </div>
+                  <a
+                    href={`https://wa.me/${a.customer.phone}?text=${encodeURIComponent(a.message)}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-auto inline-flex items-center justify-center gap-1.5 rounded-lg bg-emerald-500/15 px-3 py-2 text-xs font-medium text-emerald-500 hover:bg-emerald-500/25"
+                  >
+                    <MessageCircle className="h-3.5 w-3.5" /> Escribir con mensaje sugerido
+                  </a>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
+        <section className={cn(card, 'md:col-span-3')}>
+          <h2 className="mb-3 text-sm font-medium text-muted-foreground">Ciudades</h2>
+          {cities.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Aún no hay ciudades. Agrégalas en la ficha del cliente, en lote desde Clientes, o al importar.</p>
+          ) : (
+            <ul className="space-y-2">
+              {cities.map((c) => (
+                <li key={c.name}>
+                  <button onClick={() => onFilter({ cities: [c.name] })} className="w-full rounded-lg p-1 text-left hover:bg-accent/50">
+                    <div className="flex items-baseline gap-2 text-sm">
+                      <span className="font-medium">{c.name}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {c.customers} clientes · {c.repeatRate}% recompra
+                      </span>
+                      <span className="ml-auto tabular-nums">{money(c.revenue)}</span>
+                    </div>
+                    <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-muted">
+                      <div className="h-full rounded-full bg-sky-400" style={{ width: `${(c.revenue / maxCityRevenue) * 100}%` }} />
+                    </div>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          {noCity > 0 && <p className="mt-2 text-xs text-muted-foreground">{noCity} clientes sin ciudad.</p>}
+        </section>
+
+        <section className={cn(card, 'md:col-span-3')}>
+          <h2 className="mb-3 text-sm font-medium text-muted-foreground">Productos más vendidos</h2>
+          {(summary?.products ?? []).length === 0 ? (
+            <p className="text-sm text-muted-foreground">Sin productos todavía.</p>
+          ) : (
+            <ul className="space-y-2">
+              {summary!.products.map((p) => (
+                <li key={p.product}>
+                  <div className="flex items-baseline gap-2 text-sm">
+                    <span className="truncate font-medium">{p.product}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {p.sales} ventas · {p.customers} clientes
+                    </span>
+                    <span className="ml-auto tabular-nums">{money(p.revenue)}</span>
+                  </div>
+                  <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-muted">
+                    <div className="h-full rounded-full bg-emerald-400" style={{ width: `${(p.revenue / maxProduct) * 100}%` }} />
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
+        <section className={cn(card, 'md:col-span-3')}>
+          <h2 className="mb-3 text-sm font-medium text-muted-foreground">Valor del cliente (RFM)</h2>
+          <StackBar parts={segOrder.map((x) => ({ value: s.seg.get(x) ?? 0, color: SEGMENT_COLOR[x] }))} />
+          <ul className="mt-3 space-y-0.5">
+            {segOrder.map((x) => (
+              <Row key={x} color={SEGMENT_COLOR[x]} label={SEGMENT_INFO[x].label} value={s.seg.get(x) ?? 0} hint={SEGMENT_INFO[x].hint} onClick={() => go({ rfm: [x] })} />
+            ))}
+          </ul>
+        </section>
+
+        <section className={cn(card, 'md:col-span-3')}>
+          <h2 className="mb-3 text-sm font-medium text-muted-foreground">Etiquetas</h2>
+          {data.tags.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              Aún no tienes etiquetas. Ábrelas desde la ficha de un cliente o selecciona varios en <b>Clientes</b> y usa “Etiquetar”. Ideas: VIP,
+              Mayorista, Referido, Instagram.
+            </p>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {data.tags.map((t) => (
+                <button key={t.id} onClick={() => go({ tags: [t.id] })} className="rounded-full hover:opacity-80">
+                  <TagPill tag={{ ...t, name: `${t.name} · ${t.count}` }} />
+                </button>
+              ))}
+            </div>
+          )}
+        </section>
+      </div>
     </div>
   );
 }
 
-function Kpi({ label, value, sub, trend, glow, className }: { label: string; value: string; sub: string; trend?: number | null; glow?: boolean; className?: string }) {
+function Kpi({
+  label,
+  value,
+  sub,
+  trend,
+  glow,
+  onClick,
+  className
+}: {
+  label: string;
+  value: string;
+  sub: string;
+  trend?: number | null;
+  glow?: boolean;
+  onClick?: () => void;
+  className?: string;
+}) {
+  const Tag = onClick ? 'button' : 'div';
   return (
-    <section className={cn(card, glow && 'border-fuchsia-500/40 shadow-[0_0_40px_-12px_rgba(217,70,239,0.55)]', className)}>
-      <p className="text-sm text-muted-foreground">{label}</p>
-      <p className="mt-1 flex items-center gap-2 text-3xl font-semibold tabular-nums tracking-tight">
+    <Tag
+      onClick={onClick}
+      className={cn(
+        card,
+        'p-3 text-left sm:p-4',
+        onClick && 'transition-colors hover:border-primary/50',
+        glow && 'border-amber-400/50 shadow-[0_0_40px_-14px_rgba(251,191,36,0.6)]',
+        className
+      )}
+    >
+      <p className="text-xs text-muted-foreground sm:text-sm">{label}</p>
+      <p className="mt-1 flex items-center gap-1 text-2xl font-semibold tabular-nums tracking-tight sm:text-3xl">
         {value}
         {trend != null && (trend >= 0 ? <ArrowUpRight className="h-5 w-5 text-emerald-400" /> : <ArrowDownRight className="h-5 w-5 text-orange-400" />)}
       </p>
-      <p className="mt-1 text-xs text-muted-foreground">{sub}</p>
-    </section>
+      <p className="mt-1 text-[11px] leading-snug text-muted-foreground sm:text-xs">{sub}</p>
+    </Tag>
+  );
+}
+
+function StackBar({ parts }: { parts: { value: number; color: string }[] }) {
+  const total = Math.max(1, parts.reduce((a, p) => a + p.value, 0));
+  return (
+    <div className="flex h-3 overflow-hidden rounded-full bg-muted">
+      {parts.map((p, i) => (
+        <div key={i} style={{ width: `${(p.value / total) * 100}%`, background: p.color }} />
+      ))}
+    </div>
+  );
+}
+
+function Row({ color, label, value, hint, onClick }: { color: string; label: string; value: number; hint: string; onClick: () => void }) {
+  return (
+    <li>
+      <button onClick={onClick} title={hint} className="flex w-full items-center gap-2 rounded-md px-1 py-1 text-sm hover:bg-accent">
+        <span className="h-2.5 w-2.5 rounded-full" style={{ background: color }} />
+        {label}
+        <span className="ml-auto tabular-nums text-muted-foreground">{value}</span>
+      </button>
+    </li>
+  );
+}
+
+function Legend({ color, label }: { color: string; label: string }) {
+  return (
+    <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
+      <span className="h-2 w-2 rounded-sm" style={{ background: color }} />
+      {label}
+    </span>
   );
 }

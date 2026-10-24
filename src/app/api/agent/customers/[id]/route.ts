@@ -2,6 +2,7 @@ import { listCustomers, updateCustomer } from '@/lib/crm/customers';
 import { addActivity, listActivities } from '@/lib/crm/agent-store';
 import { getDb, listStages } from '@/lib/crm/db';
 import { fail, guardAgent, json } from '@/lib/crm/agent-http';
+import { addTags, ensureTag } from '@/lib/crm/tags';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -20,14 +21,24 @@ export async function GET(request: Request, { params }: Ctx) {
   return json({ customer, sales, activities: listActivities(id), stages: listStages() });
 }
 
-// PATCH { "stage": "Interesado", "note": "Pidió cotización" }
+// PATCH { "stage": "Interesado", "note": "Pidió cotización", "city": "Cali", "addTags": ["VIP"] }
 export async function PATCH(request: Request, { params }: Ctx) {
   const denied = guardAgent(request);
   if (denied) return denied;
   try {
     const id = Number((await params).id);
     if (!listCustomers().some((c) => c.id === id)) return json({ error: 'Cliente no encontrado' }, 404);
-    const { stage, note } = (await request.json()) as { stage?: string; note?: string };
+    const { stage, note, city, addTags: tagNames } = (await request.json()) as {
+      stage?: string;
+      note?: string;
+      city?: string;
+      addTags?: string[];
+    };
+    if (city !== undefined) updateCustomer(id, { city: String(city) });
+    if (Array.isArray(tagNames) && tagNames.length) {
+      addTags([id], tagNames.map(String).filter((t) => t.trim()).map(ensureTag));
+      addActivity(id, 'tags', `Etiquetas + ${tagNames.join(', ')}`, { by: 'agent' });
+    }
     if (stage !== undefined) {
       const found = listStages().find((s) => s.name.toLowerCase() === stage.toLowerCase());
       if (!found) return json({ error: `Etapa inválida. Opciones: ${listStages().map((s) => s.name).join(', ')}` }, 400);

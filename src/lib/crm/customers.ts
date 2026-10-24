@@ -1,19 +1,25 @@
 import { getDb } from './db';
-import { computeMetrics, type CustomerMetrics } from './scoring';
+import { computeMetrics, computeRecurrence, type CustomerMetrics, type RecurrenceMetrics } from './scoring';
+import { addTags, ensureTag, tagsByContact } from './tags';
+import { cityKey } from './filters';
 
 export type Customer = {
   id: number;
   phone: string;
   name: string;
+  city: string;
+  tags: number[];
   stageId: number | null;
   data: Record<string, unknown>;
   createdAt: string;
-} & CustomerMetrics;
+} & CustomerMetrics &
+  RecurrenceMetrics;
 
 type Row = {
   id: number;
   phone: string;
   name: string;
+  city: string;
   stage_id: number | null;
   data: string;
   created_at: string;
@@ -35,36 +41,91 @@ export function listCustomers(): Customer[] {
     rows.map((r) => ({ salesCount: r.sales_count, totalSpent: r.total_spent, lastSaleAt: r.last_sale_at }))
   );
 
+  const salesByContact = new Map<number, { soldAt: string; product: string; amount: number }[]>();
+  const sales = getDb().prepare('SELECT contact_id, sold_at, product, amount FROM sales').all() as unknown as {
+    contact_id: number; sold_at: string; product: string; amount: number;
+  }[];
+  for (const s of sales) {
+    const list = salesByContact.get(s.contact_id) ?? [];
+    list.push({ soldAt: s.sold_at, product: s.product, amount: s.amount });
+    salesByContact.set(s.contact_id, list);
+  }
+  const tags = tagsByContact();
+  const now = new Date();
+
+  // "Bogota" and "Bogotá" are the same city: show every variant with its most common spelling.
+  const spellings = new Map<string, Map<string, number>>();
+  for (const r of rows) {
+    if (!r.city) continue;
+    const k = cityKey(r.city);
+    const m = spellings.get(k) ?? new Map<string, number>();
+    m.set(r.city, (m.get(r.city) ?? 0) + 1);
+    spellings.set(k, m);
+  }
+  const canonical = new Map([...spellings].map(([k, m]) => [k, [...m].sort((a, b) => b[1] - a[1])[0][0]]));
+
   return rows.map((r, i) => ({
     id: r.id,
     phone: r.phone,
     name: r.name,
+    city: r.city ? canonical.get(cityKey(r.city)) ?? r.city : '',
+    tags: tags.get(r.id) ?? [],
     stageId: r.stage_id,
     data: JSON.parse(r.data) as Record<string, unknown>,
     createdAt: r.created_at,
-    ...metrics[i]
+    ...metrics[i],
+    ...computeRecurrence(salesByContact.get(r.id) ?? [], now)
   }));
+}
+
+/** Trims and title-cases a city so "bogotá" and "Bogotá " are stored the same way. */
+export function normalizeCity(raw: string): string {
+  return raw
+    .trim()
+    .replace(/\s+/g, ' ')
+    .slice(0, 60)
+    .toLocaleLowerCase('es')
+    .replace(/(^|[\s-])(\p{L})/gu, (_, sep: string, ch: string) => sep + ch.toLocaleUpperCase('es'));
+}
+
+export function getCustomerSales(id: number) {
+  return getDb()
+    .prepare('SELECT id, sold_at AS soldAt, amount, product, data FROM sales WHERE contact_id = ? ORDER BY sold_at DESC, id DESC')
+    .all(id)
+    .map((r) => {
+      const row = r as { id: number; soldAt: string; amount: number; product: string; data: string };
+      return { ...row, data: JSON.parse(row.data) as Record<string, unknown> };
+    });
 }
 
 export function normalizePhone(value: string): string {
   return value.replace(/\D/g, '');
 }
 
-export function createCustomer(input: { phone: string; name?: string; stageId?: number | null; data?: Record<string, unknown> }) {
+export function createCustomer(input: {
+  phone: string;
+  name?: string;
+  city?: string;
+  stageId?: number | null;
+  data?: Record<string, unknown>;
+}) {
   const phone = normalizePhone(input.phone);
   if (phone.length < 7) throw new Error('Teléfono inválido');
-  const res = getDb()
-    .prepare('INSERT INTO contacts (phone, name, stage_id, data) VALUES (?,?,?,?)')
-    .run(phone, input.name ?? '', input.stageId ?? null, JSON.stringify(input.data ?? {}));
+  const d = getDb();
+  if (d.prepare('SELECT 1 FROM contacts WHERE phone = ?').get(phone)) throw new Error('Ya existe un cliente con ese teléfono');
+  const res = d
+    .prepare('INSERT INTO contacts (phone, name, city, stage_id, data) VALUES (?,?,?,?,?)')
+    .run(phone, (input.name ?? '').trim(), normalizeCity(input.city ?? ''), input.stageId ?? null, JSON.stringify(input.data ?? {}));
   return Number(res.lastInsertRowid);
 }
 
 export function updateCustomer(
   id: number,
-  patch: { name?: string; stageId?: number | null; data?: Record<string, unknown> }
+  patch: { name?: string; city?: string; stageId?: number | null; data?: Record<string, unknown> }
 ) {
   const d = getDb();
-  if (patch.name !== undefined) d.prepare('UPDATE contacts SET name = ? WHERE id = ?').run(patch.name, id);
+  if (patch.name !== undefined) d.prepare('UPDATE contacts SET name = ? WHERE id = ?').run(patch.name.trim(), id);
+  if (patch.city !== undefined) d.prepare('UPDATE contacts SET city = ? WHERE id = ?').run(normalizeCity(patch.city), id);
   if (patch.stageId !== undefined) d.prepare('UPDATE contacts SET stage_id = ? WHERE id = ?').run(patch.stageId, id);
   if (patch.data !== undefined) {
     const cur = d.prepare('SELECT data FROM contacts WHERE id = ?').get(id) as { data: string } | undefined;
@@ -82,7 +143,17 @@ export function deleteCustomer(id: number) {
 
 // ---- Import of historical sales -------------------------------------------
 
-export type ImportTarget = 'ignore' | 'phone' | 'name' | 'sold_at' | 'amount' | 'product' | `contact:${string}` | `sale:${string}`;
+export type ImportTarget =
+  | 'ignore'
+  | 'phone'
+  | 'name'
+  | 'city'
+  | 'tags'
+  | 'sold_at'
+  | 'amount'
+  | 'product'
+  | `contact:${string}`
+  | `sale:${string}`;
 
 export function parseAmount(raw: string): number {
   let s = raw.trim().replace(/[^\d.,-]/g, '');
@@ -138,6 +209,8 @@ export function importSales(columns: string[], mapping: Record<string, ImportTar
   if (phoneIdx < 0) throw new Error('Debes asignar una columna al teléfono');
   if (dateIdx < 0) throw new Error('Debes asignar una columna a la fecha de venta');
   const nameIdx = idx('name');
+  const cityIdx = idx('city');
+  const tagsIdx = idx('tags');
   const amountIdx = idx('amount');
   const productIdx = idx('product');
 
@@ -147,9 +220,15 @@ export function importSales(columns: string[], mapping: Record<string, ImportTar
 
   const result: ImportResult = { rows: rows.length, salesCreated: 0, contactsCreated: 0, contactsUpdated: 0, skipped: [] };
 
-  const findContact = d.prepare('SELECT id, name, data FROM contacts WHERE phone = ?');
-  const insertContact = d.prepare('INSERT INTO contacts (phone, name, stage_id, data) VALUES (?,?,?,?)');
-  const updateContact = d.prepare('UPDATE contacts SET name = ?, data = ? WHERE id = ?');
+  const findContact = d.prepare('SELECT id, name, city, data FROM contacts WHERE phone = ?');
+  const insertContact = d.prepare('INSERT INTO contacts (phone, name, city, stage_id, data) VALUES (?,?,?,?,?)');
+  const updateContact = d.prepare('UPDATE contacts SET name = ?, city = ?, data = ? WHERE id = ?');
+  const tagCache = new Map<string, number>();
+  const tagId = (name: string) => {
+    const key = name.trim().toLowerCase();
+    if (!tagCache.has(key)) tagCache.set(key, ensureTag(name));
+    return tagCache.get(key)!;
+  };
   const insertSale = d.prepare('INSERT INTO sales (contact_id, sold_at, amount, product, data) VALUES (?,?,?,?,?)');
   const clientStage = d.prepare("SELECT id FROM stages WHERE name = 'Cliente'").get() as { id: number } | undefined;
 
@@ -172,8 +251,9 @@ export function importSales(columns: string[], mapping: Record<string, ImportTar
         else saleData[target.slice(5)] = value;
       }
       const name = nameIdx >= 0 ? (row[nameIdx] ?? '').trim() : '';
+      const city = cityIdx >= 0 ? normalizeCity(row[cityIdx] ?? '') : '';
 
-      const existing = findContact.get(phone) as { id: number; name: string; data: string } | undefined;
+      const existing = findContact.get(phone) as { id: number; name: string; city: string; data: string } | undefined;
       let contactId: number;
       if (existing) {
         contactId = existing.id;
@@ -183,13 +263,21 @@ export function importSales(columns: string[], mapping: Record<string, ImportTar
         }
         updateContact.run(
           existing.name || name,
+          city || existing.city,
           JSON.stringify({ ...JSON.parse(existing.data), ...contactData }),
           contactId
         );
       } else {
-        contactId = Number(insertContact.run(phone, name, clientStage?.id ?? null, JSON.stringify(contactData)).lastInsertRowid);
+        contactId = Number(
+          insertContact.run(phone, name, city, clientStage?.id ?? null, JSON.stringify(contactData)).lastInsertRowid
+        );
         touched.add(contactId);
         result.contactsCreated++;
+      }
+
+      if (tagsIdx >= 0) {
+        const names = (row[tagsIdx] ?? '').split(/[,;|]/).map((t) => t.trim()).filter(Boolean);
+        if (names.length) addTags([contactId], names.map(tagId));
       }
 
       insertSale.run(

@@ -17,16 +17,19 @@ Base URL: `$CRM_BASE_URL` (e.g. `https://crm.example.com`). Every request needs
 ## Endpoints
 | Goal | Request |
 |---|---|
-| List customers | `GET /api/agent/customers?segment=<seg>&q=<text>&limit=20` |
+| List customers | `GET /api/agent/customers?segment=<seg>&recurrence=<rec>&city=<city>&tag=<tag>&segment_id=<id>&q=<text>&limit=20` |
 | One customer (sales, chat history) | `GET /api/agent/customers/{id}` |
 | Today's recommended actions | `GET /api/agent/actions` |
-| Move stage / add note | `PATCH /api/agent/customers/{id}` body `{"stage":"Interesado","note":"..."}` |
+| Move stage / note / city / tags | `PATCH /api/agent/customers/{id}` body `{"stage":"Interesado","note":"...","city":"Cali","addTags":["VIP"]}` |
 | Propose a message | `POST /api/agent/messages` body `{"customerId":12,"body":"..."}` |
 | See pending/sent proposals | `GET /api/agent/messages?status=pending` |
 
 Segments: `campeon`, `leal`, `potencial`, `en_riesgo`, `dormido_valioso`, `perdido`, `sin_compras`.
+Recurrence: `prospecto`, `primera_compra`, `una_vez`, `recurrente`, `por_recomprar` (past their usual buying rhythm: contact now), `recurrente_perdido`.
+Each customer also has `nextExpectedAt` (date their next purchase is due), `overdueDays` (positive = late) and `favoriteProduct`.
 
 ## Typical flows
 - "¿A quién reactivo hoy?" → `GET /api/agent/actions`, summarise in Telegram with the reason for each.
+- "¿A quién le toca comprar?" → `GET /api/agent/customers?recurrence=por_recomprar`, sorted by `overdueDays`; mention their `favoriteProduct`.
 - "Escríbele a Elena" → `GET /api/agent/customers?q=elena`, draft a message, show it to the user, then `POST /api/agent/messages`.
   Tell the user to approve it in the CRM (Aprobaciones tab).

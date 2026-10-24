@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { createCustomer, deleteCustomer, listCustomers, updateCustomer } from '@/lib/crm/customers';
 import { listFields, listStages } from '@/lib/crm/db';
+import { listTags } from '@/lib/crm/tags';
+import { listSegments } from '@/lib/crm/segments';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -11,7 +13,13 @@ function fail(error: unknown, status = 400) {
 
 export async function GET() {
   try {
-    return NextResponse.json({ customers: listCustomers(), fields: listFields(), stages: listStages() });
+    return NextResponse.json({
+      customers: listCustomers(),
+      fields: listFields(),
+      stages: listStages(),
+      tags: listTags(),
+      segments: listSegments()
+    });
   } catch (error) {
     return fail(error, 500);
   }

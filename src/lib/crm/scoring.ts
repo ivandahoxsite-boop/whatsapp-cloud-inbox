@@ -103,3 +103,68 @@ export function computeMetrics(rows: Raw[], now = new Date()): CustomerMetrics[]
     };
   });
 }
+
+// ---- Recurrence ---------------------------------------------------------------
+// Orthogonal to the RFM segment: answers "does this customer come back, and when is the next purchase due?"
+
+export type Recurrence = 'prospecto' | 'primera_compra' | 'una_vez' | 'recurrente' | 'por_recomprar' | 'recurrente_perdido';
+
+export const RECURRENCE_INFO: Record<Recurrence, { label: string; hint: string }> = {
+  prospecto: { label: 'Prospecto', hint: 'Todavía no ha comprado.' },
+  primera_compra: { label: 'Primera compra', hint: 'Compró una vez hace poco. Momento ideal para lograr la segunda compra.' },
+  una_vez: { label: 'Compró una vez', hint: 'Compró una sola vez y no volvió. Ofrécele una razón para regresar.' },
+  recurrente: { label: 'Recurrente', hint: 'Compra de forma repetida y está al día.' },
+  por_recomprar: { label: 'Le toca recomprar', hint: 'Ya pasó su ritmo habitual de compra. Escríbele ahora.' },
+  recurrente_perdido: { label: 'Recurrente perdido', hint: 'Compraba seguido pero lleva mucho más de lo normal sin volver.' }
+};
+
+export type RecurrenceMetrics = {
+  firstSaleAt: string | null;
+  /** Average days between purchases (null with fewer than 2 purchase days). */
+  avgIntervalDays: number | null;
+  /** Expected date of the next purchase, from the customer's own rhythm. */
+  nextExpectedAt: string | null;
+  /** Positive when the expected purchase is late, negative when it is still ahead. */
+  overdueDays: number | null;
+  recurrence: Recurrence;
+  favoriteProduct: string | null;
+};
+
+const DAY = 86_400_000;
+const FIRST_PURCHASE_WINDOW = 90; // days a single purchase still counts as "recent"
+const MIN_INTERVAL = 30; // floor so customers who buy twice in one week are not flagged as late after 10 days
+
+export function computeRecurrence(
+  sales: { soldAt: string; product: string; amount: number }[],
+  now = new Date()
+): RecurrenceMetrics {
+  if (sales.length === 0) {
+    return { firstSaleAt: null, avgIntervalDays: null, nextExpectedAt: null, overdueDays: null, recurrence: 'prospecto', favoriteProduct: null };
+  }
+  const days = [...new Set(sales.map((s) => s.soldAt.slice(0, 10)))].sort();
+  const first = days[0];
+  const last = days[days.length - 1];
+  const sinceLast = Math.max(0, Math.floor((now.getTime() - Date.parse(last)) / DAY));
+
+  const byProduct = new Map<string, number>();
+  for (const s of sales) if (s.product) byProduct.set(s.product, (byProduct.get(s.product) ?? 0) + 1);
+  const favoriteProduct = [...byProduct.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+
+  if (days.length < 2) {
+    return {
+      firstSaleAt: first,
+      avgIntervalDays: null,
+      nextExpectedAt: null,
+      overdueDays: null,
+      recurrence: sinceLast <= FIRST_PURCHASE_WINDOW ? 'primera_compra' : 'una_vez',
+      favoriteProduct
+    };
+  }
+
+  const avg = Math.round((Date.parse(last) - Date.parse(first)) / DAY / (days.length - 1));
+  const rhythm = Math.max(MIN_INTERVAL, avg);
+  const next = new Date(Date.parse(last) + rhythm * DAY).toISOString().slice(0, 10);
+  const overdue = sinceLast - rhythm;
+  const recurrence: Recurrence = sinceLast <= rhythm * 1.5 ? 'recurrente' : sinceLast <= rhythm * 3 ? 'por_recomprar' : 'recurrente_perdido';
+  return { firstSaleAt: first, avgIntervalDays: avg, nextExpectedAt: next, overdueDays: overdue, recurrence, favoriteProduct };
+}
