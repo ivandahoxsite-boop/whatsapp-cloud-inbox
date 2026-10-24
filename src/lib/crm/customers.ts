@@ -241,6 +241,29 @@ export function updateCustomer(
   }
 }
 
+/** Records one sale by hand (e.g. a sale that did not go through the billing system). */
+export function addSale(contactId: number, input: { soldAt: string; amount: number | string; product?: string; qty?: number | string }) {
+  const d = getDb();
+  if (!d.prepare('SELECT 1 FROM contacts WHERE id = ?').get(contactId)) throw new Error('Cliente no encontrado');
+  const soldAt = parseDate(String(input.soldAt ?? ''));
+  if (!soldAt) throw new Error('Fecha inválida');
+  const amount = typeof input.amount === 'number' ? input.amount : parseAmount(String(input.amount ?? ''));
+  if (!Number.isFinite(amount) || amount <= 0) throw new Error('El monto debe ser mayor que cero');
+  const qty = Number(input.qty);
+  const data = { manual: true, ...(Number.isFinite(qty) && qty > 0 ? { qty } : {}) };
+  d.prepare('INSERT INTO sales (contact_id, sold_at, amount, product, data) VALUES (?,?,?,?,?)').run(
+    contactId,
+    soldAt,
+    amount,
+    String(input.product ?? '').trim().slice(0, 120),
+    JSON.stringify(data)
+  );
+  const clientStage = d.prepare("SELECT id FROM stages WHERE name = 'Cliente'").get() as { id: number } | undefined;
+  if (clientStage) {
+    d.prepare("UPDATE contacts SET stage_id = ? WHERE id = ? AND (stage_id IS NULL OR stage_id IN (SELECT id FROM stages WHERE name = 'Nuevo'))").run(clientStage.id, contactId);
+  }
+}
+
 export function deleteCustomer(id: number) {
   getDb().prepare('DELETE FROM contacts WHERE id = ?').run(id);
 }

@@ -22,6 +22,8 @@ Base URL: `$CRM_BASE_URL` (on the same server: `http://127.0.0.1:4000`). Every r
 | Today's recommended actions | `GET /api/agent/actions` |
 | Move stage / note / city / tags / phone | `PATCH /api/agent/customers/{id}` body `{"stage":"Interesado","note":"...","city":"Cali","addTags":["VIP"],"phone":"3001234567"}` |
 | Propose a message | `POST /api/agent/messages` body `{"customerId":12,"body":"..."}` |
+| Morning brief (ready-made text) | `GET /api/agent/digest` → post `text` as is |
+| Sales report (totals, seller, zone, products) | `GET /api/agent/reports/sales?from=2026-01-01&to=2026-12-31&seller=<name>&zone=<zone>` |
 | See pending/sent proposals | `GET /api/agent/messages?status=pending` |
 
 Segments: `campeon`, `leal`, `potencial`, `en_riesgo`, `dormido_valioso`, `perdido`, `sin_compras`.
@@ -35,6 +37,11 @@ Each customer also has `nextExpectedAt` (date their next purchase is due), `over
 - "¿A quién le toca comprar?" → `GET /api/agent/customers?recurrence=por_recomprar`, sorted by `overdueDays`; mention their `favoriteProduct`.
 - "Escríbele a Elena" → `GET /api/agent/customers?q=elena`, draft a message, show it to the user, then `POST /api/agent/messages`.
   Tell the user to approve it in the CRM (Aprobaciones tab).
+
+## Daily brief and recurring loads
+- **Morning brief.** When asked (or on the schedule the user sets, e.g. every weekday at 8:00), call `GET /api/agent/digest` and send its `text` to Telegram unchanged. Do not invent customers or numbers that are not in it, and never say a message was sent.
+- **Sales questions.** "¿Cuánto vendió Ivan en 2025 por zona?" → `GET /api/agent/reports/sales?from=2025-01-01&to=2025-12-31&seller=IVAN HOYOS`; answer from `totals`, `byZone`, `topProducts`. `droppedProducts` lists customers who stopped taking a product (good reason to message them); `combos` lists products bought together.
+- **Weekly reload from the billing system.** Because `externalId` makes re-sending safe, the same load can be repeated every week or month: (1) read only the new period from the billing system, (2) run it with `"dryRun": true` first, (3) if `conflicts` is empty and `skipped` is as expected, send it for real, (4) report `created`, `duplicates`, `skipped` and any `conflicts` to the user. If there are conflicts, stop and ask which client owns each phone.
 
 ## Loading customers and sales from the billing system
 Use this when the user asks to bring their customers/sales from their billing or sales system into the CRM.

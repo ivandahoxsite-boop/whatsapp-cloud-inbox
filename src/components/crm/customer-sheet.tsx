@@ -57,6 +57,7 @@ function SheetBody({ c, data, onClose }: { c: Customer; data: CrmData; onClose: 
   const [newTag, setNewTag] = useState('');
   const [note, setNote] = useState('');
   const [newPhone, setNewPhone] = useState('');
+  const [sale, setSale] = useState<{ soldAt: string; amount: string; product: string; qty: string } | null>(null);
 
   const run = async (fn: () => Promise<unknown>) => {
     setErr('');
@@ -245,6 +246,39 @@ function SheetBody({ c, data, onClose }: { c: Customer; data: CrmData; onClose: 
               Añadir
             </Button>
           </form>
+        </section>
+
+        <section className="space-y-2">
+          <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Venta</h3>
+          {sale ? (
+            <form
+              className="space-y-2"
+              onSubmit={(e) => {
+                e.preventDefault();
+                run(async () => {
+                  await api(`/api/crm/customers/${c.id}/sales`, 'POST', sale);
+                  setSale(null);
+                });
+              }}
+            >
+              <div className="grid grid-cols-2 gap-2">
+                <Input type="date" value={sale.soldAt} onChange={(e) => setSale({ ...sale, soldAt: e.target.value })} required aria-label="Fecha" />
+                <Input value={sale.amount} onChange={(e) => setSale({ ...sale, amount: e.target.value })} placeholder="Monto" inputMode="decimal" required aria-label="Monto" />
+              </div>
+              <div className="grid grid-cols-[1fr_5rem] gap-2">
+                <Input value={sale.product} onChange={(e) => setSale({ ...sale, product: e.target.value })} placeholder="Producto" aria-label="Producto" />
+                <Input value={sale.qty} onChange={(e) => setSale({ ...sale, qty: e.target.value })} placeholder="Cant." inputMode="numeric" aria-label="Cantidad" />
+              </div>
+              <div className="flex gap-2">
+                <Button type="submit" size="sm">Guardar venta</Button>
+                <Button type="button" size="sm" variant="ghost" onClick={() => setSale(null)}>Cancelar</Button>
+              </div>
+            </form>
+          ) : (
+            <Button size="sm" variant="outline" onClick={() => setSale({ soldAt: new Date().toLocaleDateString('en-CA'), amount: '', product: '', qty: '' })}>
+              <ShoppingBag className="mr-1.5 h-4 w-4" /> Registrar venta
+            </Button>
+          )}
         </section>
 
         <section className="space-y-2">

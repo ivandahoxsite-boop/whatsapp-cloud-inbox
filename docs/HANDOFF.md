@@ -31,8 +31,16 @@ OpenClaw tiene acceso a AnaliX (caché local). Lo que encontró:
 - Reglas de carga ya enviadas a OpenClaw: `soldAt` = primer día del mes; `externalId` = `ANX-cliente-año-mes-producto` (estable); producto = código + descripción; `data` = {seller, zone, qty}; etiquetas "Zona X" y "Vendedor Y"; ciudad desde BD_Clientes; lotes de 500; prueba de 10 primero.
 - **Siguiente paso**: OpenClaw debe reportar cuántos de los 720 clientes cruzan con teléfono y cuáles no. Decidir qué hacer con los que no tienen teléfono (el CRM hoy exige teléfono como clave).
 
+## Hecho después (carga de AnaliX terminada y mejoras)
+- Cargados 251 clientes / 35.808 ventas ($21.357.561.988) con clave = teléfono; 30 nombres compartían teléfono (221 contactos). Se corrigieron nombres pisados y se revisaron pares dudosos (R2 CAR CUSTOM = antes QUALITA AUDIO; LUXURIOS CAR'S TOY'S = Diego Armando, tel. 3148840643 → pendiente de cargar).
+- Importación de ventas: `dryRun`, detector de teléfonos con clientes distintos (`conflicts`, `onConflict:"skip"`, `sharedPhones`); cada venta guarda `data.client`.
+- El import de clientes ya no pisa nombres existentes (`overwriteName:true` para hacerlo a propósito); `externalId` de más de 80 caracteres se acorta con hash.
+- Clientes sin teléfono: `allowNoPhone:true` + `nit`/`name`; filtro "📵 Sin teléfono"; se agrega el teléfono en la ficha o con `PATCH {phone}` y se fusiona con el chat de WhatsApp si ya existe.
+- Pestaña **Ventas** (por mes, vendedor, zona, productos, combos, productos que dejaron de llevar) y `GET /api/agent/reports/sales`.
+- "Registrar venta" en la ficha del cliente; `GET /api/agent/digest` (resumen diario listo para Telegram).
+- `deploy/set-password.sh` cambia la contraseña sin mostrarla (`--rotate-key` renueva el enlace privado).
+- Pendiente fuera del repo: programar en OpenClaw el resumen de las 8:00 y la recarga semanal (ver `docs/openclaw/SKILL.md`); 465 clientes de AnaliX sin teléfono ($6.55 mil millones; los grandes: JAIMAR, RALLY PASSION, CAMILO SANCHEZ AGUILERA, ORION LUJOS Y SONIDO); 6 pares de teléfonos compartidos por revisar.
+
 ## Pendientes / ideas
-- Clientes sin teléfono (si el cruce deja muchos fuera): permitir clientes identificados por NIT.
-- Botón "Registrar venta" en la ficha (si se necesita cargar ventas a mano).
-- Enviar plantillas de WhatsApp a un segmento desde el CRM; aviso diario en Telegram vía OpenClaw.
-- Seguridad: la contraseña del CRM debe ser propia del usuario (se cambió varias veces durante la configuración).
+- Enviar plantillas de WhatsApp a un segmento desde el CRM (con aprobación).
+- Seguridad: cambiar la contraseña con `bash /opt/crm/deploy/set-password.sh --rotate-key` (se cambió varias veces durante la configuración).
