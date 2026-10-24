@@ -53,5 +53,6 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)']
+  // /api/webhooks (HMAC signature) and /api/agent (bearer token) authenticate themselves.
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|api/webhooks/|api/agent/).*)']
 };

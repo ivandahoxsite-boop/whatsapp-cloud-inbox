@@ -5,7 +5,7 @@ import { CornerDownLeft, Search } from 'lucide-react';
 import { SEGMENT_INFO, type Segment } from '@/lib/crm/scoring';
 import type { Customer } from '@/lib/crm/customers';
 
-export type CrmTab = 'resumen' | 'clientes' | 'importar' | 'estructura';
+export type CrmTab = 'resumen' | 'clientes' | 'aprobaciones' | 'importar' | 'estructura';
 
 type Item = { id: string; group: string; label: string; hint?: string; run: () => void };
 
@@ -59,6 +59,7 @@ export function CommandPalette({
       [
         ['resumen', 'Ir a Resumen'],
         ['clientes', 'Ir a Clientes'],
+        ['aprobaciones', 'Aprobar mensajes del agente'],
         ['importar', 'Importar ventas'],
         ['estructura', 'Editar estructura (campos y etapas)']
       ] as [CrmTab, string][]

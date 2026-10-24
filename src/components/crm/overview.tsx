@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { ArrowDownRight, ArrowUpRight, MessageCircle, Sparkles } from 'lucide-react';
 import { SEGMENT_INFO, type Segment } from '@/lib/crm/scoring';
 import type { Customer } from '@/lib/crm/customers';
+import { buildActions } from '@/lib/crm/actions';
 import type { MonthlyRevenue } from '@/app/api/crm/summary/route';
 import { cn } from '@/lib/utils';
 
@@ -22,50 +23,6 @@ const SEGMENT_COLOR: Record<Segment, string> = {
   perdido: '#71717a',
   sin_compras: '#52525b'
 };
-
-type Action = { customer: Customer; title: string; reason: string; message: string; priority: number };
-
-// Rule-based "next best action" list. No external AI: it ranks customers by
-// the money and urgency behind each segment so the day starts with a clear queue.
-export function buildActions(customers: Customer[]): Action[] {
-  const first = (c: Customer) => (c.name || 'hola').split(' ')[0];
-  const out: Action[] = [];
-  for (const c of customers) {
-    if (c.segment === 'dormido_valioso')
-      out.push({
-        customer: c,
-        title: 'Reactivar cliente valioso',
-        reason: `Gastó ${money(c.totalSpent)} y lleva ${c.daysSinceLastSale} días sin comprar`,
-        message: `Hola ${first(c)}, hace tiempo que no hablamos. Tenemos novedades que creemos que te van a gustar. ¿Te cuento?`,
-        priority: c.totalSpent
-      });
-    else if (c.segment === 'en_riesgo')
-      out.push({
-        customer: c,
-        title: 'Evitar que se enfríe',
-        reason: `${c.salesCount} compras, la última hace ${c.daysSinceLastSale} días`,
-        message: `Hola ${first(c)}, ¿cómo te fue con tu última compra? Me encantaría ayudarte con lo siguiente.`,
-        priority: c.totalSpent * 0.8
-      });
-    else if (c.segment === 'potencial' && (c.daysSinceLastSale ?? 99) <= 30)
-      out.push({
-        customer: c,
-        title: 'Seguimiento de compra reciente',
-        reason: `Compró hace ${c.daysSinceLastSale} días: buen momento para ofrecer algo más`,
-        message: `Hola ${first(c)}, gracias por tu compra. ¿Quieres que te muestre algo que combina con ella?`,
-        priority: c.avgTicket
-      });
-    else if (c.segment === 'campeon')
-      out.push({
-        customer: c,
-        title: 'Ofrecer algo premium',
-        reason: `Tus mejores clientes: ${c.salesCount} compras, ${money(c.totalSpent)} en total`,
-        message: `Hola ${first(c)}, queremos darte acceso anticipado a lo nuevo. ¿Te interesa?`,
-        priority: c.totalSpent * 0.5
-      });
-  }
-  return out.sort((a, b) => b.priority - a.priority).slice(0, 6);
-}
 
 export function Overview({
   customers,

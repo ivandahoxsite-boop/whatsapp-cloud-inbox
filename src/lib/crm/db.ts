@@ -65,6 +65,30 @@ export function getDb(): DatabaseSync {
       data TEXT NOT NULL DEFAULT '{}'
     );
     CREATE INDEX IF NOT EXISTS sales_contact_idx ON sales(contact_id);
+    CREATE TABLE IF NOT EXISTS activities (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      contact_id INTEGER NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
+      kind TEXT NOT NULL,
+      text TEXT NOT NULL DEFAULT '',
+      meta TEXT NOT NULL DEFAULT '{}',
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS activities_contact_idx ON activities(contact_id, id);
+    CREATE TABLE IF NOT EXISTS processed_events (
+      key TEXT PRIMARY KEY,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    -- Messages proposed by the agent. Nothing reaches WhatsApp until approved.
+    CREATE TABLE IF NOT EXISTS outbox (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      contact_id INTEGER NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
+      body TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','sent','rejected','failed')),
+      error TEXT NOT NULL DEFAULT '',
+      proposed_by TEXT NOT NULL DEFAULT 'agent',
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      decided_at TEXT
+    );
   `);
 
   const stageCount = db.prepare('SELECT COUNT(*) AS n FROM stages').get() as { n: number };
