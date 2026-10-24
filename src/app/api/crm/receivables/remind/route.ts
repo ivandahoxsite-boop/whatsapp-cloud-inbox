@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server';
 import { customerReceivables } from '@/lib/crm/receivables';
 import { listCustomers } from '@/lib/crm/customers';
 import { proposeMessage } from '@/lib/crm/agent-store';
-import { lockedResponse } from '@/lib/crm/lock';
 
 export const runtime = 'nodejs';
 
@@ -10,8 +9,6 @@ const money = (n: number) => `$${Math.round(n).toLocaleString('es-CO')}`;
 
 // POST { contactId } queues a payment reminder in "Aprobaciones". It is NOT sent until a person approves it there.
 export async function POST(request: Request) {
-  const locked = lockedResponse(request);
-  if (locked) return locked;
   try {
     const { contactId } = (await request.json()) as { contactId: number };
     const c = listCustomers().find((x) => x.id === Number(contactId));

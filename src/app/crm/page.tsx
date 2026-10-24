@@ -126,11 +126,7 @@ export default function CrmPage() {
             <SalesReportView onOpenCustomer={setOpenId} />
           </LockGate>
         )}
-        {data && tab === 'cartera' && (
-          <LockGate what="la cartera" tiles={['Por cobrar', 'Vencida', 'Facturas abiertas', 'Clientes que deben']}>
-            <ReceivablesView onOpenCustomer={setOpenId} />
-          </LockGate>
-        )}
+        {data && tab === 'cartera' && <ReceivablesView onOpenCustomer={setOpenId} />}
         {data && tab === 'segmentos' && <SegmentsView data={data} draft={draft} setDraft={setDraft} onOpen={showCustomers} />}
         {data && tab === 'campanas' && <Campaigns data={data} />}
         {tab === 'aprobaciones' && <Approvals />}
