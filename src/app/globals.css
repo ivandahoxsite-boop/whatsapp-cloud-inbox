@@ -173,6 +173,12 @@
     transition: background-color 160ms ease, color 160ms ease;
   }
 
+  /* The inbox is a fixed full-screen app, but the CRM is a normal page that scrolls. */
+  html:has([data-crm-page]),
+  body:has([data-crm-page]) {
+    overflow: visible;
+  }
+
   button,
   input,
   textarea,

@@ -51,7 +51,8 @@ export default function CrmPage() {
   };
 
   return (
-    <div className="relative min-h-screen overflow-x-hidden bg-background text-foreground">
+    // overflow-x-clip (not hidden) so the sticky header still sticks to the viewport.
+    <div data-crm-page className="relative min-h-screen overflow-x-clip bg-background text-foreground">
       <div aria-hidden className="pointer-events-none fixed inset-0 opacity-60 dark:opacity-100">
         <div className="absolute -left-40 -top-40 h-[28rem] w-[28rem] rounded-full bg-emerald-500/15 blur-[120px]" />
         <div className="absolute -right-40 top-20 h-[26rem] w-[26rem] rounded-full bg-fuchsia-500/15 blur-[120px]" />
