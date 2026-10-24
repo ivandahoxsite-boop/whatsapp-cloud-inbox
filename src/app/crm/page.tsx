@@ -1,20 +1,22 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, MessageCircle, Plus, Trash2, Upload } from 'lucide-react';
+import { ArrowLeft, MessageCircle, Plus, Search, Trash2, Upload } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ThemeToggle } from '@/components/theme-toggle';
+import { CommandPalette, type CrmTab } from '@/components/crm/command-palette';
+import { Overview } from '@/components/crm/overview';
 import { SEGMENT_INFO, type Segment } from '@/lib/crm/scoring';
 import { parseCsv } from '@/lib/crm/csv';
 import type { Customer } from '@/lib/crm/customers';
 import type { CustomField, Stage } from '@/lib/crm/db';
 
 type CrmData = { customers: Customer[]; fields: CustomField[]; stages: Stage[] };
-type Tab = 'clientes' | 'importar' | 'estructura';
+type Tab = CrmTab;
 
 const QUERY_KEY = ['crm'] as const;
 
@@ -29,7 +31,7 @@ async function api<T = unknown>(url: string, method: string, body?: unknown): Pr
   return data as T;
 }
 
-const money = (n: number) => n.toLocaleString('es', { maximumFractionDigits: 0 });
+const money = (n: number) => n.toLocaleString('es', { maximumFractionDigits: 0, useGrouping: 'always' });
 
 const SEGMENT_STYLE: Record<Segment, string> = {
   campeon: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400',
@@ -41,43 +43,104 @@ const SEGMENT_STYLE: Record<Segment, string> = {
   sin_compras: 'bg-muted text-muted-foreground'
 };
 
+const TAB_LABEL: Record<Tab, string> = {
+  resumen: 'Resumen',
+  clientes: 'Clientes',
+  importar: 'Importar ventas',
+  estructura: 'Estructura'
+};
+
 export default function CrmPage() {
-  const [tab, setTab] = useState<Tab>('clientes');
+  const [tab, setTab] = useState<Tab>('resumen');
+  const [segment, setSegment] = useState<Segment | 'todos'>('todos');
+  const [q, setQ] = useState('');
+  const [paletteOpen, setPaletteOpen] = useState(false);
   const { data, error, isLoading } = useQuery({ queryKey: QUERY_KEY, queryFn: () => api<CrmData>('/api/crm/customers', 'GET') });
 
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setPaletteOpen((o) => !o);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  const showSegment = (s: Segment) => {
+    setSegment(s);
+    setQ('');
+    setTab('clientes');
+  };
+
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      <header className="flex items-center gap-3 border-b px-4 py-3">
+    <div className="relative min-h-screen overflow-hidden bg-background text-foreground">
+      <div aria-hidden className="pointer-events-none absolute inset-0 -z-0 opacity-60 dark:opacity-100">
+        <div className="absolute -left-40 -top-40 h-[28rem] w-[28rem] rounded-full bg-emerald-500/15 blur-[120px]" />
+        <div className="absolute -right-40 top-20 h-[26rem] w-[26rem] rounded-full bg-fuchsia-500/15 blur-[120px]" />
+        <div className="absolute bottom-0 left-1/3 h-[24rem] w-[24rem] rounded-full bg-sky-500/10 blur-[120px]" />
+      </div>
+      <header className="relative z-10 flex flex-wrap items-center gap-3 border-b border-border/60 bg-background/50 px-4 py-3 backdrop-blur-xl">
         <Link href="/" className="text-muted-foreground hover:text-foreground" aria-label="Volver a la bandeja">
           <ArrowLeft className="h-5 w-5" />
         </Link>
-        <h1 className="text-lg font-semibold">CRM</h1>
-        <nav className="ml-4 flex gap-1">
-          {(['clientes', 'importar', 'estructura'] as Tab[]).map((t) => (
+        <h1 className="text-lg font-semibold tracking-tight">CRM</h1>
+        <nav className="flex gap-1">
+          {(Object.keys(TAB_LABEL) as Tab[]).map((t) => (
             <Button key={t} size="sm" variant={tab === t ? 'default' : 'ghost'} onClick={() => setTab(t)}>
-              {t === 'clientes' ? 'Clientes' : t === 'importar' ? 'Importar ventas' : 'Estructura'}
+              {TAB_LABEL[t]}
             </Button>
           ))}
         </nav>
-        <div className="ml-auto">
-          <ThemeToggle />
-        </div>
+        <button
+          onClick={() => setPaletteOpen(true)}
+          className="ml-auto flex h-9 items-center gap-2 rounded-full border border-border/60 bg-card/50 px-3 text-sm text-muted-foreground hover:text-foreground"
+        >
+          <Search className="h-4 w-4" />
+          <span className="hidden sm:inline">Pregunta o busca…</span>
+          <kbd className="rounded border px-1.5 text-[10px]">⌘K</kbd>
+        </button>
+        <ThemeToggle />
       </header>
-      <main className="mx-auto max-w-6xl p-4">
+      <main className="relative z-10 mx-auto max-w-6xl p-4">
         {isLoading && <p className="text-sm text-muted-foreground">Cargando…</p>}
         {error && <p className="text-sm text-destructive">{(error as Error).message}</p>}
-        {data && tab === 'clientes' && <Customers data={data} />}
-        {data && tab === 'importar' && <Importer data={data} onDone={() => setTab('clientes')} />}
+        {data && tab === 'resumen' && <Overview customers={data.customers} onSegment={showSegment} />}
+        {data && tab === 'clientes' && <Customers data={data} segment={segment} setSegment={setSegment} q={q} setQ={setQ} />}
+        {data && tab === 'importar' && <Importer data={data} onDone={() => setTab('resumen')} />}
         {data && tab === 'estructura' && <Structure data={data} />}
       </main>
+      <CommandPalette
+        open={paletteOpen}
+        onClose={() => setPaletteOpen(false)}
+        customers={data?.customers ?? []}
+        onTab={setTab}
+        onSegment={showSegment}
+        onSearch={(text) => {
+          setSegment('todos');
+          setQ(text);
+          setTab('clientes');
+        }}
+      />
     </div>
   );
 }
 
-function Customers({ data }: { data: CrmData }) {
+function Customers({
+  data,
+  segment,
+  setSegment,
+  q,
+  setQ
+}: {
+  data: CrmData;
+  segment: Segment | 'todos';
+  setSegment: (s: Segment | 'todos') => void;
+  q: string;
+  setQ: (q: string) => void;
+}) {
   const qc = useQueryClient();
-  const [segment, setSegment] = useState<Segment | 'todos'>('todos');
-  const [q, setQ] = useState('');
   const [sort, setSort] = useState<'score' | 'totalSpent' | 'daysSinceLastSale'>('score');
   const [newPhone, setNewPhone] = useState('');
   const [newName, setNewName] = useState('');
