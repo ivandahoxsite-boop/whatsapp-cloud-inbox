@@ -1,7 +1,7 @@
 import { buildKapsoFields, type MessageListResponse } from '@kapso/whatsapp-cloud-api';
 import { getWhatsAppClient } from '@/lib/whatsapp-client';
 import { getDb } from './db';
-import { addActivity, findOrCreateContactByPhone, hasMessageActivity } from './agent-store';
+import { addActivity, fillContactName, findOrCreateContactByPhone, hasMessageActivity } from './agent-store';
 import { messageText } from './kapso-events';
 import { normalizePhone } from './customers';
 
@@ -18,6 +18,9 @@ export type SyncState = {
   activitiesAdded: number;
   contactsCreated: number;
   skipped: number;
+  /** Contacts that got their WhatsApp profile name from Kapso's contact list. */
+  namesFilled: number;
+  phase: 'mensajes' | 'nombres' | null;
   oldestMessageAt: string | null;
   error: string | null;
 };
@@ -38,6 +41,8 @@ const state: SyncState = {
   activitiesAdded: 0,
   contactsCreated: 0,
   skipped: 0,
+  namesFilled: 0,
+  phase: null,
   oldestMessageAt: null,
   error: null
 };
@@ -63,11 +68,10 @@ const kv = (m: Msg, camel: string, snake: string): string => {
   return typeof v === 'string' ? v : '';
 };
 
-async function fetchPage(phoneNumberId: string, after?: string): Promise<MessageListResponse> {
-  const fields = buildKapsoFields(['direction', 'phone_number', 'contact_name', 'content', 'transcript', 'whatsapp_conversation_id']);
+async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
   for (let attempt = 0; ; attempt++) {
     try {
-      return await getWhatsAppClient().messages.query({ phoneNumberId, limit: PAGE_SIZE, after, fields });
+      return await fn();
     } catch (e) {
       const err = e as { httpStatus?: number; retry?: { retryAfterMs?: number } };
       const retriable = err.httpStatus === 429 || (err.httpStatus ?? 0) >= 500;
@@ -75,6 +79,28 @@ async function fetchPage(phoneNumberId: string, after?: string): Promise<Message
       // Respect Retry-After when Kapso sends it, otherwise back off exponentially.
       await sleep(err.retry?.retryAfterMs ?? 2000 * 2 ** attempt);
     }
+  }
+}
+
+function fetchPage(phoneNumberId: string, after?: string): Promise<MessageListResponse> {
+  const fields = buildKapsoFields(['direction', 'phone_number', 'contact_name', 'content', 'transcript', 'whatsapp_conversation_id']);
+  return withRetry(() => getWhatsAppClient().messages.query({ phoneNumberId, limit: PAGE_SIZE, after, fields }));
+}
+
+/** Second pass: Kapso's contact directory has the WhatsApp profile names that messages often lack. */
+async function fillNamesFromContacts(phoneNumberId: string) {
+  let after: string | undefined;
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const res = await withRetry(() => getWhatsAppClient().contacts.list({ phoneNumberId, limit: PAGE_SIZE, after }));
+    for (const c of (res.data ?? []) as unknown as Record<string, unknown>[]) {
+      const phone = String(c.waId ?? c.wa_id ?? '');
+      const name = String(c.profileName ?? c.profile_name ?? c.displayName ?? c.display_name ?? '');
+      if (phone && name && fillContactName(phone, name)) state.namesFilled++;
+    }
+    const next = res.paging?.cursors?.after;
+    if (!res.data?.length || !next || !res.paging?.next) break;
+    after = next;
+    await sleep(PAUSE_MS);
   }
 }
 
@@ -94,11 +120,15 @@ function storePage(messages: Msg[], phoneNumberId: string) {
       }
       const inbound = kv(m, 'direction', 'direction') === 'inbound';
       const phone = normalizePhone(kv(m, 'phoneNumber', 'phone_number') || (inbound ? m.from : m.to) || '');
+      // contact_name always refers to the customer, whichever side sent the message.
+      const contactName = kv(m, 'contactName', 'contact_name');
       if (!m.id || !phone || ownNumbers.has(phone) || SKIP_TYPES.has(m.type ?? '') || hasMessageActivity(m.id)) {
+        // Re-running the import still completes names of contacts imported earlier.
+        if (phone && !ownNumbers.has(phone) && fillContactName(phone, contactName)) state.namesFilled++;
         state.skipped++;
         continue;
       }
-      const { id, created } = findOrCreateContactByPhone(phone, inbound ? kv(m, 'contactName', 'contact_name') : '');
+      const { id, created } = findOrCreateContactByPhone(phone, contactName);
       if (created) state.contactsCreated++;
       addActivity(
         id,
@@ -134,6 +164,8 @@ export function startSync(phoneNumberId: string): SyncState {
     activitiesAdded: 0,
     contactsCreated: 0,
     skipped: 0,
+    namesFilled: 0,
+    phase: 'mensajes',
     oldestMessageAt: null,
     error: null
   });
@@ -151,9 +183,12 @@ export function startSync(phoneNumberId: string): SyncState {
         after = next;
         await sleep(PAUSE_MS);
       }
+      state.phase = 'nombres';
+      await fillNamesFromContacts(phoneNumberId);
     } catch (e) {
       state.error = e instanceof Error ? e.message : String(e);
     } finally {
+      state.phase = null;
       state.running = false;
       state.finishedAt = new Date().toISOString();
     }

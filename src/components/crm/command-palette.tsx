@@ -5,7 +5,7 @@ import { CornerDownLeft, Search } from 'lucide-react';
 import { RECURRENCE_INFO, SEGMENT_INFO, type Recurrence, type Segment } from '@/lib/crm/scoring';
 import type { CustomerFilter } from '@/lib/crm/filters';
 import type { Customer } from '@/lib/crm/customers';
-import { cityOptions } from './shared';
+import { cityOptions, displayName } from './shared';
 
 export type CrmTab = 'resumen' | 'clientes' | 'segmentos' | 'aprobaciones' | 'importar' | 'estructura';
 
@@ -117,7 +117,7 @@ export function CommandPalette({
       .map((c) => ({
         id: `c-${c.id}`,
         group: 'Cliente',
-        label: c.name || `+${c.phone}`,
+        label: displayName(c),
         hint: `${RECURRENCE_INFO[c.recurrence].label}${c.city ? ` · ${c.city}` : ''} · potencial ${c.score}`,
         run: done(() => onOpenCustomer(c.id))
       }));

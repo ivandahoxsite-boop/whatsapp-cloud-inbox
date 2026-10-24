@@ -49,12 +49,26 @@ export function claimEvent(key: string): boolean {
   return Number(res.changes) > 0;
 }
 
-export function findOrCreateContactByPhone(rawPhone: string, name: string): { id: number; created: boolean } {
+/** Kapso uses the phone number as contact name when WhatsApp has no profile name. */
+export const isPlaceholderName = (name: string) => !name.trim() || /^[\d\s+()-]+$/.test(name.trim());
+
+/** Sets the name only when the contact has none (or just its number); never overwrites one you typed. */
+export function fillContactName(rawPhone: string, name: string): boolean {
+  if (isPlaceholderName(name)) return false;
+  const d = getDb();
+  const row = d.prepare('SELECT id, name FROM contacts WHERE phone = ?').get(normalizePhone(rawPhone)) as { id: number; name: string } | undefined;
+  if (!row || !isPlaceholderName(row.name)) return false;
+  d.prepare('UPDATE contacts SET name = ? WHERE id = ?').run(name.trim().slice(0, 80), row.id);
+  return true;
+}
+
+export function findOrCreateContactByPhone(rawPhone: string, rawName: string): { id: number; created: boolean } {
   const phone = normalizePhone(rawPhone);
+  const name = isPlaceholderName(rawName) ? '' : rawName.trim();
   const d = getDb();
   const existing = d.prepare('SELECT id, name FROM contacts WHERE phone = ?').get(phone) as { id: number; name: string } | undefined;
   if (existing) {
-    if (!existing.name && name) d.prepare('UPDATE contacts SET name = ? WHERE id = ?').run(name, existing.id);
+    if (name && isPlaceholderName(existing.name)) d.prepare('UPDATE contacts SET name = ? WHERE id = ?').run(name, existing.id);
     return { id: existing.id, created: false };
   }
   const stage = d.prepare("SELECT id FROM stages WHERE name = 'Nuevo'").get() as { id: number } | undefined;

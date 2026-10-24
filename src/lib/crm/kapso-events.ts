@@ -31,6 +31,8 @@ export function messageText(m: { type?: string; text?: { body?: string }; kapso?
 
 // "Image attached (image_5bf3.jpeg) [Size: 357.9 KB | Type: image/jpeg]" -> "📷 Imagen"
 function mediaLabel(content: string): string {
+  // History imported from the WhatsApp Business app can hold media Kapso never downloaded.
+  if (/^\[Media\b[^\]]*\]$/i.test(content)) return '📎 Archivo';
   const m = /^(Image|Video|Document|Audio|Sticker) attached(?: \(([^)]*)\))?/i.exec(content);
   if (!m) return '';
   const kind = m[1].toLowerCase();

@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { isEmptyFilter, matchesFilter, type CustomerFilter } from '@/lib/crm/filters';
 import type { Customer } from '@/lib/crm/customers';
 import { FilterBar } from './filter-bar';
-import { Pill, QUERY_KEY, RecurrencePill, SegmentPill, TagPill, ago, api, card, cityOptions, downloadCustomersCsv, money, relativeDays, type CrmData } from './shared';
+import { Pill, QUERY_KEY, RecurrencePill, SegmentPill, TagPill, ago, api, card, cityOptions, displayName, downloadCustomersCsv, formatPhone, money, relativeDays, type CrmData } from './shared';
 
 type SortKey = 'score' | 'waiting' | 'chat' | 'totalSpent' | 'recent' | 'overdue' | 'name';
 
@@ -152,7 +152,7 @@ export function CustomersView({
                 {selecting && <input type="checkbox" readOnly checked={selected.has(c.id)} className="mt-1 accent-primary" />}
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
-                    <p className="truncate font-medium">{c.name || `+${c.phone}`}</p>
+                    <p className="truncate font-medium">{displayName(c)}</p>
                     <span className="ml-auto shrink-0 text-xs tabular-nums text-muted-foreground">{c.score}</span>
                   </div>
                   <p className="truncate text-xs text-muted-foreground">
@@ -207,7 +207,7 @@ export function CustomersView({
                 <td className="p-3">
                   <div className="font-medium">{c.name || '—'}</div>
                   <div className="text-xs text-muted-foreground">
-                    +{c.phone}
+                    {formatPhone(c.phone)}
                     {c.city && (
                       <>
                         {' · '}

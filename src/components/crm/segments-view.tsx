@@ -12,7 +12,7 @@ import { FilterBar } from './filter-bar';
 import { QUERY_KEY, RECURRENCE_COLOR, SEGMENT_COLOR, api, card, downloadCustomersCsv, money, type CrmData } from './shared';
 
 const QUICK: { name: string; hint: string; color: string; filter: CustomerFilter }[] = [
-  { name: 'Esperan tu respuesta', hint: 'Te escribieron y aún no contestas', color: '#f59e0b', filter: { awaiting: true } },
+  { name: 'Esperan tu respuesta', hint: 'Te escribieron (últimos 14 días) y aún no contestas', color: '#f59e0b', filter: { awaiting: true } },
   { name: RECURRENCE_INFO.por_recomprar.label, hint: 'Ya pasaron su ritmo habitual de compra', color: RECURRENCE_COLOR.por_recomprar, filter: { recurrence: ['por_recomprar'] } },
   { name: 'Lograr la 2ª compra', hint: 'Compraron una vez hace poco', color: RECURRENCE_COLOR.primera_compra, filter: { recurrence: ['primera_compra'] } },
   { name: 'Recuperar de una sola compra', hint: 'Compraron una vez y no volvieron', color: RECURRENCE_COLOR.una_vez, filter: { recurrence: ['una_vez'] } },

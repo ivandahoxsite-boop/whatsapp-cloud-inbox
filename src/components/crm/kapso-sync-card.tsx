@@ -57,8 +57,14 @@ export function KapsoSyncCard() {
       {data?.running ? (
         <div className="flex items-center gap-2 text-sm">
           <Loader2 className="h-4 w-4 animate-spin" />
-          Leyendo… {data.messagesSeen} mensajes revisados, {data.activitiesAdded} nuevos, {data.contactsCreated} contactos nuevos
-          {oldest && <span className="text-muted-foreground"> · llegando a {oldest}</span>}
+          {data.phase === 'nombres' ? (
+            <>Completando nombres de contactos… {data.namesFilled} nombres agregados</>
+          ) : (
+            <>
+              Leyendo… {data.messagesSeen} mensajes revisados, {data.activitiesAdded} nuevos, {data.contactsCreated} contactos nuevos
+              {oldest && <span className="text-muted-foreground"> · llegando a {oldest}</span>}
+            </>
+          )}
         </div>
       ) : (
         <Button onClick={start}>Traer historial</Button>
@@ -68,7 +74,7 @@ export function KapsoSyncCard() {
         <p className={cn('text-sm', data.error ? 'text-destructive' : 'text-muted-foreground')}>
           {data.error
             ? `Se detuvo: ${data.error}. Lo ya importado se conserva; puedes intentarlo de nuevo.`
-            : `Listo: ${data.messagesSeen} mensajes revisados, ${data.activitiesAdded} agregados, ${data.contactsCreated} contactos nuevos${oldest ? `, desde ${oldest}` : ''}.`}
+            : `Listo: ${data.messagesSeen} mensajes revisados, ${data.activitiesAdded} agregados, ${data.contactsCreated} contactos nuevos, ${data.namesFilled} nombres completados${oldest ? `, desde ${oldest}` : ''}.`}
         </p>
       )}
       {err && <p className="text-sm text-destructive">{err}</p>}

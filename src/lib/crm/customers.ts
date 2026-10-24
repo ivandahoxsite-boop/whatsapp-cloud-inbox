@@ -2,7 +2,7 @@ import { getDb } from './db';
 import { computeMetrics, computeRecurrence, type CustomerMetrics, type RecurrenceMetrics } from './scoring';
 import { addTags, ensureTag, tagsByContact } from './tags';
 import { cityKey } from './filters';
-import { needsReply } from './reply';
+import { AWAITING_WINDOW_DAYS, needsReply } from './reply';
 
 export type Customer = {
   id: number;
@@ -102,7 +102,8 @@ export function listCustomers(): Customer[] {
 
 function chatState(c?: { lastIn: string | null; lastOut: string | null; lastInText: string }) {
   if (!c) return { lastInboundAt: null, lastOutboundAt: null, lastInboundText: '', awaitingReply: false };
-  const awaitingReply = !!c.lastIn && (!c.lastOut || c.lastIn > c.lastOut) && needsReply(c.lastInText);
+  const recent = !!c.lastIn && Date.now() - Date.parse(`${c.lastIn.replace(' ', 'T')}Z`) <= AWAITING_WINDOW_DAYS * 86_400_000;
+  const awaitingReply = recent && (!c.lastOut || c.lastIn! > c.lastOut) && needsReply(c.lastInText);
   return { lastInboundAt: sqlToIso(c.lastIn), lastOutboundAt: sqlToIso(c.lastOut), lastInboundText: c.lastInText, awaitingReply };
 }
 

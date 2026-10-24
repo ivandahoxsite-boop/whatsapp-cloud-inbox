@@ -6,12 +6,15 @@ const CLOSING = /gracias|\bok\b|okey|listo|dale|de una|perfecto|excelente|bueno|
 // Closings that end the exchange whatever their length.
 const FAREWELL = /(le|te|les) (aviso|informo|confirmo|cuento)|quedo pendiente|que (tenga|tengas|tengan) (un )?(buen|feliz|lindo)|con much[oa] gusto|bendiciones|feliz (d[ií]a|tarde|noche)/i;
 
+/** Older unanswered chats are history, not a to-do. */
+export const AWAITING_WINDOW_DAYS = 14;
+
 export function needsReply(raw: string): boolean {
   const text = raw.replace(/^🎤\s*/, '').replace(/^\[(sticker|reaction|mensaje|image|audio)\]$/i, '').trim();
   if (!text) return false;
   if (REQUEST.test(text)) return true;
   // A photo or file sent without an answer is usually part of a request (product photo, receipt).
-  if (/^(📷|📄|🎬)/u.test(text)) return true;
+  if (/^(📷|📄|🎬|📎)/u.test(text)) return true;
   if (FAREWELL.test(text)) return false;
   // A bare greeting usually opens a request: answer it.
   if (/^(hola|buen[oa]s?( (d[ií]as?|tardes?|noches?))?|qu[eé] m[aá]s|saludos)\b[\s!.,]*$/i.test(text)) return true;

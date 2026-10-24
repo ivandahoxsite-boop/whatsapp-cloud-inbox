@@ -107,6 +107,14 @@ export function cityOptions(customers: Customer[]): { name: string; count: numbe
     .sort((a, b) => b.count - a.count);
 }
 
+/** "+57 300 224 5595" for Colombian mobiles, "+<digits>" otherwise. */
+export function formatPhone(phone: string): string {
+  const m = /^57(\d{3})(\d{3})(\d{4})$/.exec(phone);
+  return m ? `+57 ${m[1]} ${m[2]} ${m[3]}` : `+${phone}`;
+}
+
+export const displayName = (c: { name: string; phone: string }) => c.name || formatPhone(c.phone);
+
 /** "hace 5 min", "hace 3 h", "hace 2 d" for an ISO timestamp. */
 export function ago(iso: string | null): string {
   if (!iso) return '—';

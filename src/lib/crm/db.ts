@@ -126,6 +126,9 @@ function migrate(d: DatabaseSync) {
       PRIMARY KEY (contact_id, tag_id)
     );
     CREATE INDEX IF NOT EXISTS contact_tags_tag_idx ON contact_tags(tag_id);
+    -- Data imported before these fixes: media placeholders and phone numbers used as names.
+    UPDATE activities SET text = '📎 Archivo' WHERE text LIKE '[Media%]';
+    UPDATE contacts SET name = '' WHERE name <> '' AND trim(name, '0123456789+ ()-') = '';
     CREATE TABLE IF NOT EXISTS segments (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,

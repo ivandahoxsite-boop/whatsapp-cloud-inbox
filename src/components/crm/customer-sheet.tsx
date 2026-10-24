@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { RECURRENCE_INFO } from '@/lib/crm/scoring';
 import type { Customer } from '@/lib/crm/customers';
 import type { CustomField } from '@/lib/crm/db';
-import { QUERY_KEY, RecurrencePill, SegmentPill, TagPill, ago, api, cityOptions, money, relativeDays, type CrmData } from './shared';
+import { QUERY_KEY, RecurrencePill, SegmentPill, TagPill, ago, api, cityOptions, formatPhone, money, relativeDays, type CrmData } from './shared';
 
 type Sale = { id: number; soldAt: string; amount: number; product: string };
 type Activity = { id: number; kind: string; text: string; createdAt: string };
@@ -116,7 +116,7 @@ function SheetBody({ c, data, onClose }: { c: Customer; data: CrmData; onClose: 
             className="w-full bg-transparent text-lg font-semibold outline-none"
           />
         </DialogTitle>
-        <DialogDescription className="text-xs">+{c.phone}</DialogDescription>
+        <DialogDescription className="text-xs">{formatPhone(c.phone)}</DialogDescription>
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
           <RecurrencePill recurrence={c.recurrence} />
           <SegmentPill segment={c.segment} />

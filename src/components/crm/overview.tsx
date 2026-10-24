@@ -8,7 +8,7 @@ import { RECURRENCE_INFO, SEGMENT_INFO, type Recurrence, type Segment } from '@/
 import { buildActions } from '@/lib/crm/actions';
 import { cityKey, type CustomerFilter } from '@/lib/crm/filters';
 import type { Summary } from '@/app/api/crm/summary/route';
-import { RECURRENCE_COLOR, SEGMENT_COLOR, TagPill, ago, api, card, cityOptions, money, type CrmData } from './shared';
+import { RECURRENCE_COLOR, SEGMENT_COLOR, TagPill, ago, api, card, cityOptions, displayName, money, type CrmData } from './shared';
 
 const MONTHS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 const monthLabel = (ym: string) => `${MONTHS[Number(ym.slice(5)) - 1]} ${ym.slice(2, 4)}`;
@@ -146,7 +146,7 @@ export function Overview({ data, onFilter }: { data: CrmData; onFilter: (f: Cust
             {s.awaiting.slice(0, 6).map((c) => (
               <li key={c.id} className="flex flex-col gap-1 rounded-xl border border-border/60 bg-background/40 p-3">
                 <div className="flex items-baseline gap-2">
-                  <p className="truncate text-sm font-medium">{c.name || `+${c.phone}`}</p>
+                  <p className="truncate text-sm font-medium">{displayName(c)}</p>
                   <span className="ml-auto shrink-0 text-[11px] text-amber-500">{ago(c.lastInboundAt)}</span>
                 </div>
                 <p className="line-clamp-2 text-xs text-muted-foreground">“{c.lastInboundText}”</p>
@@ -224,7 +224,7 @@ export function Overview({ data, onFilter }: { data: CrmData; onFilter: (f: Cust
                   <div className="flex items-start gap-2">
                     <span className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: RECURRENCE_COLOR[a.customer.recurrence] }} />
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-medium">{a.customer.name || `+${a.customer.phone}`}</p>
+                      <p className="truncate text-sm font-medium">{displayName(a.customer)}</p>
                       <p className="text-xs font-medium text-foreground/80">{a.title}</p>
                       <p className="text-xs text-muted-foreground">{a.reason}</p>
                     </div>
