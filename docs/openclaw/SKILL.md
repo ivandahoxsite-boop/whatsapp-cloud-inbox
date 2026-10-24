@@ -5,8 +5,8 @@ description: Consult the sales CRM (customers, segments, recommended actions), l
 
 # CRM + WhatsApp
 
-Base URL: `$CRM_BASE_URL` (e.g. `https://crm.example.com`). Every request needs
-`Authorization: Bearer $CRM_AGENT_TOKEN` and `Content-Type: application/json`.
+Base URL: `$CRM_BASE_URL` (on the same server: `http://127.0.0.1:4000`). Every request needs
+`Authorization: Bearer $CRM_AGENT_TOKEN` and `Content-Type: application/json`. Both are environment variables of the OpenClaw service.
 
 ## Rules
 - You can read, annotate and **propose** messages. You can NOT send WhatsApp messages.
@@ -38,7 +38,8 @@ Each customer also has `nextExpectedAt` (date their next purchase is due), `over
 
 ## Loading customers and sales from the billing system
 Use this when the user asks to bring their customers/sales from their billing or sales system into the CRM.
-Base URL on this server: `http://127.0.0.1:4000`. Token: `CRM_AGENT_TOKEN` in `/etc/crm/crm.env` (read it from the file; never print it or send it in chat).
+Base URL on this server: `$CRM_BASE_URL` (`http://127.0.0.1:4000`). Token: environment variable `$CRM_AGENT_TOKEN`, set on the OpenClaw service by the server admin.
+Use it directly in commands (`curl -H "Authorization: Bearer $CRM_AGENT_TOKEN" ...`); never print it, never ask the user for it in chat.
 
 1. **Customers** — `POST /api/agent/import/customers` body `{"customers":[{"phone":"3001234567","name":"Audiolujos","city":"Medellín","tags":["Mayorista"]}]}`
    Creates or completes by phone; only fields you send are overwritten.
