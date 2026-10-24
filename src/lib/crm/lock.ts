@@ -15,7 +15,7 @@ const setSetting = (key: string, value: string) =>
 export const hasPin = () => !!getSetting('pin');
 
 export function setPin(pin: string) {
-  if (pin.length < 4 || pin.length > 64) throw new Error('La clave debe tener entre 4 y 64 caracteres');
+  if (!/^\d{4}$/.test(pin)) throw new Error('La clave debe ser de 4 números');
   const salt = randomBytes(16);
   setSetting('pin', `${salt.toString('hex')}:${scryptSync(pin, salt, 32).toString('hex')}`);
 }

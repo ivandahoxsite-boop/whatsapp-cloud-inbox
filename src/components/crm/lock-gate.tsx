@@ -75,28 +75,34 @@ export function LockGate({ what, tiles, children }: { what: string; tiles: strin
           <Lock className="h-4 w-4" />
           {changing ? 'Cambiar clave' : setup ? `Crea una clave para ver ${what}` : `Ingresa tu clave para ver ${what}`}
         </p>
-        {setup && <p className="text-xs text-muted-foreground">Mínimo 4 caracteres. Que no sea la contraseña del CRM.</p>}
+        {setup && <p className="text-xs text-muted-foreground">4 números.</p>}
         <Input
           type="password"
+          inputMode="numeric"
+          pattern="[0-9]*"
+          maxLength={4}
           autoComplete="off"
           value={pin}
-          onChange={(e) => setPin(e.target.value)}
+          onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
           placeholder={changing ? 'Clave actual' : setup ? 'Nueva clave' : 'Clave'}
           aria-label="Clave"
         />
         {(setup || changing) && (
           <Input
             type="password"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            maxLength={4}
             autoComplete="off"
             value={pin2}
-            onChange={(e) => setPin2(e.target.value)}
+            onChange={(e) => setPin2(e.target.value.replace(/\D/g, ''))}
             placeholder={changing ? 'Clave nueva' : 'Repite la clave'}
             aria-label="Clave nueva"
           />
         )}
         {err && <p className="text-sm text-destructive">{err}</p>}
         <div className="flex gap-2">
-          <Button type="submit" disabled={!pin}>
+          <Button type="submit" disabled={pin.length !== 4}>
             <Unlock className="mr-1.5 h-4 w-4" /> {changing ? 'Guardar' : setup ? 'Crear y ver' : 'Ver'}
           </Button>
           {changing && (
