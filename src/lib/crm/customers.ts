@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { getDb } from './db';
 import { computeMetrics, computeRecurrence, type CustomerMetrics, type RecurrenceMetrics } from './scoring';
 import { addTags, ensureTag, tagsByContact } from './tags';
@@ -337,7 +338,14 @@ export function importSales(columns: string[], mapping: Record<string, ImportTar
 
 // ---- Bulk upserts for the agent (e.g. OpenClaw copying from the billing system) -------------
 
-export type CustomerUpsert = { phone: string; name?: string; city?: string; tags?: string[]; data?: Record<string, unknown> };
+export type CustomerUpsert = {
+  phone: string;
+  name?: string;
+  /** Replace the stored name too. Without it an existing name is kept and `name` only fills an empty one. */
+  overwriteName?: boolean; city?: string;
+  tags?: string[];
+  data?: Record<string, unknown>;
+};
 export type SaleUpsert = {
   phone: string;
   soldAt: string;
@@ -355,7 +363,17 @@ export type SaleUpsert = {
 
 type Skip = { index: number; reason: string };
 
-/** Creates or completes customers by phone. Existing values are only overwritten when a new one is given. */
+const MAX_EXTERNAL_ID = 80;
+
+/** Ids longer than the column limit are shortened with a hash of the full id, so different long ids never collide. */
+export function normalizeExternalId(raw: string): string {
+  const id = raw.trim();
+  if (id.length <= MAX_EXTERNAL_ID) return id;
+  const hash = createHash('sha1').update(id).digest('hex').slice(0, 8);
+  return `${id.slice(0, MAX_EXTERNAL_ID - hash.length - 1)}-${hash}`;
+}
+
+/** Creates or completes customers by phone. An existing name is kept unless `overwriteName` is set; other fields are overwritten when a new value is given. */
 export function upsertCustomers(items: CustomerUpsert[]) {
   const d = getDb();
   const res = { created: 0, updated: 0, skipped: [] as Skip[] };
@@ -372,7 +390,7 @@ export function upsertCustomers(items: CustomerUpsert[]) {
       if (existing) {
         id = existing.id;
         d.prepare('UPDATE contacts SET name = ?, city = ?, data = ? WHERE id = ?').run(
-          name || existing.name,
+          (it.overwriteName ? name : '') || existing.name || name,
           city || existing.city,
           JSON.stringify({ ...JSON.parse(existing.data), ...(it.data ?? {}) }),
           id
@@ -412,7 +430,7 @@ export function upsertSales(items: SaleUpsert[]) {
       if (!soldAt) return res.skipped.push({ index, reason: 'Fecha inválida' });
       const amount = typeof it.amount === 'number' ? it.amount : parseAmount(String(it.amount ?? ''));
       if (!Number.isFinite(amount)) return res.skipped.push({ index, reason: 'Monto inválido' });
-      const externalId = it.externalId ? String(it.externalId).trim().slice(0, 80) : null;
+      const externalId = it.externalId ? normalizeExternalId(String(it.externalId)) : null;
       if (externalId && dup.get(externalId)) return void res.duplicates++;
 
       const name = String(it.name ?? '').trim().slice(0, 80);

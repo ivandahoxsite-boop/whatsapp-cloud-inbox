@@ -42,9 +42,10 @@ Base URL on this server: `$CRM_BASE_URL` (`http://127.0.0.1:4000`). Token: envir
 Use it directly in commands (`curl -H "Authorization: Bearer $CRM_AGENT_TOKEN" ...`); never print it, never ask the user for it in chat.
 
 1. **Customers** — `POST /api/agent/import/customers` body `{"customers":[{"phone":"3001234567","name":"Audiolujos","city":"Medellín","tags":["Mayorista"]}]}`
-   Creates or completes by phone; only fields you send are overwritten.
+   Creates or completes by phone; only fields you send are overwritten, **except `name`**: an existing contact keeps its name (it may be the WhatsApp profile name) and yours only fills an empty one. Add `"overwriteName":true` to a customer to replace it on purpose. Put the billing-system name in a tag (e.g. `Analix: <name>`).
 2. **Sales** — `POST /api/agent/import/sales` body
    `{"sales":[{"phone":"3001234567","soldAt":"2026-03-15","amount":850000,"product":"Amplificador X","externalId":"FE-1234","name":"Audiolujos","city":"Medellín"}]}`
+   - `externalId` longer than 80 characters is shortened with an 8-character hash of the full id (same input always gives the same id), so long ids never collide and re-running stays safe.
    - `externalId` = invoice number (or `invoice-line` if you send one row per product). **Always send it**: sales already stored with that id are skipped, so re-running is safe.
    - `soldAt`: `YYYY-MM-DD` or `DD/MM/YYYY`. `amount`: number in pesos (no symbols needed).
    - Customers that don't exist yet are created and moved to the stage "Cliente".
@@ -52,4 +53,5 @@ Use it directly in commands (`curl -H "Authorization: Bearer $CRM_AGENT_TOKEN" .
    - Monthly data (no exact day): use the first day of the month as `soldAt` and a stable id such as `ANX-<client>-<year>-<month>-<product>` as `externalId`.
 - Phones: any format works; Colombian mobiles without 57 (`3001234567`) are matched to the WhatsApp contact `573001234567`.
 - Send at most 2000 items per request (500 is a good batch). Each response returns `created`, `duplicates`/`updated` and `skipped` with the reason per row: report those numbers to the user.
+- Several billing clients can share one phone (e.g. a business that changed its name): their sales end up under the same contact. Check shared phones before loading; send only one client's sales per phone unless they are really the same business.
 - Start with a small test (10 rows), show the user the result, then load the rest.
