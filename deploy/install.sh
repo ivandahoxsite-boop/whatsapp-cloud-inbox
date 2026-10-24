@@ -123,6 +123,7 @@ $DOMAIN {
 	# The agent API is only for OpenClaw on this same server (http://127.0.0.1:$PORT)
 	@agent path /api/agent/*
 	respond @agent 404
+	encode zstd gzip
 	reverse_proxy 127.0.0.1:$PORT
 }
 EOF
