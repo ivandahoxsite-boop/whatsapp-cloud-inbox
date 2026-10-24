@@ -500,7 +500,7 @@ export type SalesOptions = {
   sharedPhones?: string[];
   /** Accept customers without a phone, identified by `nit` or `name`. Without it they are skipped as before. */
   allowNoPhone?: boolean;
-  /** A sale whose externalId is already stored gets its `data` (seller, zone, qty…) completed instead of being skipped. Nothing else changes. */
+  /** Completion mode: a sale whose externalId is already stored gets its `data` (seller, zone, qty…) completed. Nothing else changes and NO sale is ever created. */
   updateExisting?: boolean;
 };
 
@@ -621,6 +621,8 @@ export function upsertSales(items: SaleUpsert[], options: SalesOptions = {}) {
         }
         return void res.duplicates++;
       }
+      // Completing data never creates sales: an id that is not stored is reported, not inserted.
+      if (options.updateExisting) return void res.skipped.push({ index, reason: 'No existe una venta con ese externalId (updateExisting no crea ventas)' });
 
       const name = String(it.name ?? '').trim().slice(0, 80);
       const city = normalizeCity(String(it.city ?? ''));
