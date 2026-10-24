@@ -59,8 +59,8 @@ chown crm:crm "$DATA" "$BACKUPS"
 # ---- 4. Code and build -----------------------------------------------------
 say "Descargando y compilando la aplicación ($BRANCH)"
 if [ -d "$APP/.git" ]; then
-  git -C "$APP" fetch -q origin "$BRANCH"
-  git -C "$APP" checkout -q -B "$BRANCH" "origin/$BRANCH"
+  sudo -u crm -H git -C "$APP" fetch -q origin "$BRANCH"
+  sudo -u crm -H git -C "$APP" checkout -q -B "$BRANCH" "origin/$BRANCH"
 else
   mkdir -p "$APP"
   git clone -q --branch "$BRANCH" "$REPO_URL" "$APP" || die "No pude clonar $REPO_URL. Si el repositorio es privado, usa una URL con token de solo lectura: REPO_URL=https://USUARIO:TOKEN@github.com/... bash install.sh"
@@ -147,9 +147,9 @@ echo "15 3 * * * crm /usr/local/bin/crm-backup >/dev/null 2>&1" > /etc/cron.d/cr
 cat > /usr/local/bin/crm-update <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
-git -C "$APP" fetch -q origin "$BRANCH"
-git -C "$APP" checkout -q -B "$BRANCH" "origin/$BRANCH"
-chown -R crm:crm "$APP"
+# git must run as the owner of the checkout (root gets "dubious ownership")
+sudo -u crm -H git -C "$APP" fetch -q origin "$BRANCH"
+sudo -u crm -H git -C "$APP" checkout -q -B "$BRANCH" "origin/$BRANCH"
 sudo -u crm -H env PATH="$NODE_DIR:/usr/bin:/bin" bash -c "cd '$APP' && npm ci --no-audit --no-fund && npm run build"
 /usr/local/bin/crm-backup || true
 systemctl restart crm
