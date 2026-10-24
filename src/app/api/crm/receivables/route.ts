@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { markReceivablePaid, receivablesSummary } from '@/lib/crm/receivables';
+import { isAgingKey, markReceivablePaid, receivablesSummary } from '@/lib/crm/receivables';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -8,7 +8,9 @@ const fail = (e: unknown, status = 400) => NextResponse.json({ error: e instance
 
 export async function GET(request: Request) {
   try {
-    return NextResponse.json(receivablesSummary({ seller: new URL(request.url).searchParams.get('seller') || undefined }));
+    const p = new URL(request.url).searchParams;
+    const bucket = p.get('bucket');
+    return NextResponse.json(receivablesSummary({ seller: p.get('seller') || undefined, bucket: isAgingKey(bucket) ? bucket : undefined }));
   } catch (e) {
     return fail(e, 500);
   }

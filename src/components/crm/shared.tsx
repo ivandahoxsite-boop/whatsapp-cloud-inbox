@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
 import { RECURRENCE_INFO, SEGMENT_INFO, type Recurrence, type Segment } from '@/lib/crm/scoring';
@@ -27,6 +27,7 @@ export async function api<T = unknown>(url: string, method = 'GET', body?: unkno
     body: body === undefined ? undefined : JSON.stringify(body)
   });
   const data = await res.json().catch(() => ({}));
+  if (res.status === 423 && typeof window !== 'undefined') window.dispatchEvent(new Event('crm-locked'));
   if (!res.ok) throw new Error((data as { error?: string }).error || 'Error');
   return data as T;
 }
@@ -39,16 +40,23 @@ export function useCrmData() {
  * Keeps the CRM live: every few seconds asks the server (a tiny request) whether anything changed — a new
  * WhatsApp message, a sale, an approval — and only then reloads the CRM queries.
  */
-export function useLiveSync(everyMs = 5000) {
+export function useLiveSync(everyMs = 5000): { newBuild: boolean } {
   const qc = useQueryClient();
   const last = useRef<string | null>(null);
+  const build = useRef<string | null>(null);
+  const [newBuild, setNewBuild] = useState(false);
   useEffect(() => {
     let stopped = false;
     const check = async () => {
       if (document.visibilityState !== 'visible') return;
       try {
-        const { version } = await api<{ version: string }>('/api/crm/version');
+        const { version, build: serverBuild } = await api<{ version: string; build?: string }>('/api/crm/version');
         if (stopped) return;
+        // The server was updated while this page stayed open: this page's code is outdated.
+        if (serverBuild) {
+          if (build.current === null) build.current = serverBuild;
+          else if (build.current !== serverBuild) setNewBuild(true);
+        }
         if (last.current !== null && last.current !== version) {
           qc.invalidateQueries({ predicate: (q) => String(q.queryKey[0]).startsWith('crm') });
         }
@@ -66,6 +74,7 @@ export function useLiveSync(everyMs = 5000) {
       document.removeEventListener('visibilitychange', check);
     };
   }, [qc, everyMs]);
+  return { newBuild };
 }
 
 export const money = (n: number) => n.toLocaleString('es', { maximumFractionDigits: 0, useGrouping: 'always' });

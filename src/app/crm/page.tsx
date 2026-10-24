@@ -40,7 +40,7 @@ export default function CrmPage() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const { data, error, isLoading } = useCrmData();
-  useLiveSync();
+  const { newBuild } = useLiveSync();
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -104,6 +104,17 @@ export default function CrmPage() {
           ))}
         </nav>
       </header>
+
+      {newBuild && (
+        <div className="relative z-20 mx-auto flex max-w-6xl items-center gap-3 px-4 pt-3">
+          <p className="min-w-0 flex-1 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-sm">
+            Hay una versión nueva del CRM.
+          </p>
+          <button onClick={() => window.location.reload()} className="h-9 shrink-0 rounded-full bg-primary px-4 text-sm text-primary-foreground">
+            Actualizar
+          </button>
+        </div>
+      )}
 
       <main className="relative z-10 mx-auto max-w-6xl p-3 sm:p-4">
         {isLoading && <p className="text-sm text-muted-foreground">Cargando…</p>}

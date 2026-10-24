@@ -138,7 +138,10 @@ export type Debtor = {
   invoices: number;
 };
 
-export type Aging = { key: 'current' | 'd1_30' | 'd31_60' | 'd61_90' | 'd90'; label: string; amount: number; invoices: number };
+export type AgingKey = 'current' | 'd1_30' | 'd31_60' | 'd61_90' | 'd90';
+export type Aging = { key: AgingKey; label: string; amount: number; invoices: number };
+const AGING_KEYS: AgingKey[] = ['current', 'd1_30', 'd31_60', 'd61_90', 'd90'];
+export const isAgingKey = (v: unknown): v is AgingKey => AGING_KEYS.includes(v as AgingKey);
 
 type OpenRow = { id: number; contact_id: number; doc: string; issued_at: string | null; due_at: string | null; balance: number; seller: string; name: string; phone: string };
 
@@ -148,7 +151,11 @@ function daysLate(r: { issued_at: string | null; due_at: string | null }, today:
   return Math.floor((Date.parse(isoDay(today)) - Date.parse(due)) / DAY);
 }
 
-export function receivablesSummary(filter: { seller?: string } = {}, now = new Date()) {
+/**
+ * `bucket` narrows only the list of debtors (and what each one owes) to invoices in that age range; the totals and the
+ * aging bars always show everything so the ranges can be compared and switched.
+ */
+export function receivablesSummary(filter: { seller?: string; bucket?: AgingKey } = {}, now = new Date()) {
   const rows = getDb()
     .prepare(
       `SELECT r.id, r.contact_id, r.doc, r.issued_at, r.due_at, r.balance, r.seller, c.name, c.phone
@@ -165,6 +172,7 @@ export function receivablesSummary(filter: { seller?: string } = {}, now = new D
   ];
   const bySeller = new Map<string, { balance: number; overdue: number }>();
   const debtors = new Map<number, Debtor>();
+  const allDebtors = new Set<number>();
   const sellers = new Set<string>();
   let balance = 0;
   let overdue = 0;
@@ -186,6 +194,8 @@ export function receivablesSummary(filter: { seller?: string } = {}, now = new D
     if (late > 0) s.overdue += r.balance;
     bySeller.set(r.seller || 'Sin vendedor', s);
 
+    allDebtors.add(r.contact_id);
+    if (filter.bucket && AGING_KEYS[bucket] !== filter.bucket) continue;
     const dbt = debtors.get(r.contact_id) ?? {
       contactId: r.contact_id, name: r.name, phone: r.phone, hasPhone: /^\d{7,}$/.test(r.phone), seller: r.seller, balance: 0, overdue: 0, oldestDays: 0, invoices: 0
     };
@@ -197,8 +207,11 @@ export function receivablesSummary(filter: { seller?: string } = {}, now = new D
   }
 
   return {
-    totals: { balance, overdue, invoices, debtors: debtors.size },
+    totals: { balance, overdue, invoices, debtors: allDebtors.size },
+    /** What the (possibly bucket-filtered) debtor list adds up to. */
+    listed: { customers: debtors.size, amount: [...debtors.values()].reduce((a, d) => a + d.balance, 0) },
     aging,
+    bucket: filter.bucket ?? null,
     bySeller: [...bySeller].map(([name, v]) => ({ name, ...v })).sort((a, b) => b.overdue - a.overdue || b.balance - a.balance),
     debtors: [...debtors.values()].sort((a, b) => b.overdue - a.overdue || b.balance - a.balance).slice(0, 100),
     sellers: [...sellers].sort()

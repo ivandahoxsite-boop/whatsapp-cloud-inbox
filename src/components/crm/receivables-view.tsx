@@ -13,10 +13,16 @@ const AGING_COLOR = ['#34d399', '#fbbf24', '#fb923c', '#f87171', '#e11d48'];
 export function ReceivablesView({ onOpenCustomer }: { onOpenCustomer: (id: number) => void }) {
   const qc = useQueryClient();
   const [seller, setSeller] = useState('');
+  const [bucket, setBucket] = useState<string>('');
   const [note, setNote] = useState('');
   const { data, isLoading, error } = useQuery({
-    queryKey: ['crm-receivables', seller],
-    queryFn: () => api<ReceivablesSummary>(`/api/crm/receivables${seller ? `?seller=${encodeURIComponent(seller)}` : ''}`),
+    queryKey: ['crm-receivables', seller, bucket],
+    queryFn: () => {
+      const q = new URLSearchParams();
+      if (seller) q.set('seller', seller);
+      if (bucket) q.set('bucket', bucket);
+      return api<ReceivablesSummary>(`/api/crm/receivables${q.size ? `?${q}` : ''}`);
+    },
     placeholderData: (prev) => prev
   });
 
@@ -73,18 +79,29 @@ export function ReceivablesView({ onOpenCustomer }: { onOpenCustomer: (id: numbe
       </div>
 
       <section className={card}>
-        <h2 className="mb-3 text-sm font-medium">Antigüedad de la deuda</h2>
+        <h2 className="text-sm font-medium">Antigüedad de la deuda</h2>
+        <p className="mb-3 text-xs text-muted-foreground">Toca un rango para ver solo los clientes que tienen facturas en él.</p>
         <ul className="space-y-2">
           {data.aging.map((a, i) => (
             <li key={a.key}>
-              <div className="flex items-baseline gap-2 text-xs">
-                <span className="flex-1">{a.label}</span>
-                <span className="text-muted-foreground">{a.invoices} facturas</span>
-                <span className="tabular-nums">{money(a.amount)}</span>
-              </div>
-              <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-muted">
-                <div className="h-full rounded-full" style={{ width: `${(a.amount / maxAging) * 100}%`, background: AGING_COLOR[i] }} />
-              </div>
+              <button
+                onClick={() => setBucket(bucket === a.key ? '' : a.key)}
+                aria-pressed={bucket === a.key}
+                className={cn(
+                  'block w-full rounded-lg border border-transparent p-2 text-left transition-colors hover:bg-accent/40',
+                  bucket === a.key && 'border-emerald-400/60 bg-emerald-400/10',
+                  bucket && bucket !== a.key && 'opacity-50'
+                )}
+              >
+                <div className="flex items-baseline gap-2 text-xs">
+                  <span className="flex-1">{a.label}</span>
+                  <span className="text-muted-foreground">{a.invoices} facturas</span>
+                  <span className="tabular-nums">{money(a.amount)}</span>
+                </div>
+                <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-muted">
+                  <div className="h-full rounded-full" style={{ width: `${(a.amount / maxAging) * 100}%`, background: AGING_COLOR[i] }} />
+                </div>
+              </button>
             </li>
           ))}
         </ul>
@@ -113,10 +130,22 @@ export function ReceivablesView({ onOpenCustomer }: { onOpenCustomer: (id: numbe
       )}
 
       <section className={card}>
-        <h2 className="text-sm font-medium">Quién debe</h2>
-        <p className="mb-3 text-xs text-muted-foreground">Los que más tienen vencido primero. El recordatorio queda en Aprobaciones; no sale solo.</p>
+        <h2 className="text-sm font-medium">{bucket ? `Quién debe · ${data.aging.find((a) => a.key === bucket)?.label ?? ''}` : 'Quién debe'}</h2>
+        {bucket ? (
+          <p className="mb-3 flex items-center gap-2 text-xs text-muted-foreground">
+            <span className="min-w-0 flex-1">
+              {data.listed.customers} cliente{data.listed.customers === 1 ? '' : 's'} · {money(data.listed.amount)} en este rango
+            </span>
+            <button onClick={() => setBucket('')} className="shrink-0 underline">
+              Quitar filtro
+            </button>
+          </p>
+        ) : (
+          <p className="mb-3 text-xs text-muted-foreground">Los que más tienen vencido primero. El recordatorio queda en Aprobaciones; no sale solo.</p>
+        )}
         {note && <p className="mb-3 rounded-md border bg-background/40 p-2 text-xs">{note}</p>}
         <ul className="space-y-2">
+          {data.debtors.length === 0 && <li className="text-xs text-muted-foreground">Nadie en este rango.</li>}
           {data.debtors.map((d) => (
             <li key={d.contactId} className="flex items-center gap-2 rounded-lg border border-border/60 bg-background/40 p-2">
               <button onClick={() => onOpenCustomer(d.contactId)} className="min-w-0 flex-1 text-left">
