@@ -48,15 +48,36 @@ export function salesReport(filter: SalesReportFilter = {}, now = new Date()): S
     )
     .all(filter.from ?? '', filter.from ?? '', filter.to ?? '', filter.to ?? '') as unknown as Line[];
 
+  // A sale carries its own seller and zone when the loader sent them; when it did not, the customer's
+  // "Zona X" / "Vendedor Y" tags say the same thing. Names are compared in upper case so "Costa" and "COSTA" are one zone.
+  const fromTags = new Map<number, { zone?: string; seller?: string }>();
+  const tagRows = getDb()
+    .prepare("SELECT ct.contact_id AS id, t.name AS name FROM contact_tags ct JOIN tags t ON t.id = ct.tag_id WHERE t.name LIKE 'Zona %' OR t.name LIKE 'Vendedor %'")
+    .all() as unknown as { id: number; name: string }[];
+  for (const t of tagRows) {
+    const e = fromTags.get(t.id) ?? {};
+    if (/^zona /i.test(t.name)) e.zone ??= t.name.slice(5);
+    else e.seller ??= t.name.slice(9);
+    fromTags.set(t.id, e);
+  }
+  const norm = (v: string) => v.trim().replace(/\s+/g, ' ').toUpperCase();
+
   const sellers = new Set<string>();
   const zones = new Set<string>();
   const lines: Line[] = [];
   for (const r of rows) {
-    const l = { ...r, qty: Number(r.qty) || 0, product: r.product.trim() };
+    const tag = fromTags.get(r.contactId);
+    const l = {
+      ...r,
+      qty: Number(r.qty) || 0,
+      product: r.product.trim(),
+      seller: norm(r.seller || tag?.seller || ''),
+      zone: norm(r.zone || tag?.zone || '')
+    };
     if (l.seller) sellers.add(l.seller);
     if (l.zone) zones.add(l.zone);
-    if (filter.seller && l.seller !== filter.seller) continue;
-    if (filter.zone && l.zone !== filter.zone) continue;
+    if (filter.seller && l.seller !== norm(filter.seller)) continue;
+    if (filter.zone && l.zone !== norm(filter.zone)) continue;
     lines.push(l);
   }
 
