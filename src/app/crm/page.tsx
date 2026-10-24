@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -31,6 +31,7 @@ export default function CrmPage() {
   const [draft, setDraft] = useState<CustomerFilter>({});
   const [openId, setOpenId] = useState<number | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const { data, error, isLoading } = useCrmData();
 
   useEffect(() => {
@@ -47,12 +48,17 @@ export default function CrmPage() {
   const showCustomers = (f: CustomerFilter) => {
     setFilter(f);
     setTab('clientes');
-    window.scrollTo({ top: 0 });
+    scrollRef.current?.scrollTo({ top: 0 });
   };
 
   return (
-    // overflow-x-clip (not hidden) so the sticky header still sticks to the viewport.
-    <div data-crm-page className="relative min-h-screen overflow-x-clip bg-background text-foreground">
+    // The inbox locks html/body scrolling for its full-screen layout, so the CRM scrolls inside its own
+    // full-height container; that works regardless of the global styles or the browser.
+    <div
+      ref={scrollRef}
+      data-crm-page
+      className="relative h-[100dvh] overflow-y-auto overflow-x-clip overscroll-y-contain bg-background text-foreground"
+    >
       <div aria-hidden className="pointer-events-none fixed inset-0 opacity-60 dark:opacity-100">
         <div className="absolute -left-40 -top-40 h-[28rem] w-[28rem] rounded-full bg-emerald-500/15 blur-[120px]" />
         <div className="absolute -right-40 top-20 h-[26rem] w-[26rem] rounded-full bg-fuchsia-500/15 blur-[120px]" />

@@ -34,10 +34,13 @@ function Dropdown({
     document.addEventListener('mousedown', close);
     document.addEventListener('touchstart', close);
     window.addEventListener('resize', dismiss);
+    // Capture phase also catches the CRM's own scroll container.
+    window.addEventListener('scroll', dismiss, true);
     return () => {
       document.removeEventListener('mousedown', close);
       document.removeEventListener('touchstart', close);
       window.removeEventListener('resize', dismiss);
+      window.removeEventListener('scroll', dismiss, true);
     };
   }, [open]);
 
