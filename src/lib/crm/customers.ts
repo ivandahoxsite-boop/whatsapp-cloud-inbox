@@ -162,9 +162,28 @@ export const isRealPhone = (phone: string) => /^\d{7,}$/.test(phone);
  * Key for a billing-system customer that has no phone yet: the NIT when there is one, else the name.
  * Stored in contacts.phone so every table keeps working; `setCustomerPhone` swaps in the real number later.
  */
+export function normalizeNit(raw?: string): string {
+  const n = String(raw ?? '').toUpperCase().replace(/[^0-9K]/g, '');
+  return n.length >= 5 ? n : '';
+}
+
+/** Keeps the tax id on a customer that has a real phone, so receivables can find it by NIT later. */
+function rememberNit(contactId: number, nit?: string) {
+  const n = normalizeNit(nit);
+  if (n) getDb().prepare("UPDATE contacts SET data = json_set(data, '$.nit', ?) WHERE id = ? AND json_extract(data, '$.nit') IS NULL").run(n, contactId);
+}
+
+/** The customer with this NIT: one that stored it, or one created without a phone under it. */
+export function findContactByNit(nit?: string): number | null {
+  const n = normalizeNit(nit);
+  if (!n) return null;
+  const r = getDb().prepare("SELECT id FROM contacts WHERE phone = ? OR json_extract(data, '$.nit') = ? ORDER BY (phone = ?) DESC, id LIMIT 1").get(`nit:${n}`, n, `nit:${n}`) as { id: number } | undefined;
+  return r?.id ?? null;
+}
+
 export function placeholderKey(nit?: string, name?: string): string | null {
-  const n = String(nit ?? '').toUpperCase().replace(/[^0-9K]/g, '');
-  if (n.length >= 5) return `nit:${n}`;
+  const n = normalizeNit(nit);
+  if (n) return `nit:${n}`;
   const slug = String(name ?? '')
     .normalize('NFD')
     .replace(/[̀-ͯ]/g, '')
@@ -496,7 +515,7 @@ export type PhoneConflict = {
 };
 
 /** Real phone when valid; otherwise, if allowed, the NIT/name key of a customer whose phone is unknown. */
-function resolveKey(it: { phone?: string; nit?: string; name?: string }, allowNoPhone?: boolean): string | null {
+export function resolveKey(it: { phone?: string; nit?: string; name?: string }, allowNoPhone?: boolean): string | null {
   const phone = normalizePhone(String(it?.phone ?? ''));
   if (phone.length >= 7) return phone;
   return allowNoPhone ? placeholderKey(it.nit, it.name) : null;
@@ -542,6 +561,7 @@ export function upsertCustomers(items: CustomerUpsert[], options: Pick<SalesOpti
         );
         res.created++;
       }
+      rememberNit(id, it.nit);
       const tags = (Array.isArray(it.tags) ? it.tags : []).map(String).filter((t) => t.trim());
       if (tags.length) addTags([id], tags.map(ensureTag));
     });
@@ -639,6 +659,7 @@ export function upsertSales(items: SaleUpsert[], options: SalesOptions = {}) {
         externalId,
         JSON.stringify(saleData)
       );
+      rememberNit(contactId, it.nit);
       const tags = (Array.isArray(it.tags) ? it.tags : []).map(String).filter((t) => t.trim());
       if (tags.length) addTags([contactId], tags.map(ensureTag));
       res.created++;

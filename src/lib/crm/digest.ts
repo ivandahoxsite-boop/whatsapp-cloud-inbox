@@ -2,6 +2,7 @@ import { listCustomers, type Customer } from './customers';
 import { buildActions } from './actions';
 import { listOutbox } from './agent-store';
 import { getDb } from './db';
+import { receivablesSummary } from './receivables';
 
 const money = (n: number) => `$${Math.round(n).toLocaleString('es-CO')}`;
 const label = (c: Customer) => `${c.name || `+${c.phone}`}${c.city ? ` (${c.city})` : ''}`;
@@ -29,6 +30,7 @@ export function buildDigest(limit = 5) {
   const pending = listOutbox('pending').length;
   const noPhone = listCustomers().filter((c) => !c.hasPhone && c.salesCount > 0).length;
 
+  const owed = receivablesSummary();
   const sales = getDb()
     .prepare(
       `SELECT COALESCE(SUM(CASE WHEN sold_at >= date('now','-30 day') THEN amount END), 0) AS last30,
@@ -54,13 +56,17 @@ export function buildDigest(limit = 5) {
     lines.push('', '💤 Para reactivar');
     for (const a of winBack.slice(0, 3)) lines.push(`• ${label(a.customer)} — ${a.reason}`);
   }
+  if (owed.totals.overdue > 0) {
+    lines.push('', `💰 Cartera vencida: ${money(owed.totals.overdue)} de ${money(owed.totals.balance)} por cobrar`);
+    for (const d of owed.debtors.filter((x) => x.overdue > 0).slice(0, 3)) lines.push(`• ${d.name || d.phone} — ${money(d.overdue)} · ${d.oldestDays} días de mora`);
+  }
   if (pending) lines.push('', `📝 ${pending} mensaje${pending === 1 ? '' : 's'} por aprobar en el CRM (pestaña Aprobaciones).`);
   if (noPhone) lines.push('', `📵 ${noPhone} cliente${noPhone === 1 ? '' : 's'} con ventas sin teléfono: no se les puede escribir todavía.`);
   if (lines.length === 2 && !awaiting.length && !due.length) lines.push('', 'Nada urgente hoy.');
 
   return {
     text: lines.join('\n'),
-    counts: { awaiting: awaiting.length, due: due.length, pendingApprovals: pending, noPhoneWithSales: noPhone },
+    counts: { overdueReceivables: owed.totals.overdue, awaiting: awaiting.length, due: due.length, pendingApprovals: pending, noPhoneWithSales: noPhone },
     sales30: sales.last30,
     salesPrev30: sales.prev30
   };

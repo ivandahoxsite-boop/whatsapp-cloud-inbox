@@ -9,6 +9,7 @@ import { CommandPalette, type CrmTab } from '@/components/crm/command-palette';
 import { Overview } from '@/components/crm/overview';
 import { CustomersView } from '@/components/crm/customers-view';
 import { CustomerSheet } from '@/components/crm/customer-sheet';
+import { ReceivablesView } from '@/components/crm/receivables-view';
 import { SalesReportView } from '@/components/crm/sales-report';
 import { Campaigns } from '@/components/crm/campaigns';
 import { SegmentsView } from '@/components/crm/segments-view';
@@ -22,6 +23,7 @@ const TAB_LABEL: Record<CrmTab, string> = {
   resumen: 'Resumen',
   clientes: 'Clientes',
   ventas: 'Ventas',
+  cartera: 'Cartera',
   segmentos: 'Segmentos',
   campanas: 'Campañas',
   aprobaciones: 'Aprobaciones',
@@ -119,6 +121,7 @@ export default function CrmPage() {
           />
         )}
         {data && tab === 'ventas' && <SalesReportView onOpenCustomer={setOpenId} />}
+        {data && tab === 'cartera' && <ReceivablesView onOpenCustomer={setOpenId} />}
         {data && tab === 'segmentos' && <SegmentsView data={data} draft={draft} setDraft={setDraft} onOpen={showCustomers} />}
         {data && tab === 'campanas' && <Campaigns data={data} />}
         {tab === 'aprobaciones' && <Approvals />}

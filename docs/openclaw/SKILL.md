@@ -22,6 +22,7 @@ Base URL: `$CRM_BASE_URL` (on the same server: `http://127.0.0.1:4000`). Every r
 | Today's recommended actions | `GET /api/agent/actions` |
 | Move stage / note / city / tags / phone | `PATCH /api/agent/customers/{id}` body `{"stage":"Interesado","note":"...","city":"Cali","addTags":["VIP"],"phone":"3001234567"}` |
 | Propose a message | `POST /api/agent/messages` body `{"customerId":12,"body":"..."}` |
+| Receivables (who owes, aging) | `GET /api/agent/receivables?seller=<name>&limit=10` |
 | Morning brief (ready-made text) | `GET /api/agent/digest` → post `text` as is |
 | Sales report (totals, seller, zone, products) | `GET /api/agent/reports/sales?from=2026-01-01&to=2026-12-31&seller=<name>&zone=<zone>` |
 | See pending/sent proposals | `GET /api/agent/messages?status=pending` |
@@ -37,6 +38,15 @@ Each customer also has `nextExpectedAt` (date their next purchase is due), `over
 - "¿A quién le toca comprar?" → `GET /api/agent/customers?recurrence=por_recomprar`, sorted by `overdueDays`; mention their `favoriteProduct`.
 - "Escríbele a Elena" → `GET /api/agent/customers?q=elena`, draft a message, show it to the user, then `POST /api/agent/messages`.
   Tell the user to approve it in the CRM (Aprobaciones tab).
+
+## Loading receivables (cartera)
+`POST /api/agent/import/receivables` body `{"receivables":[{"externalId":"FE-1234","nit":"900111222-3","name":"Audiolujos","amount":1500000,"balance":900000,"issuedAt":"2026-08-01","dueAt":"2026-09-30","seller":"IVAN HOYOS"}],"source":"cartera","dryRun":true}`
+- One row per **unpaid invoice**. `externalId` must be stable (invoice number): sending it again updates `balance`/dates; `balance` 0 marks it paid. `balance` defaults to `amount`.
+- The customer is found by `phone`, then by `nit` (any customer loaded with that NIT, with or without phone). Unknown customers are skipped unless the request has `"allowNoPhone": true`, which creates them (shown as "Sin teléfono"). Always send `nit` with sales/customers loads too so receivables can find them.
+- No `dueAt`: it is `issuedAt` + 30 days (`CRM_DEFAULT_TERMS_DAYS`).
+- `"closeMissing": true` + `"source":"cartera"` means this request is the COMPLETE current aging report: open items of that `source` that are not in it are marked paid (the customer paid). Never use it on a partial list. Always `dryRun` first and show the user `created`, `updated`, `closed` and `skipped`.
+- Max 2000 rows per request, so a report with more rows cannot use `closeMissing`; ask the user.
+- You may mention overdue amounts in the morning brief (already included in `/api/agent/digest`). You can propose a reminder message (`POST /api/agent/messages`), never send it.
 
 ## Daily brief and recurring loads
 - **Morning brief.** When asked (or on the schedule the user sets, e.g. every weekday at 8:00), call `GET /api/agent/digest` and send its `text` to Telegram unchanged. Do not invent customers or numbers that are not in it, and never say a message was sent.

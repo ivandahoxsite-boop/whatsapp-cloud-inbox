@@ -148,6 +148,24 @@ function migrate(d: DatabaseSync) {
       oldest_message_at TEXT,
       error TEXT
     );
+    -- Invoices still to be collected (accounts receivable), loaded from the billing system's aging report.
+    CREATE TABLE IF NOT EXISTS receivables (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      contact_id INTEGER NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
+      external_id TEXT NOT NULL UNIQUE,
+      doc TEXT NOT NULL DEFAULT '',
+      issued_at TEXT,
+      due_at TEXT,
+      amount REAL NOT NULL DEFAULT 0,
+      balance REAL NOT NULL DEFAULT 0,
+      seller TEXT NOT NULL DEFAULT '',
+      source TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','paid')),
+      paid_at TEXT,
+      data TEXT NOT NULL DEFAULT '{}',
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS receivables_contact_idx ON receivables(contact_id, status);
     -- WhatsApp template campaigns: one row per recipient; nothing is sent until a person starts the campaign.
     CREATE TABLE IF NOT EXISTS campaigns (
       id INTEGER PRIMARY KEY AUTOINCREMENT,

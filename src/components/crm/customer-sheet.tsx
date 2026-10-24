@@ -13,7 +13,8 @@ import { QUERY_KEY, RecurrencePill, SegmentPill, TagPill, ago, api, cityOptions,
 
 type Sale = { id: number; soldAt: string; amount: number; product: string };
 type Activity = { id: number; kind: string; text: string; createdAt: string };
-type Detail = { sales: Sale[]; activities: Activity[] };
+type Owed = { id: number; doc: string; dueAt: string | null; balance: number; daysLate: number };
+type Detail = { sales: Sale[]; activities: Activity[]; receivables?: Owed[] };
 
 const fmtDate = (iso: string) =>
   new Date(iso.length <= 10 ? `${iso}T12:00:00` : iso.replace(' ', 'T') + (iso.includes('Z') || iso.includes('+') ? '' : 'Z')).toLocaleDateString('es', {
@@ -247,6 +248,32 @@ function SheetBody({ c, data, onClose }: { c: Customer; data: CrmData; onClose: 
             </Button>
           </form>
         </section>
+
+        {(detail?.receivables?.length ?? 0) > 0 && (
+          <section className="space-y-2">
+            <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Cartera</h3>
+            <ul className="space-y-1.5">
+              {detail!.receivables!.map((r) => (
+                <li key={r.id} className="flex items-center gap-2 rounded-md border px-2 py-1.5 text-sm">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-medium">{r.doc}</p>
+                    <p className={r.daysLate > 0 ? 'text-xs text-amber-500' : 'text-xs text-muted-foreground'}>
+                      {r.daysLate > 0 ? `${r.daysLate} días de mora` : r.dueAt ? `vence ${fmtDate(r.dueAt)}` : 'al día'}
+                    </p>
+                  </div>
+                  <span className="tabular-nums">{money(r.balance)}</span>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => confirm(`¿Marcar ${r.doc} como pagada?`) && run(() => api('/api/crm/receivables', 'POST', { id: r.id }))}
+                  >
+                    Pagada
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
 
         <section className="space-y-2">
           <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Venta</h3>
