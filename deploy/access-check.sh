@@ -14,7 +14,7 @@ case "${1:-show}" in
     ;;
   show)
     journalctl -u caddy --since "-20min" -o cat --no-pager | python3 -c '
-import sys, json
+import sys, json, re
 rows = []
 for line in sys.stdin:
     try:
@@ -25,10 +25,12 @@ for line in sys.stdin:
         continue
     r = d["request"]
     h = r.get("headers", {})
-    rows.append("%s  %-5s %-34s %s  %s" % (
-        d.get("status"), r.get("method"), r.get("uri", "")[:34],
-        "con-credenciales" if "Authorization" in h else "SIN-credenciales",
-        (h.get("User-Agent") or [""])[0][:38]))
+    uri = re.sub(r"key=[^&]*", "key=***", r.get("uri", ""))[:30]
+    rows.append("%s %-4s %-30s clave/pass:%-3s cookie:%-3s %s" % (
+        d.get("status"), r.get("method"), uri,
+        "si" if "Authorization" in h else "no",
+        "si" if "Cookie" in h else "no",
+        (h.get("User-Agent") or [""])[0][:26]))
 print("\n".join(rows[-12:]) if rows else "No hay peticiones registradas en los últimos 20 min.")
 '
     ;;
