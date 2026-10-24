@@ -15,6 +15,8 @@ export type CustomerFilter = {
   maxDaysSince?: number;
   /** Has NOT bought in the last N days. */
   minDaysSince?: number;
+  /** Their last WhatsApp message is waiting for your answer. */
+  awaiting?: boolean;
 };
 
 export type FilterableCustomer = {
@@ -27,6 +29,7 @@ export type FilterableCustomer = {
   recurrence: Recurrence;
   totalSpent: number;
   daysSinceLastSale: number | null;
+  awaitingReply: boolean;
 };
 
 export const normalizeText = (s: string) =>
@@ -49,11 +52,12 @@ export function matchesFilter(c: FilterableCustomer, f: CustomerFilter): boolean
   if (f.minSpent != null && c.totalSpent < f.minSpent) return false;
   if (f.maxDaysSince != null && (c.daysSinceLastSale == null || c.daysSinceLastSale > f.maxDaysSince)) return false;
   if (f.minDaysSince != null && c.daysSinceLastSale != null && c.daysSinceLastSale < f.minDaysSince) return false;
+  if (f.awaiting && !c.awaitingReply) return false;
   return true;
 }
 
 export function isEmptyFilter(f: CustomerFilter): boolean {
-  return Object.values(f).every((v) => v == null || v === '' || (Array.isArray(v) && v.length === 0));
+  return Object.values(f).every((v) => v == null || v === '' || v === false || (Array.isArray(v) && v.length === 0));
 }
 
 /** Drops unknown keys and wrong types so a stored or user-supplied filter can be trusted. */
@@ -71,6 +75,7 @@ export function sanitizeFilter(raw: unknown): CustomerFilter {
     stages: nums(o.stages),
     minSpent: num(o.minSpent),
     maxDaysSince: num(o.maxDaysSince),
-    minDaysSince: num(o.minDaysSince)
+    minDaysSince: num(o.minDaysSince),
+    awaiting: o.awaiting === true ? true : undefined
   };
 }

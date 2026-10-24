@@ -8,7 +8,7 @@ import { listSegments } from '@/lib/crm/segments';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-// GET /api/agent/customers?segment=dormido_valioso&recurrence=por_recomprar&city=Bogotá&tag=VIP&segment_id=3&q=ana&limit=20
+// GET /api/agent/customers?awaiting=1&segment=dormido_valioso&recurrence=por_recomprar&city=Bogotá&tag=VIP&segment_id=3&q=ana&limit=20
 export async function GET(request: Request) {
   const denied = guardAgent(request);
   if (denied) return denied;
@@ -39,7 +39,8 @@ export async function GET(request: Request) {
       rfm: segment ? [segment] : filter.rfm,
       recurrence: recurrence ? [recurrence] : filter.recurrence,
       cities: p('city') ? [p('city')] : filter.cities,
-      tags: tag ? [tag.id] : filter.tags
+      tags: tag ? [tag.id] : filter.tags,
+      awaiting: p('awaiting') === '1' || p('awaiting') === 'true' ? true : filter.awaiting
     });
 
     const tagName2 = new Map(tags.map((t) => [t.id, t.name]));
@@ -64,6 +65,10 @@ export async function GET(request: Request) {
         nextExpectedAt: c.nextExpectedAt,
         overdueDays: c.overdueDays,
         favoriteProduct: c.favoriteProduct,
+        awaitingReply: c.awaitingReply,
+        lastInboundAt: c.lastInboundAt,
+        lastInboundText: c.lastInboundText,
+        lastOutboundAt: c.lastOutboundAt,
         data: c.data
       }));
     return json({ customers });

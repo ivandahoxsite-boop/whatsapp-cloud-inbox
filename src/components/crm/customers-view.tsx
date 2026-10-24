@@ -9,12 +9,17 @@ import { Input } from '@/components/ui/input';
 import { isEmptyFilter, matchesFilter, type CustomerFilter } from '@/lib/crm/filters';
 import type { Customer } from '@/lib/crm/customers';
 import { FilterBar } from './filter-bar';
-import { QUERY_KEY, RecurrencePill, SegmentPill, TagPill, api, card, cityOptions, downloadCustomersCsv, money, relativeDays, type CrmData } from './shared';
+import { Pill, QUERY_KEY, RecurrencePill, SegmentPill, TagPill, ago, api, card, cityOptions, downloadCustomersCsv, money, relativeDays, type CrmData } from './shared';
 
-type SortKey = 'score' | 'totalSpent' | 'recent' | 'overdue' | 'name';
+type SortKey = 'score' | 'waiting' | 'chat' | 'totalSpent' | 'recent' | 'overdue' | 'name';
 
 const SORTS: Record<SortKey, { label: string; fn: (a: Customer, b: Customer) => number }> = {
   score: { label: 'Más potencial', fn: (a, b) => b.score - a.score },
+  waiting: {
+    label: 'Esperan respuesta (más antiguo primero)',
+    fn: (a, b) => Number(b.awaitingReply) - Number(a.awaitingReply) || (a.lastInboundAt ?? '').localeCompare(b.lastInboundAt ?? '')
+  },
+  chat: { label: 'Último mensaje de WhatsApp', fn: (a, b) => lastChat(b).localeCompare(lastChat(a)) },
   overdue: { label: 'Más atrasados en recomprar', fn: (a, b) => (b.overdueDays ?? -1e9) - (a.overdueDays ?? -1e9) },
   totalSpent: { label: 'Más gastaron', fn: (a, b) => b.totalSpent - a.totalSpent },
   recent: { label: 'Compra más reciente', fn: (a, b) => (a.daysSinceLastSale ?? 1e9) - (b.daysSinceLastSale ?? 1e9) },
@@ -22,6 +27,12 @@ const SORTS: Record<SortKey, { label: string; fn: (a: Customer, b: Customer) => 
 };
 
 const PAGE = 100;
+const lastChat = (c: Customer) => [c.lastInboundAt ?? '', c.lastOutboundAt ?? ''].sort().pop() ?? '';
+
+function AwaitingPill({ c }: { c: Customer }) {
+  if (!c.awaitingReply) return null;
+  return <Pill color="#fbbf24">⏳ Espera respuesta · {ago(c.lastInboundAt)}</Pill>;
+}
 
 export function CustomersView({
   data,
@@ -148,7 +159,11 @@ export function CustomersView({
                     {c.city ? `${c.city} · ` : ''}
                     {c.salesCount} compras · {money(c.totalSpent)} · {relativeDays(c.daysSinceLastSale)}
                   </p>
+                  {c.awaitingReply && c.lastInboundText && (
+                    <p className="mt-1 line-clamp-2 text-xs text-foreground/80">“{c.lastInboundText.replace(/^🎤\s*/, '🎤 ')}”</p>
+                  )}
                   <div className="mt-1.5 flex flex-wrap gap-1">
+                    <AwaitingPill c={c} />
                     <RecurrencePill recurrence={c.recurrence} />
                     <SegmentPill segment={c.segment} />
                     {c.tags.map((id) => tagById.get(id)).filter(Boolean).slice(0, 3).map((t) => <TagPill key={t!.id} tag={t!} />)}
@@ -202,7 +217,10 @@ export function CustomersView({
                   </div>
                 </td>
                 <td className="p-3">
-                  <RecurrencePill recurrence={c.recurrence} />
+                  <div className="flex flex-col items-start gap-1">
+                    <RecurrencePill recurrence={c.recurrence} />
+                    <AwaitingPill c={c} />
+                  </div>
                 </td>
                 <td className="p-3">
                   <div className="flex items-center gap-2">

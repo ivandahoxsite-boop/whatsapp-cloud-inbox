@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { parseCsv } from '@/lib/crm/csv';
 import type { CustomField } from '@/lib/crm/db';
 import { QUERY_KEY, api, type CrmData } from './shared';
+import { KapsoSyncCard } from './kapso-sync-card';
 
 // ---- Import ----------------------------------------------------------------
 
@@ -109,6 +110,8 @@ export function Importer({ data, onDone }: { data: CrmData; onDone: () => void }
 
   return (
     <div className="space-y-4">
+      <KapsoSyncCard />
+      <h2 className="pt-2 font-medium">Importar ventas (CSV)</h2>
       <p className="text-sm text-muted-foreground">
         Sube un CSV con tus ventas pasadas (una fila por venta). Necesita al menos <b>teléfono</b> y <b>fecha</b>. Si un teléfono ya existe, la venta se suma a ese cliente.
         Fechas: <code>2024-03-15</code> o <code>15/03/2024</code>. También puedes incluir <b>ciudad</b> y <b>etiquetas</b> (separadas por coma).

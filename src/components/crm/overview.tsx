@@ -8,7 +8,7 @@ import { RECURRENCE_INFO, SEGMENT_INFO, type Recurrence, type Segment } from '@/
 import { buildActions } from '@/lib/crm/actions';
 import { cityKey, type CustomerFilter } from '@/lib/crm/filters';
 import type { Summary } from '@/app/api/crm/summary/route';
-import { RECURRENCE_COLOR, SEGMENT_COLOR, TagPill, api, card, cityOptions, money, type CrmData } from './shared';
+import { RECURRENCE_COLOR, SEGMENT_COLOR, TagPill, ago, api, card, cityOptions, money, type CrmData } from './shared';
 
 const MONTHS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 const monthLabel = (ym: string) => `${MONTHS[Number(ym.slice(5)) - 1]} ${ym.slice(2, 4)}`;
@@ -49,6 +49,9 @@ export function Overview({ data, onFilter }: { data: CrmData; onFilter: (f: Cust
       avgTicket: salesCount ? revenue / salesCount : 0,
       due: due.length,
       dueValue: due.reduce((a, c) => a + c.avgTicket, 0),
+      awaiting: customers
+        .filter((c) => c.awaitingReply)
+        .sort((a, b) => (a.lastInboundAt ?? '').localeCompare(b.lastInboundAt ?? '')),
       rec,
       seg,
       actions: buildActions(customers)
@@ -84,8 +87,8 @@ export function Overview({ data, onFilter }: { data: CrmData; onFilter: (f: Cust
       <div className={cn(card, 'space-y-2 text-sm')}>
         <p className="font-medium">Tu CRM está vacío.</p>
         <p className="text-muted-foreground">
-          Ve a <b>Importar</b> y sube tus ventas pasadas (CSV). Con eso verás aquí quién es recurrente, a quién le toca comprar y qué ciudades te
-          compran más. Los nuevos contactos de WhatsApp aparecen solos.
+          Ve a <b>Importar</b>: trae tu historial de WhatsApp desde Kapso y sube tus ventas pasadas (CSV). Con eso verás aquí quién espera tu
+          respuesta, quién es recurrente, a quién le toca comprar y qué ciudades te compran más.
         </p>
       </div>
     );
@@ -129,6 +132,37 @@ export function Overview({ data, onFilter }: { data: CrmData; onFilter: (f: Cust
           className="col-span-2 lg:col-span-1"
         />
       </div>
+
+      {s.awaiting.length > 0 && (
+        <section className={cn(card, 'border-amber-400/40')}>
+          <div className="mb-3 flex items-center gap-2">
+            <h2 className="text-sm font-medium">⏳ Esperan tu respuesta</h2>
+            <span className="rounded-full bg-amber-400/20 px-2 text-xs tabular-nums text-amber-500">{s.awaiting.length}</span>
+            <button onClick={() => go({ awaiting: true })} className="ml-auto text-xs text-muted-foreground underline">
+              Ver todos
+            </button>
+          </div>
+          <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {s.awaiting.slice(0, 6).map((c) => (
+              <li key={c.id} className="flex flex-col gap-1 rounded-xl border border-border/60 bg-background/40 p-3">
+                <div className="flex items-baseline gap-2">
+                  <p className="truncate text-sm font-medium">{c.name || `+${c.phone}`}</p>
+                  <span className="ml-auto shrink-0 text-[11px] text-amber-500">{ago(c.lastInboundAt)}</span>
+                </div>
+                <p className="line-clamp-2 text-xs text-muted-foreground">“{c.lastInboundText}”</p>
+                <a
+                  href={`https://wa.me/${c.phone}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-1 inline-flex items-center justify-center gap-1.5 rounded-lg bg-emerald-500/15 px-3 py-1.5 text-xs font-medium text-emerald-500 hover:bg-emerald-500/25"
+                >
+                  <MessageCircle className="h-3.5 w-3.5" /> Responder
+                </a>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {/* grid-cols-1 = minmax(0,1fr): lets wide content (the chart) shrink instead of overflowing on phones */}
       <div className="grid grid-cols-1 gap-3 md:grid-cols-6">

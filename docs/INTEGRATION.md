@@ -19,6 +19,12 @@ Customer ─WhatsApp─▶ Kapso ─signed webhook─▶ CRM ◀─Bearer API─
    ```
 The CRM verifies the HMAC-SHA256 signature, ignores retries (idempotency key) and creates the customer in stage "Nuevo" when the number is unknown.
 
+## 1b. Past WhatsApp history
+The webhook only sees new messages. To bring in the chats Kapso already stored, open **CRM → Importar → Traer historial**.
+It reads `GET /{phone_number_id}/messages` page by page (100 per page, short pause between pages, retries on 429),
+creates missing contacts and adds each message to the customer's timeline (audio arrives transcribed). It is read-only:
+it never sends anything. Safe to repeat: messages are de-duplicated by WhatsApp message id, also against the webhook.
+
 ## 2. OpenClaw → CRM
 Set `CRM_AGENT_TOKEN` and give OpenClaw `CRM_BASE_URL` + the same token. Install `docs/openclaw/SKILL.md` as a skill
 (OpenClaw skills are folders with a `SKILL.md`; check your version's docs for the exact path). The agent can read,

@@ -122,6 +122,15 @@ export function CommandPalette({
         run: done(() => onOpenCustomer(c.id))
       }));
 
+    if (/respuesta|esperan|contestar|pendiente|responder/.test(q)) {
+      byWords.unshift({
+        id: 'awaiting',
+        group: 'Chats',
+        label: 'Mostrar: Esperan tu respuesta',
+        hint: 'Te escribieron y aún no contestas',
+        run: done(() => onFilter({ awaiting: true }))
+      });
+    }
     const shown = new Set([...byWords, ...cityHits].map((i) => i.id));
     const rest = [...nav, ...recs, ...segs].filter((i) => norm(i.label).includes(q) && !shown.has(i.id));
     return [...byWords, ...people, ...cityHits, ...rest];

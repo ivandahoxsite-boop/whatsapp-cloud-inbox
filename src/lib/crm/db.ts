@@ -113,6 +113,8 @@ function migrate(d: DatabaseSync) {
   }
   d.exec(`
     CREATE INDEX IF NOT EXISTS contacts_city_idx ON contacts(city);
+    -- Lets the webhook and the history sync skip WhatsApp messages that are already stored.
+    CREATE INDEX IF NOT EXISTS activities_message_idx ON activities(json_extract(meta, '$.message_id'));
     CREATE TABLE IF NOT EXISTS tags (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL UNIQUE COLLATE NOCASE,

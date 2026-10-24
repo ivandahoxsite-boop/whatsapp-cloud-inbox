@@ -2,6 +2,7 @@ import { getDb } from './db';
 import { computeMetrics, computeRecurrence, type CustomerMetrics, type RecurrenceMetrics } from './scoring';
 import { addTags, ensureTag, tagsByContact } from './tags';
 import { cityKey } from './filters';
+import { needsReply } from './reply';
 
 export type Customer = {
   id: number;
@@ -12,8 +13,16 @@ export type Customer = {
   stageId: number | null;
   data: Record<string, unknown>;
   createdAt: string;
+  /** ISO timestamps of the last WhatsApp message from / to the customer. */
+  lastInboundAt: string | null;
+  lastOutboundAt: string | null;
+  lastInboundText: string;
+  /** Their last message is newer than your last reply and is more than a "thanks"/"ok"/sticker. */
+  awaitingReply: boolean;
 } & CustomerMetrics &
   RecurrenceMetrics;
+
+const sqlToIso = (s: string | null) => (s ? `${s.replace(' ', 'T')}Z` : null);
 
 type Row = {
   id: number;
@@ -52,6 +61,18 @@ export function listCustomers(): Customer[] {
   }
   const tags = tagsByContact();
   const now = new Date();
+  const chat = new Map<number, { lastIn: string | null; lastOut: string | null; lastInText: string }>();
+  const chatRows = getDb()
+    .prepare(
+      `SELECT contact_id,
+              MAX(CASE WHEN kind = 'whatsapp_in' THEN created_at END) AS last_in,
+              MAX(CASE WHEN kind = 'whatsapp_out' THEN created_at END) AS last_out,
+              (SELECT a2.text FROM activities a2 WHERE a2.contact_id = a.contact_id AND a2.kind = 'whatsapp_in'
+               ORDER BY a2.created_at DESC, a2.id DESC LIMIT 1) AS last_in_text
+       FROM activities a WHERE kind IN ('whatsapp_in', 'whatsapp_out') GROUP BY contact_id`
+    )
+    .all() as unknown as { contact_id: number; last_in: string | null; last_out: string | null; last_in_text: string | null }[];
+  for (const r of chatRows) chat.set(r.contact_id, { lastIn: r.last_in, lastOut: r.last_out, lastInText: r.last_in_text ?? '' });
 
   // "Bogota" and "Bogotá" are the same city: show every variant with its most common spelling.
   const spellings = new Map<string, Map<string, number>>();
@@ -73,9 +94,16 @@ export function listCustomers(): Customer[] {
     stageId: r.stage_id,
     data: JSON.parse(r.data) as Record<string, unknown>,
     createdAt: r.created_at,
+    ...chatState(chat.get(r.id)),
     ...metrics[i],
     ...computeRecurrence(salesByContact.get(r.id) ?? [], now)
   }));
+}
+
+function chatState(c?: { lastIn: string | null; lastOut: string | null; lastInText: string }) {
+  if (!c) return { lastInboundAt: null, lastOutboundAt: null, lastInboundText: '', awaitingReply: false };
+  const awaitingReply = !!c.lastIn && (!c.lastOut || c.lastIn > c.lastOut) && needsReply(c.lastInText);
+  return { lastInboundAt: sqlToIso(c.lastIn), lastOutboundAt: sqlToIso(c.lastOut), lastInboundText: c.lastInText, awaitingReply };
 }
 
 /** Trims and title-cases a city so "bogotá" and "Bogotá " are stored the same way. */

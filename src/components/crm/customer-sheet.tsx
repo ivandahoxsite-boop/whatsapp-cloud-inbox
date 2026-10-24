@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { RECURRENCE_INFO } from '@/lib/crm/scoring';
 import type { Customer } from '@/lib/crm/customers';
 import type { CustomField } from '@/lib/crm/db';
-import { QUERY_KEY, RecurrencePill, SegmentPill, TagPill, api, cityOptions, money, relativeDays, type CrmData } from './shared';
+import { QUERY_KEY, RecurrencePill, SegmentPill, TagPill, ago, api, cityOptions, money, relativeDays, type CrmData } from './shared';
 
 type Sale = { id: number; soldAt: string; amount: number; product: string };
 type Activity = { id: number; kind: string; text: string; createdAt: string };
@@ -21,6 +21,9 @@ const fmtDate = (iso: string) =>
     month: 'short',
     year: 'numeric'
   });
+
+const fmtDateTime = (iso: string) =>
+  new Date(iso).toLocaleString('es', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
 
 function NextPurchase({ c }: { c: Customer }) {
   if (!c.nextExpectedAt || c.overdueDays == null) return <span className="text-muted-foreground">Necesita 2+ compras</span>;
@@ -80,15 +83,17 @@ function SheetBody({ c, data, onClose }: { c: Customer; data: CrmData; onClose: 
       icon: ShoppingBag,
       color: '#34d399',
       title: `Compra${s.product ? ` · ${s.product}` : ''}`,
-      text: money(s.amount)
+      text: money(s.amount),
+      withTime: false
     })),
     ...(detail?.activities ?? []).map((a) => ({
       key: `a${a.id}`,
       at: a.createdAt.replace(' ', 'T') + 'Z',
       icon: a.kind === 'note' ? StickyNote : a.kind.startsWith('whatsapp') ? MessageCircle : a.kind === 'tags' ? TagIcon : ArrowRightLeft,
       color: a.kind === 'whatsapp_in' ? '#38bdf8' : a.kind === 'whatsapp_out' ? '#a78bfa' : a.kind === 'note' ? '#fbbf24' : '#a1a1aa',
-      title: a.kind === 'whatsapp_in' ? 'Escribió por WhatsApp' : a.kind === 'whatsapp_out' ? 'Le escribiste' : a.kind === 'note' ? 'Nota' : 'Cambio',
-      text: a.text
+      title: a.kind === 'whatsapp_in' ? 'Escribió' : a.kind === 'whatsapp_out' ? 'Le escribiste' : a.kind === 'note' ? 'Nota' : 'Cambio',
+      text: a.text,
+      withTime: true
     }))
   ].sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
 
@@ -128,6 +133,12 @@ function SheetBody({ c, data, onClose }: { c: Customer; data: CrmData; onClose: 
       </div>
 
       <div className="space-y-5 p-4">
+        {c.awaitingReply && (
+          <div className="rounded-xl border border-amber-400/40 bg-amber-400/10 p-3 text-sm">
+            <p className="text-xs font-medium text-amber-500">⏳ Te escribió {ago(c.lastInboundAt)} y aún no le respondes</p>
+            <p className="mt-1 whitespace-pre-wrap break-words">“{c.lastInboundText}”</p>
+          </div>
+        )}
         <p className="rounded-xl bg-muted/40 p-3 text-xs text-muted-foreground">{RECURRENCE_INFO[c.recurrence].hint}</p>
 
         <dl className="grid grid-cols-2 gap-3 text-sm">
@@ -144,6 +155,8 @@ function SheetBody({ c, data, onClose }: { c: Customer; data: CrmData; onClose: 
             </dd>
           </div>
           {c.firstSaleAt && <Stat label="Cliente desde" value={fmtDate(c.firstSaleAt)} />}
+          <Stat label="Te escribió" value={ago(c.lastInboundAt)} />
+          <Stat label="Le escribiste" value={ago(c.lastOutboundAt)} />
         </dl>
 
         <section className="space-y-2">
@@ -250,7 +263,7 @@ function SheetBody({ c, data, onClose }: { c: Customer; data: CrmData; onClose: 
                 </span>
                 <div className="min-w-0">
                   <p className="text-sm font-medium">
-                    {t.title} <span className="font-normal text-muted-foreground">· {fmtDate(t.at)}</span>
+                    {t.title} <span className="font-normal text-muted-foreground">· {t.withTime ? fmtDateTime(t.at) : fmtDate(t.at)}</span>
                   </p>
                   <p className="whitespace-pre-wrap break-words text-sm text-muted-foreground">{t.text}</p>
                 </div>

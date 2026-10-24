@@ -13,8 +13,15 @@ export type OutboxItem = {
   createdAt: string;
 };
 
-export function addActivity(contactId: number, kind: string, text: string, meta: Record<string, unknown> = {}) {
-  getDb().prepare('INSERT INTO activities (contact_id, kind, text, meta) VALUES (?,?,?,?)').run(contactId, kind, text, JSON.stringify(meta));
+/** `createdAt` (UTC, "YYYY-MM-DD HH:MM:SS") backdates imported history; defaults to now. */
+export function addActivity(contactId: number, kind: string, text: string, meta: Record<string, unknown> = {}, createdAt?: string) {
+  getDb()
+    .prepare("INSERT INTO activities (contact_id, kind, text, meta, created_at) VALUES (?,?,?,?, COALESCE(?, datetime('now')))")
+    .run(contactId, kind, text, JSON.stringify(meta), createdAt ?? null);
+}
+
+export function hasMessageActivity(messageId: string): boolean {
+  return !!getDb().prepare("SELECT 1 FROM activities WHERE json_extract(meta, '$.message_id') = ? LIMIT 1").get(messageId);
 }
 
 export function listActivities(contactId: number, limit = 30): Activity[] {

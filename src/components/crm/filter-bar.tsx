@@ -136,6 +136,16 @@ export function FilterBar({
       )}
       {/* Horizontal scroll on phones instead of wrapping into many rows. */}
       <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:none]">
+        <button
+          onClick={() => set({ awaiting: filter.awaiting ? undefined : true })}
+          className={cn(
+            'flex h-9 shrink-0 items-center gap-1 whitespace-nowrap rounded-full border px-3 text-sm',
+            filter.awaiting ? 'border-amber-400/70 bg-amber-400/15 text-foreground' : 'border-border/60 bg-card/50 text-muted-foreground'
+          )}
+        >
+          ⏳ Esperan respuesta
+          <span className="text-xs tabular-nums opacity-70">{data.customers.filter((c) => c.awaitingReply).length}</span>
+        </button>
         <Dropdown
           label="Tipo de cliente"
           selected={filter.recurrence ?? []}

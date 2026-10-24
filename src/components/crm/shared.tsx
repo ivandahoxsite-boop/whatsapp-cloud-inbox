@@ -107,6 +107,15 @@ export function cityOptions(customers: Customer[]): { name: string; count: numbe
     .sort((a, b) => b.count - a.count);
 }
 
+/** "hace 5 min", "hace 3 h", "hace 2 d" for an ISO timestamp. */
+export function ago(iso: string | null): string {
+  if (!iso) return '—';
+  const min = Math.max(0, Math.round((Date.now() - Date.parse(iso)) / 60000));
+  if (min < 60) return `hace ${min} min`;
+  if (min < 48 * 60) return `hace ${Math.round(min / 60)} h`;
+  return `hace ${Math.round(min / 1440)} d`;
+}
+
 export function relativeDays(days: number | null): string {
   if (days == null) return '—';
   if (days === 0) return 'hoy';
