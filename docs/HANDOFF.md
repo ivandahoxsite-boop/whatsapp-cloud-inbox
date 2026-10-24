@@ -38,9 +38,10 @@ OpenClaw tiene acceso a AnaliX (caché local). Lo que encontró:
 - Clientes sin teléfono: `allowNoPhone:true` + `nit`/`name`; filtro "📵 Sin teléfono"; se agrega el teléfono en la ficha o con `PATCH {phone}` y se fusiona con el chat de WhatsApp si ya existe.
 - Pestaña **Ventas** (por mes, vendedor, zona, productos, combos, productos que dejaron de llevar) y `GET /api/agent/reports/sales`.
 - "Registrar venta" en la ficha del cliente; `GET /api/agent/digest` (resumen diario listo para Telegram).
+- Pestaña **Campañas**: plantilla de WhatsApp a un segmento. Se arma la lista de destinatarios (sin teléfono, descansando 7 días y sin datos quedan fuera), se revisa/quita gente y un humano pulsa "Aprobar y enviar"; envía hasta `CRM_MAX_CAMPAIGN_SENDS_PER_HOUR` (40) por hora y se detiene tras 3 errores seguidos. El agente NO puede crear ni enviar campañas. Plantillas con botones con variables no se admiten todavía.
 - `deploy/set-password.sh` cambia la contraseña sin mostrarla (`--rotate-key` renueva el enlace privado).
 - Pendiente fuera del repo: programar en OpenClaw el resumen de las 8:00 y la recarga semanal (ver `docs/openclaw/SKILL.md`); 465 clientes de AnaliX sin teléfono ($6.55 mil millones; los grandes: JAIMAR, RALLY PASSION, CAMILO SANCHEZ AGUILERA, ORION LUJOS Y SONIDO); 6 pares de teléfonos compartidos por revisar.
 
 ## Pendientes / ideas
-- Enviar plantillas de WhatsApp a un segmento desde el CRM (con aprobación).
+- Campañas: seguimiento de respuestas por campaña, y estados de entrega/lectura vía webhook.
 - Seguridad: cambiar la contraseña con `bash /opt/crm/deploy/set-password.sh --rotate-key` (se cambió varias veces durante la configuración).

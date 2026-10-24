@@ -10,6 +10,7 @@ import { Overview } from '@/components/crm/overview';
 import { CustomersView } from '@/components/crm/customers-view';
 import { CustomerSheet } from '@/components/crm/customer-sheet';
 import { SalesReportView } from '@/components/crm/sales-report';
+import { Campaigns } from '@/components/crm/campaigns';
 import { SegmentsView } from '@/components/crm/segments-view';
 import { Importer } from '@/components/crm/importer';
 import { Structure } from '@/components/crm/structure';
@@ -22,6 +23,7 @@ const TAB_LABEL: Record<CrmTab, string> = {
   clientes: 'Clientes',
   ventas: 'Ventas',
   segmentos: 'Segmentos',
+  campanas: 'Campañas',
   aprobaciones: 'Aprobaciones',
   importar: 'Importar',
   estructura: 'Estructura'
@@ -117,6 +119,7 @@ export default function CrmPage() {
         )}
         {data && tab === 'ventas' && <SalesReportView onOpenCustomer={setOpenId} />}
         {data && tab === 'segmentos' && <SegmentsView data={data} draft={draft} setDraft={setDraft} onOpen={showCustomers} />}
+        {data && tab === 'campanas' && <Campaigns data={data} />}
         {tab === 'aprobaciones' && <Approvals />}
         {data && tab === 'importar' && <Importer data={data} onDone={() => setTab('resumen')} />}
         {data && tab === 'estructura' && <Structure data={data} />}

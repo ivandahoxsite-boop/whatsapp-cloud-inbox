@@ -148,6 +148,31 @@ function migrate(d: DatabaseSync) {
       oldest_message_at TEXT,
       error TEXT
     );
+    -- WhatsApp template campaigns: one row per recipient; nothing is sent until a person starts the campaign.
+    CREATE TABLE IF NOT EXISTS campaigns (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      template_name TEXT NOT NULL,
+      language TEXT NOT NULL,
+      body_text TEXT NOT NULL DEFAULT '',
+      param_info TEXT NOT NULL DEFAULT '{}',
+      param_map TEXT NOT NULL DEFAULT '[]',
+      filter TEXT NOT NULL DEFAULT '{}',
+      status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft','running','done','cancelled')),
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE TABLE IF NOT EXISTS campaign_items (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      campaign_id INTEGER NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+      contact_id INTEGER NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
+      params TEXT NOT NULL DEFAULT '[]',
+      status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','sent','failed','excluded')),
+      error TEXT NOT NULL DEFAULT '',
+      sent_at TEXT,
+      UNIQUE (campaign_id, contact_id)
+    );
+    CREATE INDEX IF NOT EXISTS campaign_items_status_idx ON campaign_items(campaign_id, status);
+    CREATE INDEX IF NOT EXISTS campaign_items_sent_idx ON campaign_items(sent_at);
     CREATE TABLE IF NOT EXISTS segments (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
