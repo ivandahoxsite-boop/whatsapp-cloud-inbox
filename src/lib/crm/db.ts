@@ -182,6 +182,17 @@ function migrate(d: DatabaseSync) {
   `);
 }
 
+/**
+ * Changes whenever anything is written to the database, by this connection (total_changes) or by another one
+ * (data_version). Cheap enough to poll every few seconds, and the key for caching derived data.
+ */
+export function dataVersion(): string {
+  const d = getDb();
+  const changes = (d.prepare('SELECT total_changes() AS n').get() as { n: number }).n;
+  const other = (d.prepare('PRAGMA data_version').get() as { data_version: number }).data_version;
+  return `${changes}.${other}`;
+}
+
 export function slugifyKey(label: string): string {
   return label
     .normalize('NFD')

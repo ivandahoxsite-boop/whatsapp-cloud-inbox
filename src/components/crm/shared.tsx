@@ -1,6 +1,7 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
+import { useEffect, useRef } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
 import { RECURRENCE_INFO, SEGMENT_INFO, type Recurrence, type Segment } from '@/lib/crm/scoring';
 import type { Customer } from '@/lib/crm/customers';
@@ -32,6 +33,39 @@ export async function api<T = unknown>(url: string, method = 'GET', body?: unkno
 
 export function useCrmData() {
   return useQuery({ queryKey: QUERY_KEY, queryFn: () => api<CrmData>('/api/crm/customers') });
+}
+
+/**
+ * Keeps the CRM live: every few seconds asks the server (a tiny request) whether anything changed — a new
+ * WhatsApp message, a sale, an approval — and only then reloads the CRM queries.
+ */
+export function useLiveSync(everyMs = 5000) {
+  const qc = useQueryClient();
+  const last = useRef<string | null>(null);
+  useEffect(() => {
+    let stopped = false;
+    const check = async () => {
+      if (document.visibilityState !== 'visible') return;
+      try {
+        const { version } = await api<{ version: string }>('/api/crm/version');
+        if (stopped) return;
+        if (last.current !== null && last.current !== version) {
+          qc.invalidateQueries({ predicate: (q) => String(q.queryKey[0]).startsWith('crm') });
+        }
+        last.current = version;
+      } catch {
+        /* offline or signed out: try again on the next tick */
+      }
+    };
+    check();
+    const timer = setInterval(check, everyMs);
+    document.addEventListener('visibilitychange', check);
+    return () => {
+      stopped = true;
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', check);
+    };
+  }, [qc, everyMs]);
 }
 
 export const money = (n: number) => n.toLocaleString('es', { maximumFractionDigits: 0, useGrouping: 'always' });

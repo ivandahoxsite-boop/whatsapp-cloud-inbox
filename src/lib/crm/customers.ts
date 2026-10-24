@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { getDb } from './db';
+import { dataVersion, getDb } from './db';
 import { computeMetrics, computeRecurrence, type CustomerMetrics, type RecurrenceMetrics } from './scoring';
 import { addTags, ensureTag, tagsByContact } from './tags';
 import { cityKey } from './filters';
@@ -42,7 +42,19 @@ type Row = {
   last_sale_at: string | null;
 };
 
+let customersCache: { key: string; value: Customer[] } | null = null;
+
+/**
+ * Every customer with metrics. Computing it reads all sales and chats, so the result is kept until something
+ * is written to the database (or the hour changes, because "days since last purchase" moves with time).
+ */
 export function listCustomers(): Customer[] {
+  const key = `${dataVersion()}|${new Date().toISOString().slice(0, 13)}`;
+  if (customersCache?.key !== key) customersCache = { key, value: computeCustomers() };
+  return [...customersCache.value];
+}
+
+function computeCustomers(): Customer[] {
   const rows = getDb()
     .prepare(
       `SELECT c.*, COUNT(s.id) AS sales_count, COALESCE(SUM(s.amount), 0) AS total_spent, MAX(s.sold_at) AS last_sale_at

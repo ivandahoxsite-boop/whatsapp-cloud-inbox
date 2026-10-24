@@ -15,7 +15,7 @@ import { SegmentsView } from '@/components/crm/segments-view';
 import { Importer } from '@/components/crm/importer';
 import { Structure } from '@/components/crm/structure';
 import { Approvals } from '@/components/crm/approvals';
-import { useCrmData } from '@/components/crm/shared';
+import { useCrmData, useLiveSync } from '@/components/crm/shared';
 import type { CustomerFilter } from '@/lib/crm/filters';
 
 const TAB_LABEL: Record<CrmTab, string> = {
@@ -37,6 +37,7 @@ export default function CrmPage() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const { data, error, isLoading } = useCrmData();
+  useLiveSync();
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
