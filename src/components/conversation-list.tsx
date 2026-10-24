@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { differenceInDays, differenceInHours, differenceInMinutes, format, isValid, isYesterday } from 'date-fns';
-import { Bell, BellOff, Check, ChevronDown, Plus, RefreshCw, Search, Settings } from 'lucide-react';
+import { Bell, BellOff, Check, ChevronDown, Plus, RefreshCw, Search, Settings, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   CONVERSATIONS_QUERY_KEY,
@@ -419,6 +419,18 @@ export function ConversationList({ onSelectThread, selectedThreadKey, isHidden =
             >
               <Link href="/settings">
                 <Settings className="size-4" />
+              </Link>
+            </Button>
+            <Button
+              asChild
+              variant="ghost"
+              size="icon"
+              className="size-8 rounded-md text-muted-foreground hover:bg-[var(--chat-icon-hover)] hover:text-foreground"
+              aria-label="CRM"
+              title="CRM"
+            >
+              <Link href="/crm">
+                <Users className="size-4" />
               </Link>
             </Button>
             <ThemeToggle className="size-8 rounded-md text-muted-foreground md:size-8" />
