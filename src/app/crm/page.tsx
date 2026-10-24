@@ -9,6 +9,7 @@ import { CommandPalette, type CrmTab } from '@/components/crm/command-palette';
 import { Overview } from '@/components/crm/overview';
 import { CustomersView } from '@/components/crm/customers-view';
 import { CustomerSheet } from '@/components/crm/customer-sheet';
+import { SalesReportView } from '@/components/crm/sales-report';
 import { SegmentsView } from '@/components/crm/segments-view';
 import { Importer } from '@/components/crm/importer';
 import { Structure } from '@/components/crm/structure';
@@ -19,6 +20,7 @@ import type { CustomerFilter } from '@/lib/crm/filters';
 const TAB_LABEL: Record<CrmTab, string> = {
   resumen: 'Resumen',
   clientes: 'Clientes',
+  ventas: 'Ventas',
   segmentos: 'Segmentos',
   aprobaciones: 'Aprobaciones',
   importar: 'Importar',
@@ -113,6 +115,7 @@ export default function CrmPage() {
             }}
           />
         )}
+        {data && tab === 'ventas' && <SalesReportView onOpenCustomer={setOpenId} />}
         {data && tab === 'segmentos' && <SegmentsView data={data} draft={draft} setDraft={setDraft} onOpen={showCustomers} />}
         {tab === 'aprobaciones' && <Approvals />}
         {data && tab === 'importar' && <Importer data={data} onDone={() => setTab('resumen')} />}

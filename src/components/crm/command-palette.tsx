@@ -7,7 +7,7 @@ import type { CustomerFilter } from '@/lib/crm/filters';
 import type { Customer } from '@/lib/crm/customers';
 import { cityOptions, displayName } from './shared';
 
-export type CrmTab = 'resumen' | 'clientes' | 'segmentos' | 'aprobaciones' | 'importar' | 'estructura';
+export type CrmTab = 'resumen' | 'clientes' | 'ventas' | 'segmentos' | 'aprobaciones' | 'importar' | 'estructura';
 
 type Item = { id: string; group: string; label: string; hint?: string; run: () => void };
 
@@ -69,6 +69,7 @@ export function CommandPalette({
       [
         ['resumen', 'Ir a Resumen'],
         ['clientes', 'Ir a Clientes'],
+        ['ventas', 'Ver reporte de ventas (vendedor, zona, productos)'],
         ['segmentos', 'Ir a Segmentos'],
         ['aprobaciones', 'Aprobar mensajes del agente'],
         ['importar', 'Importar ventas'],
