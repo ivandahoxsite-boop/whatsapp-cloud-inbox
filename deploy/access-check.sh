@@ -3,6 +3,7 @@
 # Never prints passwords: Caddy redacts the Authorization header.
 #   bash access-check.sh on     enable request logging in Caddy
 #   bash access-check.sh show   list the last requests (default)
+#   bash access-check.sh off    disable request logging (URLs with ?key= would otherwise be logged)
 set -euo pipefail
 case "${1:-show}" in
   on)
@@ -31,5 +32,10 @@ for line in sys.stdin:
 print("\n".join(rows[-12:]) if rows else "No hay peticiones registradas en los últimos 20 min.")
 '
     ;;
-  *) echo "uso: bash $0 on|show"; exit 1 ;;
+  off)
+    sed -i '/^\tlog$/d' /etc/caddy/Caddyfile
+    systemctl reload caddy
+    echo "Registro desactivado."
+    ;;
+  *) echo "uso: bash $0 on|show|off"; exit 1 ;;
 esac

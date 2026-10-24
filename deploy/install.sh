@@ -83,6 +83,7 @@ KAPSO_API_KEY=${KAPSO_API_KEY// /}
 PHONE_NUMBER_ID=${PHONE_NUMBER_ID// /}
 KAPSO_WEBHOOK_SECRET=$(openssl rand -hex 24)
 CRM_AGENT_TOKEN=$(openssl rand -hex 24)
+INBOX_ACCESS_KEY=$(openssl rand -hex 24)
 CRM_DB_PATH=$DATA/crm.db
 EOF
   NEW_ENV=1
