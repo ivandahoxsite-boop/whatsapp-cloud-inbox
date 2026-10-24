@@ -129,8 +129,8 @@ export function CustomersView({
         </p>
       )}
 
-      {/* Phones: cards */}
-      <ul className="space-y-2 md:hidden">
+      {/* Phones (also in landscape, ~850px wide) and tablets: cards */}
+      <ul className="space-y-2 lg:hidden">
         {rows.slice(0, limit).map((c) => (
           <li key={c.id}>
             <button
@@ -160,8 +160,8 @@ export function CustomersView({
         ))}
       </ul>
 
-      {/* Larger screens: table */}
-      <div className={cn(card, 'hidden overflow-x-auto p-0 md:block')}>
+      {/* Computers: table */}
+      <div className={cn(card, 'hidden overflow-x-auto p-0 lg:block')}>
         <table className="w-full text-sm">
           <thead className="text-left text-xs text-muted-foreground">
             <tr className="border-b border-border/60">
