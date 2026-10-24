@@ -54,4 +54,8 @@ Use it directly in commands (`curl -H "Authorization: Bearer $CRM_AGENT_TOKEN" .
 - Phones: any format works; Colombian mobiles without 57 (`3001234567`) are matched to the WhatsApp contact `573001234567`.
 - Send at most 2000 items per request (500 is a good batch). Each response returns `created`, `duplicates`/`updated` and `skipped` with the reason per row: report those numbers to the user.
 - Several billing clients can share one phone (e.g. a business that changed its name): their sales end up under the same contact. Check shared phones before loading; send only one client's sales per phone unless they are really the same business.
+- **Duplicate detector.** Each sale keeps the billing-system client name (`name`) as `data.client`. If a phone already holds a client with a clearly different name (or two names arrive in the same request), the response lists it under `conflicts` (`phone`, `existing`, `incoming`, `sales`, `amount`).
+  - Add `"dryRun": true` at the top level of the body to preview a whole load: nothing is stored, you get `created`, `duplicates`, `skipped` and `conflicts`. **Always dry-run a full load first, show the user the conflicts, and ask which client really owns each phone.**
+  - `"onConflict":"skip"` leaves out the sales of the second client instead of merging them.
+  - `"sharedPhones":["3001234567"]` marks phones the user confirmed as the same business under two names (e.g. a renamed company), so they are not reported again.
 - Start with a small test (10 rows), show the user the result, then load the rest.

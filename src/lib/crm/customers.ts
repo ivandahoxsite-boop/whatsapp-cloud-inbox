@@ -3,6 +3,7 @@ import { getDb } from './db';
 import { computeMetrics, computeRecurrence, type CustomerMetrics, type RecurrenceMetrics } from './scoring';
 import { addTags, ensureTag, tagsByContact } from './tags';
 import { cityKey } from './filters';
+import { sameCustomerName } from './names';
 import { AWAITING_WINDOW_DAYS, needsReply } from './reply';
 
 export type Customer = {
@@ -342,7 +343,8 @@ export type CustomerUpsert = {
   phone: string;
   name?: string;
   /** Replace the stored name too. Without it an existing name is kept and `name` only fills an empty one. */
-  overwriteName?: boolean; city?: string;
+  overwriteName?: boolean;
+  city?: string;
   tags?: string[];
   data?: Record<string, unknown>;
 };
@@ -353,6 +355,7 @@ export type SaleUpsert = {
   product?: string;
   /** Invoice or order number; the same id is stored only once. */
   externalId?: string;
+  /** Name in the billing system. Kept with the sale as `data.client` so two clients sharing a phone can be told apart. */
   name?: string;
   city?: string;
   /** Extra details kept with the sale, e.g. { seller, zone, qty }. */
@@ -362,6 +365,27 @@ export type SaleUpsert = {
 };
 
 type Skip = { index: number; reason: string };
+
+export type SalesOptions = {
+  /** Run everything and roll it back: the response shows what would happen without storing anything. */
+  dryRun?: boolean;
+  /** What to do with a sale whose phone already belongs to a differently named client. `skip` keeps them out. */
+  onConflict?: 'allow' | 'skip';
+  /** Phones confirmed as one business with several names (e.g. a renamed company): never reported. */
+  sharedPhones?: string[];
+};
+
+export type PhoneConflict = {
+  phone: string;
+  contactId: number;
+  contactName: string;
+  /** Names already holding this phone (stored sales or earlier rows of this request). */
+  existing: string[];
+  /** The other client trying to use it, and how many of its sales / how much money. */
+  incoming: string;
+  sales: number;
+  amount: number;
+};
 
 const MAX_EXTERNAL_ID = 80;
 
@@ -414,13 +438,32 @@ export function upsertCustomers(items: CustomerUpsert[]) {
   return res;
 }
 
-/** Adds sales, creating the customer if needed; sales with an already stored externalId are skipped. */
-export function upsertSales(items: SaleUpsert[]) {
+/**
+ * Adds sales, creating the customer if needed; sales with an already stored externalId are skipped.
+ * Reports phones that end up holding two differently named clients, so a wrong phone is caught
+ * before it merges two businesses' histories.
+ */
+export function upsertSales(items: SaleUpsert[], options: SalesOptions = {}) {
   const d = getDb();
-  const res = { created: 0, duplicates: 0, contactsCreated: 0, skipped: [] as Skip[] };
+  const res = {
+    dryRun: !!options.dryRun,
+    created: 0,
+    duplicates: 0,
+    contactsCreated: 0,
+    skipped: [] as Skip[],
+    conflicts: [] as PhoneConflict[]
+  };
   const find = d.prepare('SELECT id, name, city FROM contacts WHERE phone = ?');
   const dup = d.prepare('SELECT 1 FROM sales WHERE external_id = ?');
+  const clientsOf = d.prepare("SELECT DISTINCT json_extract(data, '$.client') AS c FROM sales WHERE contact_id = ? AND json_extract(data, '$.client') IS NOT NULL");
   const clientStage = d.prepare("SELECT id FROM stages WHERE name = 'Cliente'").get() as { id: number } | undefined;
+  const shared = new Set((options.sharedPhones ?? []).map((p) => normalizePhone(String(p))));
+  const known = new Map<number, string[]>();
+  const conflictAt = new Map<string, PhoneConflict>();
+  const namesOn = (contactId: number) => {
+    if (!known.has(contactId)) known.set(contactId, (clientsOf.all(contactId) as { c: string }[]).map((r) => r.c));
+    return known.get(contactId)!;
+  };
   d.exec('BEGIN');
   try {
     items.forEach((it, index) => {
@@ -436,6 +479,26 @@ export function upsertSales(items: SaleUpsert[]) {
       const name = String(it.name ?? '').trim().slice(0, 80);
       const city = normalizeCity(String(it.city ?? ''));
       const existing = find.get(phone) as { id: number; name: string; city: string } | undefined;
+
+      // Does another client already hold this phone?
+      if (existing && name && !shared.has(phone)) {
+        const key = `${existing.id}|${name.toUpperCase()}`;
+        let conflict = conflictAt.get(key);
+        if (!conflict) {
+          const holders = namesOn(existing.id);
+          if (holders.length && !holders.some((h) => sameCustomerName(h, name))) {
+            conflict = { phone, contactId: existing.id, contactName: existing.name, existing: [...holders], incoming: name, sales: 0, amount: 0 };
+            conflictAt.set(key, conflict);
+            res.conflicts.push(conflict);
+          }
+        }
+        if (conflict) {
+          conflict.sales++;
+          conflict.amount += amount;
+          if (options.onConflict === 'skip') return res.skipped.push({ index, reason: `Teléfono ya usado por "${conflict.existing[0]}"` });
+        }
+      }
+
       let contactId: number;
       if (existing) {
         contactId = existing.id;
@@ -451,19 +514,21 @@ export function upsertSales(items: SaleUpsert[]) {
         );
         res.contactsCreated++;
       }
+      if (name && !namesOn(contactId).some((h) => sameCustomerName(h, name))) namesOn(contactId).push(name);
+      const saleData = { ...(name ? { client: name } : {}), ...(it.data && typeof it.data === 'object' ? it.data : {}) };
       d.prepare('INSERT INTO sales (contact_id, sold_at, amount, product, external_id, data) VALUES (?,?,?,?,?,?)').run(
         contactId,
         soldAt,
         amount,
         String(it.product ?? '').trim().slice(0, 120),
         externalId,
-        JSON.stringify(it.data && typeof it.data === 'object' ? it.data : {})
+        JSON.stringify(saleData)
       );
       const tags = (Array.isArray(it.tags) ? it.tags : []).map(String).filter((t) => t.trim());
       if (tags.length) addTags([contactId], tags.map(ensureTag));
       res.created++;
     });
-    d.exec('COMMIT');
+    d.exec(options.dryRun ? 'ROLLBACK' : 'COMMIT');
   } catch (e) {
     d.exec('ROLLBACK');
     throw e;
