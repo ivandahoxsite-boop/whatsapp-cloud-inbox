@@ -127,8 +127,14 @@ export function getCustomerSales(id: number) {
     });
 }
 
+// Billing systems store Colombian mobiles without the country code (3001234567) while WhatsApp
+// uses 573001234567; add it so both land on the same customer. Override with CRM_DEFAULT_COUNTRY_CODE.
+const DEFAULT_CC = (process.env.CRM_DEFAULT_COUNTRY_CODE ?? '57').replace(/\D/g, '');
+
 export function normalizePhone(value: string): string {
-  return value.replace(/\D/g, '');
+  let d = value.replace(/\D/g, '').replace(/^00/, '');
+  if (DEFAULT_CC === '57' && d.length === 10 && d.startsWith('3')) d = `57${d}`;
+  return d;
 }
 
 export function createCustomer(input: {
@@ -187,6 +193,9 @@ export type ImportTarget =
 export function parseAmount(raw: string): number {
   let s = raw.trim().replace(/[^\d.,-]/g, '');
   if (!s) return 0;
+  // Only thousands separators: "1.200.000" (Colombia) or "1,200,000".
+  if (/^-?\d{1,3}(\.\d{3})+$/.test(s)) return Number(s.replace(/\./g, ''));
+  if (/^-?\d{1,3}(,\d{3})+$/.test(s)) return Number(s.replace(/,/g, ''));
   const lastComma = s.lastIndexOf(',');
   const lastDot = s.lastIndexOf('.');
   if (lastComma > -1 && lastDot > -1) {
@@ -324,4 +333,115 @@ export function importSales(columns: string[], mapping: Record<string, ImportTar
     throw error;
   }
   return result;
+}
+
+// ---- Bulk upserts for the agent (e.g. OpenClaw copying from the billing system) -------------
+
+export type CustomerUpsert = { phone: string; name?: string; city?: string; tags?: string[]; data?: Record<string, unknown> };
+export type SaleUpsert = {
+  phone: string;
+  soldAt: string;
+  amount: number | string;
+  product?: string;
+  /** Invoice or order number; the same id is stored only once. */
+  externalId?: string;
+  name?: string;
+  city?: string;
+};
+
+type Skip = { index: number; reason: string };
+
+/** Creates or completes customers by phone. Existing values are only overwritten when a new one is given. */
+export function upsertCustomers(items: CustomerUpsert[]) {
+  const d = getDb();
+  const res = { created: 0, updated: 0, skipped: [] as Skip[] };
+  const find = d.prepare('SELECT id, name, city, data FROM contacts WHERE phone = ?');
+  d.exec('BEGIN');
+  try {
+    items.forEach((it, index) => {
+      const phone = normalizePhone(String(it?.phone ?? ''));
+      if (phone.length < 7) return res.skipped.push({ index, reason: 'Teléfono inválido' });
+      const name = String(it.name ?? '').trim().slice(0, 80);
+      const city = normalizeCity(String(it.city ?? ''));
+      const existing = find.get(phone) as { id: number; name: string; city: string; data: string } | undefined;
+      let id: number;
+      if (existing) {
+        id = existing.id;
+        d.prepare('UPDATE contacts SET name = ?, city = ?, data = ? WHERE id = ?').run(
+          name || existing.name,
+          city || existing.city,
+          JSON.stringify({ ...JSON.parse(existing.data), ...(it.data ?? {}) }),
+          id
+        );
+        res.updated++;
+      } else {
+        id = Number(
+          d.prepare('INSERT INTO contacts (phone, name, city, data) VALUES (?,?,?,?)').run(phone, name, city, JSON.stringify(it.data ?? {}))
+            .lastInsertRowid
+        );
+        res.created++;
+      }
+      const tags = (Array.isArray(it.tags) ? it.tags : []).map(String).filter((t) => t.trim());
+      if (tags.length) addTags([id], tags.map(ensureTag));
+    });
+    d.exec('COMMIT');
+  } catch (e) {
+    d.exec('ROLLBACK');
+    throw e;
+  }
+  return res;
+}
+
+/** Adds sales, creating the customer if needed; sales with an already stored externalId are skipped. */
+export function upsertSales(items: SaleUpsert[]) {
+  const d = getDb();
+  const res = { created: 0, duplicates: 0, contactsCreated: 0, skipped: [] as Skip[] };
+  const find = d.prepare('SELECT id, name, city FROM contacts WHERE phone = ?');
+  const dup = d.prepare('SELECT 1 FROM sales WHERE external_id = ?');
+  const clientStage = d.prepare("SELECT id FROM stages WHERE name = 'Cliente'").get() as { id: number } | undefined;
+  d.exec('BEGIN');
+  try {
+    items.forEach((it, index) => {
+      const phone = normalizePhone(String(it?.phone ?? ''));
+      if (phone.length < 7) return res.skipped.push({ index, reason: 'Teléfono inválido' });
+      const soldAt = parseDate(String(it.soldAt ?? ''));
+      if (!soldAt) return res.skipped.push({ index, reason: 'Fecha inválida' });
+      const amount = typeof it.amount === 'number' ? it.amount : parseAmount(String(it.amount ?? ''));
+      if (!Number.isFinite(amount)) return res.skipped.push({ index, reason: 'Monto inválido' });
+      const externalId = it.externalId ? String(it.externalId).trim().slice(0, 80) : null;
+      if (externalId && dup.get(externalId)) return void res.duplicates++;
+
+      const name = String(it.name ?? '').trim().slice(0, 80);
+      const city = normalizeCity(String(it.city ?? ''));
+      const existing = find.get(phone) as { id: number; name: string; city: string } | undefined;
+      let contactId: number;
+      if (existing) {
+        contactId = existing.id;
+        if ((name && !existing.name) || (city && !existing.city)) {
+          d.prepare('UPDATE contacts SET name = ?, city = ? WHERE id = ?').run(existing.name || name, existing.city || city, contactId);
+        }
+        // Someone who buys is a customer, whatever stage the chat left them in.
+        if (clientStage) d.prepare("UPDATE contacts SET stage_id = ? WHERE id = ? AND (stage_id IS NULL OR stage_id IN (SELECT id FROM stages WHERE name = 'Nuevo'))").run(clientStage.id, contactId);
+      } else {
+        contactId = Number(
+          d.prepare("INSERT INTO contacts (phone, name, city, stage_id, data) VALUES (?,?,?,?, '{}')").run(phone, name, city, clientStage?.id ?? null)
+            .lastInsertRowid
+        );
+        res.contactsCreated++;
+      }
+      d.prepare('INSERT INTO sales (contact_id, sold_at, amount, product, external_id) VALUES (?,?,?,?,?)').run(
+        contactId,
+        soldAt,
+        amount,
+        String(it.product ?? '').trim().slice(0, 120),
+        externalId
+      );
+      res.created++;
+    });
+    d.exec('COMMIT');
+  } catch (e) {
+    d.exec('ROLLBACK');
+    throw e;
+  }
+  return res;
 }

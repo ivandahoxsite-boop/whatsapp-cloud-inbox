@@ -104,6 +104,11 @@ export function getDb(): DatabaseSync {
 
 // Additive, idempotent schema changes for databases created by earlier versions.
 function migrate(d: DatabaseSync) {
+  const saleCols = d.prepare('PRAGMA table_info(sales)').all() as unknown as { name: string }[];
+  // Invoice / order number from the source system: re-importing the same sale never duplicates it.
+  if (!saleCols.some((c) => c.name === 'external_id')) d.exec('ALTER TABLE sales ADD COLUMN external_id TEXT');
+  d.exec('CREATE UNIQUE INDEX IF NOT EXISTS sales_external_idx ON sales(external_id) WHERE external_id IS NOT NULL');
+
   const contactCols = d.prepare('PRAGMA table_info(contacts)').all() as unknown as { name: string }[];
   if (!contactCols.some((c) => c.name === 'city')) {
     d.exec("ALTER TABLE contacts ADD COLUMN city TEXT NOT NULL DEFAULT ''");
