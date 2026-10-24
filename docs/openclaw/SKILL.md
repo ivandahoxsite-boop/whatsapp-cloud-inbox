@@ -20,7 +20,7 @@ Base URL: `$CRM_BASE_URL` (on the same server: `http://127.0.0.1:4000`). Every r
 | List customers | `GET /api/agent/customers?awaiting=1&segment=<seg>&recurrence=<rec>&city=<city>&tag=<tag>&segment_id=<id>&q=<text>&limit=20` |
 | One customer (sales, chat history) | `GET /api/agent/customers/{id}` |
 | Today's recommended actions | `GET /api/agent/actions` |
-| Move stage / note / city / tags | `PATCH /api/agent/customers/{id}` body `{"stage":"Interesado","note":"...","city":"Cali","addTags":["VIP"]}` |
+| Move stage / note / city / tags / phone | `PATCH /api/agent/customers/{id}` body `{"stage":"Interesado","note":"...","city":"Cali","addTags":["VIP"],"phone":"3001234567"}` |
 | Propose a message | `POST /api/agent/messages` body `{"customerId":12,"body":"..."}` |
 | See pending/sent proposals | `GET /api/agent/messages?status=pending` |
 
@@ -58,4 +58,6 @@ Use it directly in commands (`curl -H "Authorization: Bearer $CRM_AGENT_TOKEN" .
   - Add `"dryRun": true` at the top level of the body to preview a whole load: nothing is stored, you get `created`, `duplicates`, `skipped` and `conflicts`. **Always dry-run a full load first, show the user the conflicts, and ask which client really owns each phone.**
   - `"onConflict":"skip"` leaves out the sales of the second client instead of merging them.
   - `"sharedPhones":["3001234567"]` marks phones the user confirmed as the same business under two names (e.g. a renamed company), so they are not reported again.
+- **Customers without a phone.** Add `"allowNoPhone": true` at the top level of a customers or sales request and send `nit` (and/or `name`) instead of `phone`: the customer is created with `hasPhone:false`, shown as "Sin teléfono" in the CRM, and can hold sales, tags and notes but cannot be messaged or exported to a broadcast. Use the **same `nit`** (or exact name) in every request so all its sales land on one customer. List them with `GET /api/agent/customers?nophone=1`.
+  When you learn the real number: `PATCH /api/agent/customers/{id}` with `{"phone":"3001234567"}`. If that number already has a WhatsApp chat, both are merged into the chat contact (response `merged:true`, with its `contactId`).
 - Start with a small test (10 rows), show the user the result, then load the rest.

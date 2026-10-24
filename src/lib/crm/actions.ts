@@ -11,6 +11,7 @@ export function buildActions(customers: Customer[]): Action[] {
   const first = (c: Customer) => (c.name.trim() ? ` ${c.name.trim().split(' ')[0]}` : '');
   const out: Action[] = [];
   for (const c of customers) {
+    if (!c.hasPhone) continue; // nothing to write to yet
     if (c.recurrence === 'por_recomprar') {
       const product = c.favoriteProduct ? ` tu ${c.favoriteProduct}` : '';
       out.push({

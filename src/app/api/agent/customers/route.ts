@@ -40,7 +40,8 @@ export async function GET(request: Request) {
       recurrence: recurrence ? [recurrence] : filter.recurrence,
       cities: p('city') ? [p('city')] : filter.cities,
       tags: tag ? [tag.id] : filter.tags,
-      awaiting: p('awaiting') === '1' || p('awaiting') === 'true' ? true : filter.awaiting
+      awaiting: p('awaiting') === '1' || p('awaiting') === 'true' ? true : filter.awaiting,
+      noPhone: p('nophone') === '1' || p('nophone') === 'true' ? true : filter.noPhone
     });
 
     const tagName2 = new Map(tags.map((t) => [t.id, t.name]));
@@ -52,6 +53,7 @@ export async function GET(request: Request) {
         id: c.id,
         name: c.name,
         phone: c.phone,
+        hasPhone: c.hasPhone,
         city: c.city,
         tags: c.tags.map((t) => tagName2.get(t)).filter(Boolean),
         stageId: c.stageId,

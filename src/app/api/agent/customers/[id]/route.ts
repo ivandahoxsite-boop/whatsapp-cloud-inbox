@@ -1,4 +1,4 @@
-import { listCustomers, updateCustomer } from '@/lib/crm/customers';
+import { listCustomers, setCustomerPhone, updateCustomer } from '@/lib/crm/customers';
 import { addActivity, listActivities } from '@/lib/crm/agent-store';
 import { getDb, listStages } from '@/lib/crm/db';
 import { fail, guardAgent, json } from '@/lib/crm/agent-http';
@@ -21,19 +21,23 @@ export async function GET(request: Request, { params }: Ctx) {
   return json({ customer, sales, activities: listActivities(id), stages: listStages() });
 }
 
-// PATCH { "stage": "Interesado", "note": "Pidió cotización", "city": "Cali", "addTags": ["VIP"] }
+// PATCH { "stage": "Interesado", "note": "Pidió cotización", "city": "Cali", "addTags": ["VIP"], "phone": "3001234567" }
+// "phone" gives a customer loaded without one its number (merging into the WhatsApp contact if that exists).
 export async function PATCH(request: Request, { params }: Ctx) {
   const denied = guardAgent(request);
   if (denied) return denied;
   try {
     const id = Number((await params).id);
     if (!listCustomers().some((c) => c.id === id)) return json({ error: 'Cliente no encontrado' }, 404);
-    const { stage, note, city, addTags: tagNames } = (await request.json()) as {
+    const { stage, note, city, phone, addTags: tagNames } = (await request.json()) as {
+      phone?: string;
       stage?: string;
       note?: string;
       city?: string;
       addTags?: string[];
     };
+    let merged: { contactId: number; merged: boolean } | undefined;
+    if (phone) merged = setCustomerPhone(id, String(phone));
     if (city !== undefined) updateCustomer(id, { city: String(city) });
     if (Array.isArray(tagNames) && tagNames.length) {
       addTags([id], tagNames.map(String).filter((t) => t.trim()).map(ensureTag));
@@ -46,7 +50,7 @@ export async function PATCH(request: Request, { params }: Ctx) {
       addActivity(id, 'stage', `Etapa → ${found.name}`, { by: 'agent' });
     }
     if (note?.trim()) addActivity(id, 'note', note.trim().slice(0, 1000), { by: 'agent' });
-    return json({ ok: true });
+    return json({ ok: true, ...(merged ? { contactId: merged.contactId, merged: merged.merged } : {}) });
   } catch (e) {
     return fail(e);
   }

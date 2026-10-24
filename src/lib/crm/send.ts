@@ -1,4 +1,5 @@
 import { getWhatsAppClient } from '@/lib/whatsapp-client';
+import { isRealPhone } from './customers';
 import { getOutbox, lastPhoneNumberId, markOutbox, sentLastHour, addActivity } from './agent-store';
 
 const HOURLY_LIMIT = Number(process.env.CRM_MAX_SENDS_PER_HOUR || 20);
@@ -7,6 +8,7 @@ const HOURLY_LIMIT = Number(process.env.CRM_MAX_SENDS_PER_HOUR || 20);
 export async function approveAndSend(id: number): Promise<{ ok: boolean; error?: string }> {
   const item = getOutbox(id);
   if (!item) return { ok: false, error: 'Mensaje no encontrado' };
+  if (!isRealPhone(item.phone)) return { ok: false, error: 'Este cliente aún no tiene teléfono: agrégalo en su ficha' };
   if (item.status !== 'pending') return { ok: false, error: `El mensaje ya está ${item.status}` };
   if (sentLastHour() >= HOURLY_LIMIT) return { ok: false, error: `Límite de ${HOURLY_LIMIT} envíos por hora alcanzado` };
 

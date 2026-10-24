@@ -107,8 +107,9 @@ export function cityOptions(customers: Customer[]): { name: string; count: numbe
     .sort((a, b) => b.count - a.count);
 }
 
-/** "+57 300 224 5595" for Colombian mobiles, "+<digits>" otherwise. */
+/** "+57 300 224 5595" for Colombian mobiles, "+<digits>" otherwise, "Sin teléfono" for an internal key. */
 export function formatPhone(phone: string): string {
+  if (!/^\d+$/.test(phone)) return 'Sin teléfono';
   const m = /^57(\d{3})(\d{3})(\d{4})$/.exec(phone);
   return m ? `+57 ${m[1]} ${m[2]} ${m[3]}` : `+${phone}`;
 }
@@ -143,7 +144,8 @@ export function downloadCustomersCsv(customers: Customer[], data: CrmData, filen
   const tagName = new Map(data.tags.map((t) => [t.id, t.name]));
   const stageName = new Map(data.stages.map((s) => [s.id, s.name]));
   const header = ['telefono', 'nombre', 'ciudad', 'etiquetas', 'etapa', 'tipo', 'segmento', 'compras', 'total', 'ultima_compra', 'producto_favorito'];
-  const rows = customers.map((c) => [
+  // Customers without a phone can't be uploaded to a broadcast.
+  const rows = customers.filter((c) => c.hasPhone).map((c) => [
     c.phone,
     c.name,
     c.city,

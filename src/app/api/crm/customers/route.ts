@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { createCustomer, deleteCustomer, listCustomers, updateCustomer } from '@/lib/crm/customers';
+import { createCustomer, deleteCustomer, listCustomers, setCustomerPhone, updateCustomer } from '@/lib/crm/customers';
 import { listFields, listStages } from '@/lib/crm/db';
 import { listTags } from '@/lib/crm/tags';
 import { listSegments } from '@/lib/crm/segments';
@@ -36,9 +36,10 @@ export async function POST(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
-    const { id, ...patch } = await request.json();
-    updateCustomer(Number(id), patch);
-    return NextResponse.json({ ok: true });
+    const { id, phone, ...patch } = await request.json();
+    const moved = phone ? setCustomerPhone(Number(id), String(phone)) : null;
+    updateCustomer(moved?.contactId ?? Number(id), patch);
+    return NextResponse.json({ ok: true, merged: moved?.merged ?? false });
   } catch (error) {
     return fail(error);
   }

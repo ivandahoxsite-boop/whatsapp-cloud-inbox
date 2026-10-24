@@ -1,5 +1,5 @@
 import { getDb } from './db';
-import { createCustomer, normalizePhone } from './customers';
+import { createCustomer, isRealPhone, normalizePhone } from './customers';
 
 export type Activity = { id: number; kind: string; text: string; meta: Record<string, unknown>; createdAt: string };
 export type OutboxItem = {
@@ -103,6 +103,8 @@ export function getOutbox(id: number): OutboxItem | null {
 
 export function proposeMessage(contactId: number, body: string, by = 'agent'): number {
   const text = body.trim();
+  const owner = getDb().prepare('SELECT phone FROM contacts WHERE id = ?').get(contactId) as { phone: string } | undefined;
+  if (owner && !isRealPhone(owner.phone)) throw new Error('Este cliente aún no tiene teléfono: no se le puede escribir');
   if (!text) throw new Error('El mensaje está vacío');
   if (text.length > 1000) throw new Error('El mensaje supera 1000 caracteres');
   return Number(getDb().prepare('INSERT INTO outbox (contact_id, body, proposed_by) VALUES (?,?,?)').run(contactId, text, by).lastInsertRowid);

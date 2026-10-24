@@ -8,7 +8,10 @@ import { AWAITING_WINDOW_DAYS, needsReply } from './reply';
 
 export type Customer = {
   id: number;
+  /** WhatsApp number, or an internal key ("nit:..." / "nom:...") for a customer whose phone is still unknown. */
   phone: string;
+  /** False while `phone` is only an internal key: no WhatsApp link, no sending, no broadcast export. */
+  hasPhone: boolean;
   name: string;
   city: string;
   tags: number[];
@@ -90,6 +93,7 @@ export function listCustomers(): Customer[] {
   return rows.map((r, i) => ({
     id: r.id,
     phone: r.phone,
+    hasPhone: isRealPhone(r.phone),
     name: r.name,
     city: r.city ? canonical.get(cityKey(r.city)) ?? r.city : '',
     tags: tags.get(r.id) ?? [],
@@ -137,6 +141,69 @@ export function normalizePhone(value: string): string {
   let d = value.replace(/\D/g, '').replace(/^00/, '');
   if (DEFAULT_CC === '57' && d.length === 10 && d.startsWith('3')) d = `57${d}`;
   return d;
+}
+
+/** A WhatsApp number, as opposed to the internal key kept for customers whose phone is unknown. */
+export const isRealPhone = (phone: string) => /^\d{7,}$/.test(phone);
+
+/**
+ * Key for a billing-system customer that has no phone yet: the NIT when there is one, else the name.
+ * Stored in contacts.phone so every table keeps working; `setCustomerPhone` swaps in the real number later.
+ */
+export function placeholderKey(nit?: string, name?: string): string | null {
+  const n = String(nit ?? '').toUpperCase().replace(/[^0-9K]/g, '');
+  if (n.length >= 5) return `nit:${n}`;
+  const slug = String(name ?? '')
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 60);
+  return slug.length >= 3 ? `nom:${slug}` : null;
+}
+
+/**
+ * Gives a customer its real phone. If another contact already has that number (e.g. the WhatsApp chat),
+ * the two are merged into it: sales, tags, notes and proposed messages move over and this one is removed.
+ */
+export function setCustomerPhone(id: number, raw: string): { contactId: number; merged: boolean } {
+  const phone = normalizePhone(raw);
+  if (!isRealPhone(phone) || phone.length < 7) throw new Error('Teléfono inválido');
+  const d = getDb();
+  const me = d.prepare('SELECT id, phone, name, city, stage_id, data FROM contacts WHERE id = ?').get(id) as
+    | { id: number; phone: string; name: string; city: string; stage_id: number | null; data: string }
+    | undefined;
+  if (!me) throw new Error('Cliente no encontrado');
+  if (me.phone === phone) return { contactId: id, merged: false };
+  const other = d.prepare('SELECT id, name, city, stage_id, data FROM contacts WHERE phone = ?').get(phone) as
+    | { id: number; name: string; city: string; stage_id: number | null; data: string }
+    | undefined;
+  if (!other) {
+    d.prepare('UPDATE contacts SET phone = ? WHERE id = ?').run(phone, id);
+    return { contactId: id, merged: false };
+  }
+  d.exec('BEGIN');
+  try {
+    d.prepare('UPDATE sales SET contact_id = ? WHERE contact_id = ?').run(other.id, id);
+    d.prepare('UPDATE activities SET contact_id = ? WHERE contact_id = ?').run(other.id, id);
+    d.prepare('UPDATE outbox SET contact_id = ? WHERE contact_id = ?').run(other.id, id);
+    d.prepare('INSERT OR IGNORE INTO contact_tags (contact_id, tag_id) SELECT ?, tag_id FROM contact_tags WHERE contact_id = ?').run(other.id, id);
+    // The chat contact keeps its own name (often what the customer calls themselves); gaps are filled from this one.
+    d.prepare('UPDATE contacts SET name = ?, city = ?, stage_id = ?, data = ? WHERE id = ?').run(
+      other.name || me.name,
+      other.city || me.city,
+      other.stage_id ?? me.stage_id,
+      JSON.stringify({ ...JSON.parse(me.data), ...JSON.parse(other.data) }),
+      other.id
+    );
+    d.prepare('DELETE FROM contacts WHERE id = ?').run(id);
+    d.exec('COMMIT');
+  } catch (e) {
+    d.exec('ROLLBACK');
+    throw e;
+  }
+  return { contactId: other.id, merged: true };
 }
 
 export function createCustomer(input: {
@@ -340,7 +407,10 @@ export function importSales(columns: string[], mapping: Record<string, ImportTar
 // ---- Bulk upserts for the agent (e.g. OpenClaw copying from the billing system) -------------
 
 export type CustomerUpsert = {
-  phone: string;
+  /** Optional when the request sets `allowNoPhone` and `nit` or `name` identify the customer. */
+  phone?: string;
+  /** Tax id from the billing system, used as the key while the phone is unknown. */
+  nit?: string;
   name?: string;
   /** Replace the stored name too. Without it an existing name is kept and `name` only fills an empty one. */
   overwriteName?: boolean;
@@ -349,7 +419,8 @@ export type CustomerUpsert = {
   data?: Record<string, unknown>;
 };
 export type SaleUpsert = {
-  phone: string;
+  phone?: string;
+  nit?: string;
   soldAt: string;
   amount: number | string;
   product?: string;
@@ -373,6 +444,8 @@ export type SalesOptions = {
   onConflict?: 'allow' | 'skip';
   /** Phones confirmed as one business with several names (e.g. a renamed company): never reported. */
   sharedPhones?: string[];
+  /** Accept customers without a phone, identified by `nit` or `name`. Without it they are skipped as before. */
+  allowNoPhone?: boolean;
 };
 
 export type PhoneConflict = {
@@ -387,6 +460,13 @@ export type PhoneConflict = {
   amount: number;
 };
 
+/** Real phone when valid; otherwise, if allowed, the NIT/name key of a customer whose phone is unknown. */
+function resolveKey(it: { phone?: string; nit?: string; name?: string }, allowNoPhone?: boolean): string | null {
+  const phone = normalizePhone(String(it?.phone ?? ''));
+  if (phone.length >= 7) return phone;
+  return allowNoPhone ? placeholderKey(it.nit, it.name) : null;
+}
+
 const MAX_EXTERNAL_ID = 80;
 
 /** Ids longer than the column limit are shortened with a hash of the full id, so different long ids never collide. */
@@ -398,15 +478,15 @@ export function normalizeExternalId(raw: string): string {
 }
 
 /** Creates or completes customers by phone. An existing name is kept unless `overwriteName` is set; other fields are overwritten when a new value is given. */
-export function upsertCustomers(items: CustomerUpsert[]) {
+export function upsertCustomers(items: CustomerUpsert[], options: Pick<SalesOptions, 'allowNoPhone'> = {}) {
   const d = getDb();
   const res = { created: 0, updated: 0, skipped: [] as Skip[] };
   const find = d.prepare('SELECT id, name, city, data FROM contacts WHERE phone = ?');
   d.exec('BEGIN');
   try {
     items.forEach((it, index) => {
-      const phone = normalizePhone(String(it?.phone ?? ''));
-      if (phone.length < 7) return res.skipped.push({ index, reason: 'Teléfono inválido' });
+      const phone = resolveKey(it, options.allowNoPhone);
+      if (!phone) return res.skipped.push({ index, reason: 'Teléfono inválido' });
       const name = String(it.name ?? '').trim().slice(0, 80);
       const city = normalizeCity(String(it.city ?? ''));
       const existing = find.get(phone) as { id: number; name: string; city: string; data: string } | undefined;
@@ -467,8 +547,8 @@ export function upsertSales(items: SaleUpsert[], options: SalesOptions = {}) {
   d.exec('BEGIN');
   try {
     items.forEach((it, index) => {
-      const phone = normalizePhone(String(it?.phone ?? ''));
-      if (phone.length < 7) return res.skipped.push({ index, reason: 'Teléfono inválido' });
+      const phone = resolveKey(it, options.allowNoPhone);
+      if (!phone) return res.skipped.push({ index, reason: 'Teléfono inválido' });
       const soldAt = parseDate(String(it.soldAt ?? ''));
       if (!soldAt) return res.skipped.push({ index, reason: 'Fecha inválida' });
       const amount = typeof it.amount === 'number' ? it.amount : parseAmount(String(it.amount ?? ''));

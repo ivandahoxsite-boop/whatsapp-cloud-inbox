@@ -149,6 +149,16 @@ export function FilterBar({
           ⏳ Esperan respuesta
           <span className="text-xs tabular-nums opacity-70">{data.customers.filter((c) => c.awaitingReply).length}</span>
         </button>
+        <button
+          onClick={() => set({ noPhone: filter.noPhone ? undefined : true })}
+          className={cn(
+            'flex h-9 shrink-0 items-center gap-1 whitespace-nowrap rounded-full border px-3 text-sm',
+            filter.noPhone ? 'border-sky-400/70 bg-sky-400/15 text-foreground' : 'border-border/60 bg-card/50 text-muted-foreground'
+          )}
+        >
+          📵 Sin teléfono
+          <span className="text-xs tabular-nums opacity-70">{data.customers.filter((c) => !c.hasPhone).length}</span>
+        </button>
         <Dropdown
           label="Tipo de cliente"
           selected={filter.recurrence ?? []}

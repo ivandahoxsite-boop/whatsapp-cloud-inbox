@@ -56,6 +56,7 @@ function SheetBody({ c, data, onClose }: { c: Customer; data: CrmData; onClose: 
   const [city, setCity] = useState(c.city);
   const [newTag, setNewTag] = useState('');
   const [note, setNote] = useState('');
+  const [newPhone, setNewPhone] = useState('');
 
   const run = async (fn: () => Promise<unknown>) => {
     setErr('');
@@ -122,14 +123,33 @@ function SheetBody({ c, data, onClose }: { c: Customer; data: CrmData; onClose: 
           <SegmentPill segment={c.segment} />
           <span className="text-xs text-muted-foreground">Potencial {c.score}/100</span>
         </div>
-        <a
-          href={`https://wa.me/${c.phone}`}
-          target="_blank"
-          rel="noreferrer"
-          className="mt-3 inline-flex h-9 items-center gap-2 rounded-full bg-emerald-500/15 px-4 text-sm font-medium text-emerald-500 hover:bg-emerald-500/25"
-        >
-          <MessageCircle className="h-4 w-4" /> Escribir por WhatsApp
-        </a>
+        {c.hasPhone ? (
+          <a
+            href={`https://wa.me/${c.phone}`}
+            target="_blank"
+            rel="noreferrer"
+            className="mt-3 inline-flex h-9 items-center gap-2 rounded-full bg-emerald-500/15 px-4 text-sm font-medium text-emerald-500 hover:bg-emerald-500/25"
+          >
+            <MessageCircle className="h-4 w-4" /> Escribir por WhatsApp
+          </a>
+        ) : (
+          <form
+            className="mt-3 flex gap-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (!newPhone.trim()) return;
+              // If this number already has a WhatsApp chat, both are merged and this sheet closes.
+              run(async () => {
+                const r = await api<{ merged: boolean }>('/api/crm/customers', 'PATCH', { id: c.id, phone: newPhone.trim() });
+                setNewPhone('');
+                if (r.merged) onClose();
+              });
+            }}
+          >
+            <Input value={newPhone} onChange={(e) => setNewPhone(e.target.value)} placeholder="Agregar teléfono" inputMode="tel" className="h-9" />
+            <Button type="submit" size="sm">Guardar</Button>
+          </form>
+        )}
       </div>
 
       <div className="space-y-5 p-4">

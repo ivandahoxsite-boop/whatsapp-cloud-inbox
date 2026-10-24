@@ -17,6 +17,8 @@ export type CustomerFilter = {
   minDaysSince?: number;
   /** Their last WhatsApp message is waiting for your answer. */
   awaiting?: boolean;
+  /** Customers loaded from the billing system whose phone is still unknown. */
+  noPhone?: boolean;
 };
 
 export type FilterableCustomer = {
@@ -30,6 +32,7 @@ export type FilterableCustomer = {
   totalSpent: number;
   daysSinceLastSale: number | null;
   awaitingReply: boolean;
+  hasPhone: boolean;
 };
 
 export const normalizeText = (s: string) =>
@@ -42,7 +45,7 @@ export function matchesFilter(c: FilterableCustomer, f: CustomerFilter): boolean
   if (f.q) {
     const q = normalizeText(f.q);
     const digits = q.replace(/\D/g, '');
-    if (!normalizeText(c.name).includes(q) && !(digits && c.phone.includes(digits)) && !cityKey(c.city).includes(q)) return false;
+    if (!normalizeText(c.name).includes(q) && !(digits && c.hasPhone && c.phone.includes(digits)) && !cityKey(c.city).includes(q)) return false;
   }
   if (f.rfm?.length && !f.rfm.includes(c.segment)) return false;
   if (f.recurrence?.length && !f.recurrence.includes(c.recurrence)) return false;
@@ -53,6 +56,7 @@ export function matchesFilter(c: FilterableCustomer, f: CustomerFilter): boolean
   if (f.maxDaysSince != null && (c.daysSinceLastSale == null || c.daysSinceLastSale > f.maxDaysSince)) return false;
   if (f.minDaysSince != null && c.daysSinceLastSale != null && c.daysSinceLastSale < f.minDaysSince) return false;
   if (f.awaiting && !c.awaitingReply) return false;
+  if (f.noPhone && c.hasPhone) return false;
   return true;
 }
 
@@ -76,6 +80,7 @@ export function sanitizeFilter(raw: unknown): CustomerFilter {
     minSpent: num(o.minSpent),
     maxDaysSince: num(o.maxDaysSince),
     minDaysSince: num(o.minDaysSince),
-    awaiting: o.awaiting === true ? true : undefined
+    awaiting: o.awaiting === true ? true : undefined,
+    noPhone: o.noPhone === true ? true : undefined
   };
 }
