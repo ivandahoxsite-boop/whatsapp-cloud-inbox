@@ -500,6 +500,8 @@ export type SalesOptions = {
   sharedPhones?: string[];
   /** Accept customers without a phone, identified by `nit` or `name`. Without it they are skipped as before. */
   allowNoPhone?: boolean;
+  /** A sale whose externalId is already stored gets its `data` (seller, zone, qty…) completed instead of being skipped. Nothing else changes. */
+  updateExisting?: boolean;
 };
 
 export type PhoneConflict = {
@@ -584,6 +586,7 @@ export function upsertSales(items: SaleUpsert[], options: SalesOptions = {}) {
     dryRun: !!options.dryRun,
     created: 0,
     duplicates: 0,
+    updated: 0,
     contactsCreated: 0,
     skipped: [] as Skip[],
     conflicts: [] as PhoneConflict[]
@@ -609,7 +612,15 @@ export function upsertSales(items: SaleUpsert[], options: SalesOptions = {}) {
       const amount = typeof it.amount === 'number' ? it.amount : parseAmount(String(it.amount ?? ''));
       if (!Number.isFinite(amount)) return res.skipped.push({ index, reason: 'Monto inválido' });
       const externalId = it.externalId ? normalizeExternalId(String(it.externalId)) : null;
-      if (externalId && dup.get(externalId)) return void res.duplicates++;
+      if (externalId && dup.get(externalId)) {
+        const extra = it.data && typeof it.data === 'object' ? Object.fromEntries(Object.entries(it.data).filter(([, v]) => v !== null && v !== undefined && v !== '')) : {};
+        if (options.updateExisting && Object.keys(extra).length) {
+          // json_patch merges the keys sent over the stored ones; keys that are not sent stay as they were.
+          d.prepare("UPDATE sales SET data = json_patch(data, ?) WHERE external_id = ? AND data <> json_patch(data, ?)").run(JSON.stringify(extra), externalId, JSON.stringify(extra));
+          res.updated += Number((d.prepare('SELECT changes() AS n').get() as { n: number }).n);
+        }
+        return void res.duplicates++;
+      }
 
       const name = String(it.name ?? '').trim().slice(0, 80);
       const city = normalizeCity(String(it.city ?? ''));

@@ -10,7 +10,8 @@ const MAX = 2000;
 // externalId (invoice number) makes re-sending the same sales safe: they are stored once.
 // Optional top-level: "dryRun": true (nothing is stored; shows created/duplicates/conflicts),
 // "onConflict": "skip" (leave out sales whose phone already holds another client) and
-// "sharedPhones": ["3001234567"] (phones confirmed as one business with several names).
+// "sharedPhones": ["3001234567"] (phones confirmed as one business with several names),
+// "updateExisting": true (sales already stored get their data — seller, zone, qty — completed instead of skipped).
 export async function POST(request: Request) {
   const denied = guardAgent(request);
   if (denied) return denied;
