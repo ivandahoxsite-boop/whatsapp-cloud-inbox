@@ -51,8 +51,8 @@ sec "Docker (solo nombres, sin variables de entorno)"
 have docker && docker ps --format '{{.Names}}\t{{.Image}}\t{{.Ports}}' 2>/dev/null || echo "sin acceso a docker"
 
 sec "OpenClaw (solo detección)"
-found=$(pgrep -af -i 'openclaw|clawdbot|moltbot' | grep -v -E "pgrep|diagnose|bash -c" | cut -c1-120 | sed -E 's/(--?token|--?password|--?key)[= ][^ ]*/\1=***/' | head -5)
-[ -n "$found" ] && echo "proceso: $found" || echo "sin proceso de OpenClaw en ejecucion
+found=$(pgrep -af -i 'openclaw|clawdbot|moltbot' | grep -v -E "^($$|$PPID) |pgrep|diagnose" | cut -c1-120 | sed -E 's/(--?token|--?password|--?key)[= ][^ ]*/\1=***/' | head -5)
+[ -n "$found" ] && echo "proceso: $found" || echo "sin proceso de OpenClaw en ejecucion"
 for d in "$HOME/.openclaw" "$HOME/.clawdbot" "$HOME/.moltbot"; do [ -d "$d" ] && echo "carpeta: $d  (skills: $(ls "$d/workspace/skills" 2>/dev/null | wc -l))"; done
 systemctl list-units --type=service --no-pager 2>/dev/null | grep -i -E 'claw|molt' || echo "sin servicio systemd de OpenClaw"
 have openclaw && echo "cli: $(openclaw --version 2>&1 | head -1)"
