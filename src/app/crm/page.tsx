@@ -9,6 +9,7 @@ import { CommandPalette, type CrmTab } from '@/components/crm/command-palette';
 import { Overview } from '@/components/crm/overview';
 import { CustomersView } from '@/components/crm/customers-view';
 import { CustomerSheet } from '@/components/crm/customer-sheet';
+import { LockGate } from '@/components/crm/lock-gate';
 import { ReceivablesView } from '@/components/crm/receivables-view';
 import { SalesReportView } from '@/components/crm/sales-report';
 import { Campaigns } from '@/components/crm/campaigns';
@@ -120,8 +121,16 @@ export default function CrmPage() {
             }}
           />
         )}
-        {data && tab === 'ventas' && <SalesReportView onOpenCustomer={setOpenId} />}
-        {data && tab === 'cartera' && <ReceivablesView onOpenCustomer={setOpenId} />}
+        {data && tab === 'ventas' && (
+          <LockGate what="las ventas" tiles={['Ventas', 'Unidades', 'Líneas de venta', 'Clientes que compraron']}>
+            <SalesReportView onOpenCustomer={setOpenId} />
+          </LockGate>
+        )}
+        {data && tab === 'cartera' && (
+          <LockGate what="la cartera" tiles={['Por cobrar', 'Vencida', 'Facturas abiertas', 'Clientes que deben']}>
+            <ReceivablesView onOpenCustomer={setOpenId} />
+          </LockGate>
+        )}
         {data && tab === 'segmentos' && <SegmentsView data={data} draft={draft} setDraft={setDraft} onOpen={showCustomers} />}
         {data && tab === 'campanas' && <Campaigns data={data} />}
         {tab === 'aprobaciones' && <Approvals />}

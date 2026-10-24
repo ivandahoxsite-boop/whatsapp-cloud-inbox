@@ -148,6 +148,7 @@ function migrate(d: DatabaseSync) {
       oldest_message_at TEXT,
       error TEXT
     );
+    CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
     -- Invoices still to be collected (accounts receivable), loaded from the billing system's aging report.
     CREATE TABLE IF NOT EXISTS receivables (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
