@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { MessageCircle, ShoppingBag, StickyNote, Trash2, ArrowRightLeft, Tag as TagIcon, X } from 'lucide-react';
+import { MessageCircle, Phone, ShoppingBag, StickyNote, Trash2, ArrowRightLeft, Tag as TagIcon, X } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -92,9 +92,9 @@ function SheetBody({ c, data, onClose }: { c: Customer; data: CrmData; onClose: 
     ...(detail?.activities ?? []).map((a) => ({
       key: `a${a.id}`,
       at: a.createdAt.replace(' ', 'T') + 'Z',
-      icon: a.kind === 'note' ? StickyNote : a.kind.startsWith('whatsapp') ? MessageCircle : a.kind === 'tags' ? TagIcon : ArrowRightLeft,
-      color: a.kind === 'whatsapp_in' ? '#38bdf8' : a.kind === 'whatsapp_out' ? '#a78bfa' : a.kind === 'note' ? '#fbbf24' : '#a1a1aa',
-      title: a.kind === 'whatsapp_in' ? 'Escribió' : a.kind === 'whatsapp_out' ? 'Le escribiste' : a.kind === 'note' ? 'Nota' : 'Cambio',
+      icon: a.kind === 'note' ? StickyNote : a.kind === 'call' ? Phone : a.kind.startsWith('whatsapp') ? MessageCircle : a.kind === 'tags' ? TagIcon : ArrowRightLeft,
+      color: a.kind === 'whatsapp_in' ? '#38bdf8' : a.kind === 'whatsapp_out' ? '#a78bfa' : a.kind === 'note' ? '#fbbf24' : a.kind === 'call' ? '#f472b6' : '#a1a1aa',
+      title: a.kind === 'whatsapp_in' ? 'Escribió' : a.kind === 'whatsapp_out' ? 'Le escribiste' : a.kind === 'note' ? 'Nota' : a.kind === 'call' ? 'Llamada de cobro' : 'Cambio',
       text: a.text,
       withTime: true
     }))

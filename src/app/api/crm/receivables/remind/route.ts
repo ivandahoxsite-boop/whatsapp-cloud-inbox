@@ -24,7 +24,7 @@ export async function POST(request: Request) {
       `${docs ? ` (${docs}${open.length > 3 ? '…' : ''})` : ''}` +
       `${late.length ? `, con facturas vencidas hace hasta ${Math.max(...late.map((r) => r.daysLate))} días` : ''}. ` +
       '¿Nos confirmas cuándo podrías realizar el pago? Gracias.';
-    const id = proposeMessage(c.id, body, 'user');
+    const id = proposeMessage(c.id, body, 'cobranza');
     return NextResponse.json({ id, body });
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : 'Error' }, { status: 400 });

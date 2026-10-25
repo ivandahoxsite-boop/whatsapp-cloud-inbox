@@ -3,6 +3,7 @@ import { buildActions } from './actions';
 import { listOutbox } from './agent-store';
 import { getDb } from './db';
 import { receivablesSummary } from './receivables';
+import { callWindow } from './collections';
 
 const money = (n: number) => `$${Math.round(n).toLocaleString('es-CO')}`;
 const label = (c: Customer) => `${c.name || `+${c.phone}`}${c.city ? ` (${c.city})` : ''}`;
@@ -60,6 +61,29 @@ export function buildDigest(limit = 5) {
     lines.push('', `💰 Cartera vencida: ${money(owed.totals.overdue)} de ${money(owed.totals.balance)} por cobrar`);
     for (const d of owed.debtors.filter((x) => x.overdue > 0).slice(0, 3)) lines.push(`• ${d.name || d.phone} — ${money(d.overdue)} · ${d.oldestDays} días de mora`);
   }
+  // Promises of payment taken in collection calls: due today, and broken ones (promised date passed, still owing).
+  const today = new Date(Date.now() - 5 * 3_600_000).toISOString().slice(0, 10);
+  const promises = getDb()
+    .prepare(
+      `SELECT c.id, c.name, json_extract(a.meta,'$.promiseDate') AS due, json_extract(a.meta,'$.promiseAmount') AS amount
+       FROM activities a JOIN contacts c ON c.id = a.contact_id
+       WHERE a.kind = 'call' AND json_extract(a.meta,'$.outcome') = 'promesa_pago'
+         AND a.id = (SELECT MAX(a2.id) FROM activities a2 WHERE a2.contact_id = a.contact_id AND a2.kind = 'call')
+         AND json_extract(a.meta,'$.promiseDate') <= ? AND json_extract(a.meta,'$.promiseDate') >= date(?, '-7 day')`
+    )
+    .all(today, today) as unknown as { id: number; name: string; due: string; amount: number | null }[];
+  const owing = new Set(owed.debtors.map((x) => x.contactId));
+  const dueToday = promises.filter((p) => p.due === today);
+  const broken = promises.filter((p) => p.due < today && owing.has(p.id));
+  if (dueToday.length) {
+    lines.push('', `📞 Prometieron pagar hoy (${dueToday.length})`);
+    for (const p of dueToday.slice(0, limit)) lines.push(`• ${p.name || 'Cliente'}${p.amount ? ` — ${money(p.amount)}` : ''}`);
+  }
+  if (broken.length) {
+    lines.push('', `⚠️ Prometieron pagar y no lo han hecho (${broken.length})`);
+    for (const p of broken.slice(0, limit)) lines.push(`• ${p.name || 'Cliente'} — prometió el ${p.due}`);
+  }
+  if (!callWindow().allowed) lines.push('', `🕒 Ahora no se puede llamar para cobrar: ${callWindow().reason}.`);
   if (pending) lines.push('', `📝 ${pending} mensaje${pending === 1 ? '' : 's'} por aprobar en el CRM (pestaña Aprobaciones).`);
   if (noPhone) lines.push('', `📵 ${noPhone} cliente${noPhone === 1 ? '' : 's'} con ventas sin teléfono: no se les puede escribir todavía.`);
   if (lines.length === 2 && !awaiting.length && !due.length) lines.push('', 'Nada urgente hoy.');
