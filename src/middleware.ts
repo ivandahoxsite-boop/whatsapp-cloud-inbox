@@ -12,6 +12,34 @@ function safeEqual(a: string, b: string): boolean {
   return mismatch === 0;
 }
 
+// Wrong passwords per visitor address: after MAX_FAILS within WINDOW_MS that address is refused for WINDOW_MS.
+// Caddy sets X-Forwarded-For to the real client address (it ignores the one a visitor sends).
+const MAX_FAILS = 10;
+const WINDOW_MS = 15 * 60_000;
+const fails = new Map<string, { count: number; first: number }>();
+
+function clientAddress(request: NextRequest): string {
+  return request.headers.get('x-forwarded-for')?.split(',')[0].trim() || 'local';
+}
+
+function blocked(ip: string, now = Date.now()): boolean {
+  const f = fails.get(ip);
+  if (!f) return false;
+  if (now - f.first > WINDOW_MS) {
+    fails.delete(ip);
+    return false;
+  }
+  return f.count >= MAX_FAILS;
+}
+
+function recordFail(ip: string, now = Date.now()) {
+  const f = fails.get(ip);
+  if (!f || now - f.first > WINDOW_MS) fails.set(ip, { count: 1, first: now });
+  else f.count++;
+  // Keep the table small if many addresses try.
+  if (fails.size > 5000) for (const [k, v] of fails) if (now - v.first > WINDOW_MS) fails.delete(k);
+}
+
 function unauthorized(): NextResponse {
   return new NextResponse('Authentication required', {
     status: 401,
@@ -76,6 +104,10 @@ export async function middleware(request: NextRequest) {
 
   const username = process.env.INBOX_USERNAME?.trim() || 'admin';
   const header = request.headers.get('authorization');
+  const ip = clientAddress(request);
+  if (blocked(ip)) {
+    return new NextResponse('Demasiados intentos de contraseña. Espera 15 minutos.', { status: 429, headers: { 'Retry-After': '900' } });
+  }
 
   if (!header?.startsWith('Basic ')) {
     return unauthorized();
@@ -95,8 +127,10 @@ export async function middleware(request: NextRequest) {
   const userOk = safeEqual(providedUser, username);
   const passwordOk = safeEqual(providedPassword, password);
   if (!userOk || !passwordOk) {
+    recordFail(ip);
     return unauthorized();
   }
+  fails.delete(ip);
 
   return secondStep(request, password);
 }
