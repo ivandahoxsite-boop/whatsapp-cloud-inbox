@@ -21,10 +21,10 @@ export function PendingView({ onOpenCustomer }: { onOpenCustomer: (id: number) =
   const { data: tdata } = useQuery(tasksQuery());
   const { data, isLoading, error: loadError } = useQuery({
     queryKey: ['crm-pending'],
-    queryFn: () => api<{ chats: PendingChat[] }>('/api/crm/pending')
+    queryFn: () => api<{ chats: PendingChat[]; muted: { contactId: number; name: string; phone: string }[] }>('/api/crm/pending')
   });
 
-  const close = async (contactId: number, kind: 'resolved' | 'ignored') => {
+  const close = async (contactId: number, kind: 'resolved' | 'ignored' | 'muted' | 'unmuted') => {
     setError('');
     try {
       await api('/api/crm/pending', 'POST', { contactId, kind });
@@ -147,6 +147,15 @@ export function PendingView({ onOpenCustomer }: { onOpenCustomer: (id: number) =
                 <button onClick={() => close(c.contactId, 'ignored')} className="h-8 rounded-full border px-3 text-muted-foreground">
                   Ignorar
                 </button>
+                <button
+                  onClick={() =>
+                    confirm(`¿No mostrar más a ${c.name || formatPhone(c.phone)} en Pendientes, aunque vuelva a escribir?\n\nLo puedes deshacer abajo, en "Ocultos".`) &&
+                    close(c.contactId, 'muted')
+                  }
+                  className="h-8 rounded-full border px-3 text-muted-foreground"
+                >
+                  🚫 No mostrar más
+                </button>
               </div>
               {later?.id === c.contactId && (
                 <div className="mt-2 space-y-2">
@@ -161,6 +170,23 @@ export function PendingView({ onOpenCustomer }: { onOpenCustomer: (id: number) =
           ))}
         </ul>
       </section>
+
+      {(data?.muted.length ?? 0) > 0 && (
+        <details className={card}>
+          <summary className="cursor-pointer text-sm font-medium">Ocultos ({data!.muted.length})</summary>
+          <p className="mb-2 mt-1 text-xs text-muted-foreground">Nunca aparecen en Pendientes, aunque escriban. Toca «Mostrar de nuevo» para deshacerlo.</p>
+          <ul className="space-y-1.5">
+            {data!.muted.map((m) => (
+              <li key={m.contactId} className="flex items-center gap-2 text-sm">
+                <span className="min-w-0 flex-1 truncate">{m.name || formatPhone(m.phone)}</span>
+                <button onClick={() => close(m.contactId, 'unmuted')} className="shrink-0 text-xs underline">
+                  Mostrar de nuevo
+                </button>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
     </div>
   );
 }

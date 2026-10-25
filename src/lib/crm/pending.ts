@@ -43,6 +43,7 @@ export function pendingChats(now = new Date()): PendingChat[] {
       r.resolved_at
     ])
   );
+  const muted = new Set((db.prepare('SELECT contact_id FROM chat_mutes').all() as unknown as { contact_id: number }[]).map((r) => r.contact_id));
   const contacts = new Map(
     (db.prepare('SELECT id, name, phone FROM contacts').all() as unknown as { id: number; name: string; phone: string }[]).map((c) => [c.id, c])
   );
@@ -57,7 +58,7 @@ export function pendingChats(now = new Date()): PendingChat[] {
   const out: PendingChat[] = [];
   for (const [id, list] of byContact) {
     const c = contacts.get(id);
-    if (!c) continue;
+    if (!c || muted.has(id)) continue;
     const last = list[list.length - 1];
     const lastInbound = [...list].reverse().find((m) => m.kind === 'whatsapp_in');
     // Closed from the panel: stays hidden until the customer writes something newer.
@@ -100,4 +101,19 @@ export function closeChat(contactId: number, kind: 'resolved' | 'ignored') {
        ON CONFLICT(contact_id) DO UPDATE SET kind = excluded.kind, resolved_at = excluded.resolved_at`
     )
     .run(contactId, kind);
+}
+
+/** Hides a customer from "Pendientes" for good (until `unmuteChat`), even when they write again. */
+export function muteChat(contactId: number) {
+  getDb().prepare('INSERT OR IGNORE INTO chat_mutes (contact_id) VALUES (?)').run(contactId);
+}
+
+export function unmuteChat(contactId: number) {
+  getDb().prepare('DELETE FROM chat_mutes WHERE contact_id = ?').run(contactId);
+}
+
+export function mutedChats(): { contactId: number; name: string; phone: string }[] {
+  return getDb()
+    .prepare('SELECT c.id AS contactId, c.name, c.phone FROM chat_mutes m JOIN contacts c ON c.id = m.contact_id ORDER BY c.name')
+    .all() as unknown as { contactId: number; name: string; phone: string }[];
 }

@@ -211,6 +211,11 @@ function migrate(d: DatabaseSync) {
       kind TEXT NOT NULL DEFAULT 'resolved' CHECK (kind IN ('resolved','ignored')),
       resolved_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+    -- Customers the user never wants to see in "Pendientes" (family, suppliers...), whatever they write.
+    CREATE TABLE IF NOT EXISTS chat_mutes (
+      contact_id INTEGER PRIMARY KEY REFERENCES contacts(id) ON DELETE CASCADE,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
     -- To-dos the user writes by hand ("llevarle el imán a Jesús", Monday), optionally tied to a customer and repeating.
     CREATE TABLE IF NOT EXISTS tasks (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
