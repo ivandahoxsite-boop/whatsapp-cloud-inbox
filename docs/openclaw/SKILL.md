@@ -23,7 +23,8 @@ Base URL: `$CRM_BASE_URL` (on the same server: `http://127.0.0.1:4000`). Every r
 | Move stage / note / city / tags / phone | `PATCH /api/agent/customers/{id}` body `{"stage":"Interesado","note":"...","city":"Cali","addTags":["VIP"],"phone":"3001234567"}` |
 | Propose a message | `POST /api/agent/messages` body `{"customerId":12,"body":"..."}` |
 | Receivables (who owes, aging) | `GET /api/agent/receivables?seller=<name>&limit=10` |
-| Who may be called about a debt right now | `GET /api/agent/collections/queue?minDays=30&minAmount=0&limit=10` |
+| Can this customer be called about a debt now? (customers the user picked) | `GET /api/agent/collections/check?q=<name>` or `?customerId=<id>` |
+| Who may be called about a debt right now (only if the user asks for a list) | `GET /api/agent/collections/queue?minDays=30&minAmount=0&limit=10` |
 | Log a finished collection call | `POST /api/agent/customers/{id}/calls` body `{"outcome":"promesa_pago","summary":"...","promiseDate":"2026-10-30","promiseAmount":1500000,"durationSec":80}` |
 | Morning brief (ready-made text) | `GET /api/agent/digest` → post `text` as is |
 | Sales report (totals, seller, zone, products) | `GET /api/agent/reports/sales?from=2026-01-01&to=2026-12-31&seller=<name>&zone=<zone>` |
@@ -53,7 +54,8 @@ Each customer also has `nextExpectedAt` (date their next purchase is due), `over
 ## Collection calls (phone)
 The CRM decides WHO may be called and WHEN; you only dial what it returns.
 - **Never dial without the user's explicit OK in Telegram** for that specific list. Propose the list (name, amount, days overdue) and wait.
-- Get the list from `GET /api/agent/collections/queue`. If `window.allowed` is `false` (outside Mon-Fri 7-19, Sat 8-15 Colombian time, or Sunday/holiday) the queue is empty: **do not call**, whatever the user says; tell them the reason in `window.reason`.
+- **The user picks who to call** (a few customers, by name). For each one, call `GET /api/agent/collections/check?q=<name>` (or `customerId`) and call only if `allowed` is `true`; if not, tell the user the `reasons`. If the name matches several customers, ask which one. Use `/collections/queue` only if the user asks "who can I call?".
+- If `window.allowed` is `false` (outside Mon-Fri 7-19, Sat 8-15 Colombian time, or Sunday/holiday) the queue is empty: **do not call**, whatever the user says; tell them the reason in `window.reason`.
 - At most one call per customer per day; never call anyone who is not in the queue; never call third parties (references, relatives, employers).
 - On the call: say you are the business's automated assistant and why you call (a pending balance, amount and invoice); be brief and polite; **do not ask why they have not paid** (offer payment options instead); no threats; if they ask for a person, say someone will call them and end; if they ask not to be called again, agree.
 - If someone other than the customer answers, do not mention the debt: ask for a good time to call or end the call.

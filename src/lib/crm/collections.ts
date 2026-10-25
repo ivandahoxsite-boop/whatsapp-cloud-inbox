@@ -76,30 +76,28 @@ export function recordCall(contactId: number, input: CallInput, now = new Date()
 
 export type QueueOptions = { minDays?: number; minAmount?: number; limit?: number };
 
-/**
- * Who may be called right now about a debt. Empty outside the allowed hours. Leaves out people who: have no phone, asked
- * not to be called, were called today, were reached by a call or by a payment reminder in the last 7 days, or promised
- * to pay on a date that has not passed.
- */
-export function collectionQueue(options: QueueOptions = {}, now = new Date()) {
-  const window = callWindow(now);
-  const minDays = options.minDays ?? 30;
-  const minAmount = options.minAmount ?? 0;
-  const limit = Math.min(50, Math.max(1, options.limit ?? 10));
-  if (!window.allowed) return { window, queue: [] as unknown[], skipped: {} as Record<string, number> };
+const BLOCK_TEXT: Record<string, string> = {
+  noLlamar: 'Pidió que no lo llamen',
+  llamadoHoy: 'Ya se le llamó hoy',
+  promesaVigente: 'Tiene una promesa de pago vigente',
+  contactoReciente: 'Se le contactó por cobro en los últimos 7 días'
+};
 
+/**
+ * Why each customer must be left out right now, strongest reason first. A customer who asked not to be called, was
+ * called today, has a promise of payment that has not passed, or was reached (by a call or a payment reminder) in
+ * the last 7 days.
+ */
+function blocks(now: Date): Map<number, string> {
   const d = getDb();
   const today = bogota(now).date;
-  const skipped: Record<string, number> = { sinTelefono: 0, noLlamar: 0, llamadoHoy: 0, contactoReciente: 0, promesaVigente: 0 };
   const calls = d
     .prepare("SELECT contact_id AS id, created_at, json_extract(meta,'$.outcome') AS outcome, json_extract(meta,'$.reached') AS reached, json_extract(meta,'$.promiseDate') AS promise FROM activities WHERE kind = 'call' ORDER BY id")
     .all() as unknown as { id: number; created_at: string; outcome: string; reached: number | null; promise: string | null }[];
-  const reminders = new Set(
-    (d.prepare("SELECT DISTINCT contact_id AS id FROM outbox WHERE proposed_by = 'cobranza' AND status = 'sent' AND decided_at > datetime('now','-7 day')").all() as unknown as { id: number }[]).map((r) => r.id)
-  );
+  const reminders = (d.prepare("SELECT DISTINCT contact_id AS id FROM outbox WHERE proposed_by = 'cobranza' AND status = 'sent' AND decided_at > datetime('now','-7 day')").all() as unknown as { id: number }[]).map((r) => r.id);
   const sinceWeek = new Date(now.getTime() - 7 * 86_400_000).toISOString().slice(0, 19).replace('T', ' ');
   const sinceDay = new Date(now.getTime() - 24 * 3_600_000).toISOString().slice(0, 19).replace('T', ' ');
-  // Why each customer is left out, strongest reason first.
+
   const flags = new Map<number, { optedOut: boolean; calledToday: boolean; promise: boolean; reachedWeek: boolean }>();
   const flag = (id: number) => flags.get(id) ?? flags.set(id, { optedOut: false, calledToday: false, promise: false, reachedWeek: false }).get(id)!;
   for (const c of calls) {
@@ -110,12 +108,25 @@ export function collectionQueue(options: QueueOptions = {}, now = new Date()) {
     if (c.promise && c.promise >= today) f.promise = true;
   }
   for (const id of reminders) flag(id).reachedWeek = true;
-  const block = new Map<number, string>();
+  const out = new Map<number, string>();
   for (const [id, f] of flags) {
     const why = f.optedOut ? 'noLlamar' : f.calledToday ? 'llamadoHoy' : f.promise ? 'promesaVigente' : f.reachedWeek ? 'contactoReciente' : '';
-    if (why) block.set(id, why);
+    if (why) out.set(id, why);
   }
+  return out;
+}
 
+/** Who may be called right now about a debt, biggest overdue first. Empty outside the allowed hours. */
+export function collectionQueue(options: QueueOptions = {}, now = new Date()) {
+  const window = callWindow(now);
+  const minDays = options.minDays ?? 30;
+  const minAmount = options.minAmount ?? 0;
+  const limit = Math.min(50, Math.max(1, options.limit ?? 10));
+  if (!window.allowed) return { window, queue: [] as unknown[], skipped: {} as Record<string, number> };
+
+  const d = getDb();
+  const block = blocks(now);
+  const skipped: Record<string, number> = { sinTelefono: 0, noLlamar: 0, llamadoHoy: 0, contactoReciente: 0, promesaVigente: 0 };
   const queue: unknown[] = [];
   for (const debtor of receivablesSummary({}, now).debtors) {
     if (debtor.overdue <= 0 || debtor.oldestDays < minDays || debtor.overdue < minAmount) continue;
@@ -128,7 +139,54 @@ export function collectionQueue(options: QueueOptions = {}, now = new Date()) {
       customerId: debtor.contactId, name: debtor.name, phone: debtor.phone, seller: debtor.seller,
       overdue: Math.round(debtor.overdue), balance: Math.round(debtor.balance), oldestDays: debtor.oldestDays, invoices: debtor.invoices, docs: docs.map((r) => r.doc)
     });
-    if (queue.length >= limit) break;
   }
   return { window, queue, skipped };
+}
+
+export type CallCheck = {
+  customerId: number;
+  name: string;
+  phone: string;
+  /** True only if everything allows calling this customer about a debt right now. */
+  allowed: boolean;
+  /** Why not (empty when allowed). */
+  reasons: string[];
+  overdue: number;
+  oldestDays: number;
+  docs: string[];
+};
+
+/**
+ * For customers the user picked by hand: can each one be called right now, and if not, why. `q` finds customers by name
+ * (up to 5), `customerId` checks one.
+ */
+export function checkCustomers(by: { customerId?: number; q?: string }, now = new Date()) {
+  const window = callWindow(now);
+  const d = getDb();
+  const block = blocks(now);
+  const norm = (v: string) => v.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const debtors = new Map(receivablesSummary({}, now).debtors.map((x) => [x.contactId, x]));
+
+  let rows: { id: number; name: string; phone: string }[];
+  if (by.customerId) rows = d.prepare('SELECT id, name, phone FROM contacts WHERE id = ?').all(by.customerId) as unknown as typeof rows;
+  else if (by.q?.trim()) {
+    const q = norm(by.q.trim());
+    rows = (d.prepare('SELECT id, name, phone FROM contacts').all() as unknown as typeof rows)
+      .filter((r) => norm(r.name).includes(q))
+      .sort((a, b) => (debtors.get(b.id)?.overdue ?? 0) - (debtors.get(a.id)?.overdue ?? 0))
+      .slice(0, 5);
+  } else throw new Error('Manda customerId o q (nombre)');
+
+  const checks: CallCheck[] = rows.map((r) => {
+    const debt = debtors.get(r.id);
+    const reasons: string[] = [];
+    if (!window.allowed) reasons.push(window.reason);
+    if (!/^\d{7,}$/.test(r.phone)) reasons.push('No tiene teléfono');
+    if (!debt || debt.overdue <= 0) reasons.push('No tiene deuda vencida');
+    const why = block.get(r.id);
+    if (why) reasons.push(BLOCK_TEXT[why]);
+    const docs = debt ? (d.prepare("SELECT doc FROM receivables WHERE contact_id = ? AND status = 'open' ORDER BY COALESCE(due_at, issued_at) LIMIT 3").all(r.id) as unknown as { doc: string }[]).map((x) => x.doc) : [];
+    return { customerId: r.id, name: r.name, phone: r.phone, allowed: reasons.length === 0, reasons, overdue: Math.round(debt?.overdue ?? 0), oldestDays: debt?.oldestDays ?? 0, docs };
+  });
+  return { window, checks };
 }
