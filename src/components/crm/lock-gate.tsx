@@ -229,7 +229,7 @@ function PinPad({ what, hasPin, changing, onCancel, onDone }: { what: string; ha
   );
 }
 
-function Key({ label, onClick }: { label: string; onClick: () => void }) {
+export function Key({ label, onClick }: { label: string; onClick: () => void }) {
   return (
     <button
       onClick={onClick}
