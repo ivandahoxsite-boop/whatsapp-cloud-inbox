@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Nightly: takes a fresh consistent copy of the CRM database, compresses it, encrypts it (rclone crypt) and uploads it
-# to Google Drive, deletes the uploaded copies older than 30 days, and records the result in a small status file
+# to the cloud (Backblaze B2 or Google Drive, whichever was set up), deletes the uploaded copies older than 30 days, and records the result in a small status file
 # that the CRM reads (the 8:00 brief warns if no copy went up for more than a day and a half).
 #   bash /opt/crm/deploy/offsite-backup.sh          run it now
-# Set up once with: bash /opt/crm/deploy/setup-offsite-backup.sh
+# Set up once with: bash /opt/crm/deploy/setup-offsite-b2.sh (or setup-offsite-backup.sh for Google Drive)
 set -euo pipefail
 
 REMOTE=${CRM_OFFSITE_REMOTE:-crm-backup-crypt}
@@ -11,7 +11,7 @@ STATUS=${CRM_OFFSITE_STATUS:-/var/lib/crm/offsite-backup.json}
 KEEP_DAYS=${CRM_OFFSITE_KEEP_DAYS:-30}
 LOCAL_BACKUP=${CRM_LOCAL_BACKUP_CMD:-/usr/local/bin/crm-backup}
 [ "$(id -u)" -eq 0 ] || { echo "Ejecuta como root."; exit 1; }
-command -v rclone >/dev/null || { echo "Falta rclone: ejecuta primero setup-offsite-backup.sh"; exit 1; }
+command -v rclone >/dev/null || { echo "Falta rclone: ejecuta primero setup-offsite-b2.sh"; exit 1; }
 
 exec 9>/var/lock/crm-offsite-backup.lock
 flock -n 9 || { echo "Ya hay una copia en curso."; exit 0; }
@@ -42,11 +42,11 @@ gzip -c "$SRC" > "$WORK/$NAME"
 BYTES=$(stat -c %s "$WORK/$NAME")
 
 echo "$(now) subiendo $NAME ($BYTES bytes)..."
-rclone copyto "$WORK/$NAME" "$REMOTE:$NAME" --retries 3 || fail "no se pudo subir a Drive (¿token vencido o sin espacio?)"
+rclone copyto "$WORK/$NAME" "$REMOTE:$NAME" --retries 3 || fail "no se pudo subir a la nube (¿claves vencidas o sin espacio?)"
 # Check it is really there before we call it done.
-rclone lsjson "$REMOTE:$NAME" | grep -q '"Size"' || fail "subió pero no aparece en Drive"
+rclone lsjson "$REMOTE:$NAME" | grep -q '"Size"' || fail "subió pero no aparece en la nube"
 
-echo "$(now) borrando copias de más de $KEEP_DAYS días en Drive..."
+echo "$(now) borrando copias de más de $KEEP_DAYS días en la nube..."
 rclone delete "$REMOTE:" --min-age "${KEEP_DAYS}d" --include 'crm-*.db.gz*' || true
 
 write_status OK "" "$BYTES" "$NAME"

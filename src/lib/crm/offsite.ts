@@ -25,5 +25,5 @@ export function offsiteWarning(now = new Date()): string | null {
   const ageH = s.lastOk ? (now.getTime() - Date.parse(s.lastOk)) / 3_600_000 : Infinity;
   if (ageH <= STALE_HOURS) return null;
   const since = s.lastOk ? `hace ${Math.floor(ageH / 24)} día(s)` : 'nunca se ha completado';
-  return `⚠️ La copia de seguridad en Google Drive ${s.lastOk ? `no se hace desde ${since}` : since}${s.lastError ? ` (${s.lastError})` : ''}. Avísale a quien administra el servidor.`;
+  return `⚠️ La copia de seguridad fuera del servidor ${s.lastOk ? `no se hace desde ${since}` : since}${s.lastError ? ` (${s.lastError})` : ''}. Avísale a quien administra el servidor.`;
 }
