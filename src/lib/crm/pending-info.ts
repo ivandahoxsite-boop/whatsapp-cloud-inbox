@@ -14,7 +14,7 @@ export type PendingChat = {
 };
 
 export const PENDING_INFO: Record<PendingReason, { label: string; hint: string }> = {
-  sin_respuesta: { label: 'Sin respuesta', hint: 'Te escribió algo que pide respuesta y no le contestaste.' },
+  sin_respuesta: { label: 'Sin respuesta', hint: 'Te escribió algo que pide respuesta y no le contestaste (un audio tuyo cuenta como respuesta).' },
   en_el_aire: { label: 'Quedó en el aire', hint: 'Le dijiste algo como "te confirmo" y el chat murió sin cierre.' },
-  cotizacion: { label: 'Pidió precio y no compró', hint: 'Preguntó precio, disponibilidad o cotización y no hay venta después.' }
+  cotizacion: { label: 'Pidió precio sin respuesta', hint: 'Preguntó precio, disponibilidad o cotización y no le contestaste después (ni por texto ni por audio).' }
 };

@@ -110,7 +110,7 @@ export function buildDigest(limit = 5, now = Date.now()) {
     for (const t of soon.slice(0, limit)) lines.push(taskLine(t));
   }
   const loose = pendingChats().filter((c) => c.reason !== 'sin_respuesta').length;
-  if (loose) lines.push('', `🗂 ${loose} chat${loose === 1 ? '' : 's'} quedaron en el aire o sin cotización cerrada (pestaña Pendientes).`);
+  if (loose) lines.push('', `🗂 ${loose} chat${loose === 1 ? '' : 's'} quedaron en el aire o pidieron precio sin respuesta (pestaña Pendientes).`);
 
   if (awaiting.length) {
     lines.push('', `⏳ Esperan tu respuesta (${awaiting.length})`);

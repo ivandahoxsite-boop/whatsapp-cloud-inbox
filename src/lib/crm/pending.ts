@@ -11,7 +11,7 @@ export { PENDING_INFO, type PendingChat, type PendingReason } from './pending-in
 
 // Things you say when you owe the customer something.
 const PROMISE = /te (confirmo|aviso|cuento|averiguo|reviso|cotizo|env[ií]o|mando|paso|escribo|llamo)|le (confirmo|aviso|cuento|averiguo|reviso|cotizo|env[ií]o|mando|paso|escribo|llamo)|d[eé]jame|d[eé]jeme|perm[ií]t(a|e)me|voy a (revisar|consultar|averiguar|preguntar|cotizar)|lo (reviso|averiguo|consulto|miro)|d[ée]me un (momento|momentico|rato)|en un momento|ahorita (le|te)|quedo pendiente|ma[ñn]ana (le|te)/i;
-const QUOTE = /precio|cu[aá]nto (vale|cuesta|sale|es)|valor|cotiz|disponib|tiene[sn]? |hay |referencia|catalogo|cat[aá]logo/i;
+const QUOTE = /precio|cu[aá]nto (vale|cuesta|sale|es)|cost(ar[ií]a|ar[aá]|ar)|valor|cotiz|disponib|tiene[sn]? |hay |referencia|catalogo|cat[aá]logo/i;
 
 const toIso = (s: string) => `${s.replace(' ', 'T')}Z`;
 const DAY = 86_400_000;
@@ -75,8 +75,11 @@ export function pendingChats(now = new Date()): PendingChat[] {
     } else if (last.kind === 'whatsapp_out' && PROMISE.test(last.text) && now.getTime() - Date.parse(toIso(last.created_at)) >= STALE_DAYS * DAY && !soldAfter(last.created_at)) {
       hit = { reason: 'en_el_aire', m: last };
     } else {
-      const ask = [...list].reverse().find((m) => m.kind === 'whatsapp_in' && QUOTE.test(m.text) && m.text.length >= 4);
-      if (ask && now.getTime() - Date.parse(toIso(ask.created_at)) >= STALE_DAYS * DAY && !soldAfter(ask.created_at)) hit = { reason: 'cotizacion', m: ask };
+      // Asked for a price and you never answered after it (any reply counts: text, voice note, photo).
+      // A chat you did answer is not pending, even without a sale.
+      const i = list.findLastIndex((m) => m.kind === 'whatsapp_in' && QUOTE.test(m.text) && m.text.length >= 4);
+      const answered = i >= 0 && list.slice(i + 1).some((m) => m.kind === 'whatsapp_out');
+      if (i >= 0 && !answered && !soldAfter(list[i].created_at)) hit = { reason: 'cotizacion', m: list[i] };
     }
     if (!hit) continue;
     out.push({
