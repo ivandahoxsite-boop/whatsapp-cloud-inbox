@@ -39,7 +39,7 @@ main() {
     rm -rf "$APP/.next-new"
     if [ "$(sha256sum "$APP/package-lock.json" | cut -d' ' -f1)" != "$(cat "$APP/node_modules/.crm-lock-hash" 2>/dev/null || true)" ]; then
       echo "Restaurando las dependencias anteriores..."
-      as_crm "npm ci --no-audit --no-fund >>'$LOG' 2>&1 && sha256sum package-lock.json | cut -d' ' -f1 > node_modules/.crm-lock-hash" || true
+      as_crm "npm ci --no-audit --no-fund && sha256sum package-lock.json | cut -d' ' -f1 > node_modules/.crm-lock-hash" >>"$LOG" 2>&1 || true
     fi
   }
 
@@ -48,16 +48,16 @@ main() {
   sudo -u crm -H git -C "$APP" checkout -q -B "$BRANCH" "origin/$BRANCH"
   LOCK_NEW=$(sha256sum "$APP/package-lock.json" | cut -d' ' -f1)
   echo "Compilando aparte (1-2 minutos). El CRM sigue funcionando mientras tanto..."
-  : >"$LOG"
+  : >"$LOG" # written by root (the redirections run outside the crm user's shell)
   # Dependencies are reinstalled only when package-lock.json changed: reinstalling deletes node_modules under the running CRM.
   if [ "$LOCK_NEW" != "$LOCK_OLD" ]; then
-    if ! as_crm "npm ci --no-audit --no-fund >>'$LOG' 2>&1 && echo '$LOCK_NEW' > node_modules/.crm-lock-hash"; then
+    if ! as_crm "npm ci --no-audit --no-fund && echo '$LOCK_NEW' > node_modules/.crm-lock-hash" >>"$LOG" 2>&1; then
       tail -n 30 "$LOG"; undo_source
       echo "ERROR: falló la instalación de dependencias. El CRM sigue con la versión anterior y tus datos no se tocaron."
       exit 1
     fi
   fi
-  if ! as_crm "rm -rf .next-new && NEXT_DIST_DIR=.next-new npm run build >>'$LOG' 2>&1"; then
+  if ! as_crm "rm -rf .next-new && NEXT_DIST_DIR=.next-new npm run build" >>"$LOG" 2>&1; then
     tail -n 30 "$LOG"; undo_source
     echo "ERROR: falló la compilación. El CRM sigue con la versión anterior y tus datos no se tocaron."
     exit 1
