@@ -51,7 +51,7 @@ export function ReceivablesView({ onOpenCustomer }: { onOpenCustomer: (id: numbe
         setNote(
           r.callableNow
             ? `${name || 'El cliente'} quedó en la lista para llamar. OpenClaw te pedirá tu OK por Telegram antes de marcar.`
-            : `${name || 'El cliente'} quedó en la lista, pero ahora no se puede llamar (${r.window}). Se llamará cuando abra el horario.`
+            : `${name || 'El cliente'} quedó en la lista. Ahora no se puede llamar: ${r.window}. Se llamará cuando abra el horario.`
         );
       }
       qc.invalidateQueries({ queryKey: ['crm-call-requests'] });
