@@ -10,6 +10,8 @@ const FAREWELL = /(le|te|les) (aviso|informo|confirmo|cuento)|quedo pendiente|qu
 export const AWAITING_WINDOW_DAYS = 14;
 
 export function needsReply(raw: string): boolean {
+  // A voice note, photo, video or document with no text (no transcript yet) still waits for your answer.
+  if (/^(🎤\s*audio|\[(audio|image|video|document)\])$/iu.test(raw.trim())) return true;
   const text = raw.replace(/^🎤\s*/, '').replace(/^\[(sticker|reaction|mensaje|image|audio)\]$/i, '').trim();
   if (!text) return false;
   if (REQUEST.test(text)) return true;

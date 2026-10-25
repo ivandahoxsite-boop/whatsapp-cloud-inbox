@@ -69,9 +69,12 @@ export function pendingChats(now = new Date()): PendingChat[] {
       return !!d && d >= iso.slice(0, 10);
     };
 
+    // Everything they wrote since your last message: a question followed by "gracias" is still unanswered.
+    const lastOut = list.findLastIndex((m) => m.kind === 'whatsapp_out');
+    const unanswered = list.slice(lastOut + 1).filter((m) => needsReply(m.text));
     let hit: { reason: PendingReason; m: Msg } | null = null;
-    if (last.kind === 'whatsapp_in' && needsReply(last.text)) {
-      hit = { reason: 'sin_respuesta', m: last };
+    if (unanswered.length) {
+      hit = { reason: 'sin_respuesta', m: unanswered[unanswered.length - 1] };
     } else if (last.kind === 'whatsapp_out' && PROMISE.test(last.text) && now.getTime() - Date.parse(toIso(last.created_at)) >= STALE_DAYS * DAY && !soldAfter(last.created_at)) {
       hit = { reason: 'en_el_aire', m: last };
     } else {
