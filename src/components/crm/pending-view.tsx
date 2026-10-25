@@ -114,7 +114,7 @@ export function PendingView({ onOpenCustomer }: { onOpenCustomer: (id: number) =
       <section className={card}>
         <h2 className="text-sm font-medium">Chats por atender · últimos 90 días</h2>
         <p className="mb-3 text-xs text-muted-foreground">
-          Toca un cuadro para filtrar. <b>Resuelto</b> o <b>Ignorar</b> lo saca de la lista; si el cliente vuelve a escribir, reaparece solo.
+          Toca un cuadro para filtrar. <b>Resuelto</b> lo saca hasta que el cliente vuelva a escribir. <b>Ignorar</b> lo saca para siempre (se deshace abajo, en «Ocultos»).
         </p>
         {error && <p className="mb-3 rounded-md border bg-background/40 p-2 text-xs text-destructive">{error}</p>}
         <ul className="space-y-2">
@@ -144,17 +144,8 @@ export function PendingView({ onOpenCustomer }: { onOpenCustomer: (id: number) =
                 <button onClick={() => setLater(later?.id === c.contactId ? null : { id: c.contactId, date: nextMonday(todayCo()) })} className="h-8 rounded-full border px-3">
                   📅 Otro día
                 </button>
-                <button onClick={() => close(c.contactId, 'ignored')} className="h-8 rounded-full border px-3 text-muted-foreground">
+                <button onClick={() => close(c.contactId, 'muted')} className="h-8 rounded-full border px-3 text-muted-foreground">
                   Ignorar
-                </button>
-                <button
-                  onClick={() =>
-                    confirm(`¿No mostrar más a ${c.name || formatPhone(c.phone)} en Pendientes, aunque vuelva a escribir?\n\nLo puedes deshacer abajo, en "Ocultos".`) &&
-                    close(c.contactId, 'muted')
-                  }
-                  className="h-8 rounded-full border px-3 text-muted-foreground"
-                >
-                  🚫 No mostrar más
                 </button>
               </div>
               {later?.id === c.contactId && (

@@ -238,6 +238,9 @@ function migrate(d: DatabaseSync) {
   `);
   const taskCols = d.prepare('PRAGMA table_info(tasks)').all() as unknown as { name: string }[];
   if (!taskCols.some((c) => c.name === 'due_time')) d.exec('ALTER TABLE tasks ADD COLUMN due_time TEXT');
+  // "Ignorar" used to hide a chat only until the customer wrote again; now it hides it for good.
+  d.exec(`INSERT OR IGNORE INTO chat_mutes (contact_id) SELECT contact_id FROM chat_resolutions WHERE kind = 'ignored';
+          DELETE FROM chat_resolutions WHERE kind = 'ignored';`);
 }
 
 /**
