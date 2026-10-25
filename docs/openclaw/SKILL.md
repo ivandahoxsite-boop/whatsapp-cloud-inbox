@@ -50,6 +50,7 @@ Each customer also has `nextExpectedAt` (date their next purchase is due), `over
 - No `dueAt`: it is `issuedAt` + 30 days (`CRM_DEFAULT_TERMS_DAYS`).
 - `"closeMissing": true` + `"source":"cartera"` means this request is the COMPLETE current aging report: open items of that `source` that are not in it are marked paid (the customer paid). Never use it on a partial list. Always `dryRun` first and show the user `created`, `updated`, `closed` and `skipped`.
 - Max 2000 rows per request, so a report with more rows cannot use `closeMissing`; ask the user.
+- **Schedule:** the user wants the aging report reloaded from AnaliX **Monday to Saturday at 9:00, 13:00 and 17:40** (Colombian time), never on Sundays or Colombian holidays. Each run: full report, `dryRun` first, then the real load with `closeMissing` + `source:"cartera"` only if the safety checks pass (at least 70 % of the open invoices still there, at most 15 % closed, at most 5 % skipped); otherwise do not load and tell the user why. Do not message the user when a scheduled load goes fine. The CRM shows the time of the last real load and warns when a scheduled one is missing.
 - You may mention overdue amounts in the morning brief (already included in `/api/agent/digest`). You can propose a reminder message (`POST /api/agent/messages`), never send it.
 
 ## Collection calls (phone)

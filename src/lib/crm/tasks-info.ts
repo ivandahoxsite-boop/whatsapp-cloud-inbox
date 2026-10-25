@@ -105,3 +105,11 @@ export function dueLabel(date: string | null, today: string, time?: string | nul
   const d = at(date);
   return `${DAYS[d.getUTCDay()]} ${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]}${suffix}`;
 }
+
+/** "sáb 25 oct · 1:02 p. m." in Colombian time. */
+export function coDateTime(iso: string): string {
+  const ms = Date.parse(iso);
+  const date = new Date(ms).toLocaleDateString('es-CO', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'America/Bogota' });
+  const time = new Date(ms).toLocaleTimeString('es-CO', { hour: 'numeric', minute: '2-digit', timeZone: 'America/Bogota' });
+  return `${date} · ${time}`;
+}

@@ -1,5 +1,5 @@
 import { getDb } from './db';
-import { addDays, dayProblem, todayCo } from './tasks-info';
+import { addDays, coDateTime, dayProblem, todayCo } from './tasks-info';
 import { findContactByNit, normalizeCity, normalizePhone, parseAmount, parseDate, placeholderKey, normalizeNit } from './customers';
 
 export type ReceivableUpsert = {
@@ -261,12 +261,24 @@ export function debtsByPhone(now = new Date()): Record<string, DebtFlag> {
   return out;
 }
 
-export type ReceivablesFreshness = { loadedAt: string; workdaysOld: number; stale: boolean };
+/** When OpenClaw loads the aging report from AnaliX: Monday to Saturday (not holidays), Colombian time. */
+export const LOAD_TIMES = ['09:00', '13:00', '17:40'];
+/** A load counts as missed this long after its time (it takes a few minutes). */
+const GRACE_MS = 20 * 60_000;
 
-/**
- * How old the loaded aging report is, in working days (Monday-Saturday, not Colombian holidays). Today counts from
- * 7:50 in Colombia, when the daily 7:30 load should already have run (so the 8:00 brief notices a failed load). Null when no receivables were ever loaded.
- */
+export type ReceivablesFreshness = {
+  loadedAt: string;
+  /** Scheduled loads that should have happened since `loadedAt` and did not. */
+  missed: number;
+  stale: boolean;
+  /** Next scheduled load (ISO). */
+  nextAt: string;
+};
+
+/** Instant of a "HH:MM" Colombian time on a "YYYY-MM-DD" day (Colombia is UTC-5 all year). */
+const slotMs = (day: string, time: string) => Date.parse(`${day}T${time}:00Z`) + 5 * 3_600_000;
+
+/** How fresh the loaded aging report is compared with the load schedule. Null when nothing was ever loaded. */
 export function receivablesFreshness(now = Date.now()): ReceivablesFreshness | null {
   const d = getDb();
   const set = d.prepare("SELECT value FROM settings WHERE key = 'receivables_loaded_at'").get() as { value: string } | undefined;
@@ -274,24 +286,28 @@ export function receivablesFreshness(now = Date.now()): ReceivablesFreshness | n
   const last = set?.value ?? (d.prepare('SELECT MAX(updated_at) AS t FROM receivables').get() as { t: string | null }).t;
   if (!last) return null;
   const loadedAt = `${last.replace(' ', 'T')}Z`;
-  const loadedDay = todayCo(Date.parse(loadedAt));
+  const loadedMs = Date.parse(loadedAt);
   const today = todayCo(now);
-  const co = new Date(now - 5 * 3_600_000);
-  const minuteCo = co.getUTCHours() * 60 + co.getUTCMinutes();
-  let workdaysOld = 0;
-  for (let day = addDays(loadedDay, 1); day <= today; day = addDays(day, 1)) {
+  let missed = 0;
+  for (let day = todayCo(loadedMs); day <= today; day = addDays(day, 1)) {
     if (dayProblem(day)) continue;
-    if (day === today && minuteCo < 7 * 60 + 50) continue;
-    workdaysOld++;
+    for (const t of LOAD_TIMES) {
+      const at = slotMs(day, t);
+      if (at > loadedMs && at + GRACE_MS <= now) missed++;
+    }
   }
-  return { loadedAt, workdaysOld, stale: workdaysOld >= 1 };
+  let nextAt = '';
+  for (let day = today; !nextAt; day = addDays(day, 1)) {
+    if (dayProblem(day)) continue;
+    const t = LOAD_TIMES.find((x) => slotMs(day, x) > now);
+    if (t) nextAt = new Date(slotMs(day, t)).toISOString();
+  }
+  return { loadedAt, missed, stale: missed > 0, nextAt };
 }
 
 /** One line for the morning brief, or null when the report is up to date. */
 export function receivablesStaleWarning(now = Date.now()): string | null {
   const f = receivablesFreshness(now);
   if (!f?.stale) return null;
-  const day = new Date(Date.parse(f.loadedAt) - 5 * 3_600_000).toISOString().slice(0, 10);
-  const label = new Date(`${day}T12:00:00Z`).toLocaleDateString('es-CO', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
-  return `⚠️ La cartera no se actualiza desde hace ${f.workdaysOld} día${f.workdaysOld === 1 ? '' : 's'} hábil${f.workdaysOld === 1 ? '' : 'es'} (última carga: ${label}). Los avisos de deuda pueden estar viejos: revisa la carga diaria de OpenClaw.`;
+  return `⚠️ La cartera no se actualiza desde el ${coDateTime(f.loadedAt)}: faltaron ${f.missed} actualizaci${f.missed === 1 ? 'ón' : 'ones'} programada${f.missed === 1 ? '' : 's'} (lun-sáb 9:00 a. m., 1:00 p. m. y 5:40 p. m.). Los avisos de deuda pueden estar viejos: revisa las cargas de OpenClaw.`;
 }
