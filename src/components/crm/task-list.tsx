@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
-import { REPEAT_LABEL, dueLabel, type Task } from '@/lib/crm/tasks-info';
+import { REPEAT_LABEL, calendarUrl, dueLabel, type Task } from '@/lib/crm/tasks-info';
 import { api, formatPhone } from './shared';
 import { DatePick } from './task-form';
 
@@ -27,7 +27,8 @@ export function TaskRow({ t, today, showWho, onOpenCustomer }: { t: Task; today:
       setErr((e as Error).message);
     }
   };
-  const label = dueLabel(t.dueDate, today);
+  const label = dueLabel(t.dueDate, today, t.dueTime);
+  const cal = typeof window === 'undefined' ? null : calendarUrl(t, `${window.location.origin}/crm`);
   const late = !!t.dueDate && t.dueDate < today;
   return (
     <li className="rounded-lg border border-border/60 bg-background/40 p-2">
@@ -52,6 +53,11 @@ export function TaskRow({ t, today, showWho, onOpenCustomer }: { t: Task; today:
         <button onClick={() => act({ action: 'done' })} className="h-8 rounded-full bg-emerald-500/20 px-3 text-emerald-400">
           ✓ Hecho
         </button>
+        {cal && (
+          <a href={cal} target="_blank" rel="noreferrer" className="h-8 rounded-full border px-3 leading-8">
+            🔔 Calendar
+          </a>
+        )}
         <button onClick={() => setMoving(!moving)} className="h-8 rounded-full border px-3">
           📅 Mover
         </button>

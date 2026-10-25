@@ -19,7 +19,7 @@ export async function GET(request: Request) {
 // POST { text, contactId?, dueDate?, repeat? } creates a to-do.
 export async function POST(request: Request) {
   try {
-    const b = (await request.json()) as { text: string; contactId?: number | null; dueDate?: string | null; repeat?: string };
+    const b = (await request.json()) as { text: string; contactId?: number | null; dueDate?: string | null; dueTime?: string | null; repeat?: string };
     return NextResponse.json({ id: createTask(b) });
   } catch (e) {
     return fail(e);
@@ -29,10 +29,10 @@ export async function POST(request: Request) {
 // PATCH { id, action: 'done' | 'move' | 'delete', dueDate? }
 export async function PATCH(request: Request) {
   try {
-    const { id, action, dueDate } = (await request.json()) as { id: number; action: string; dueDate?: string | null };
+    const { id, action, dueDate, dueTime } = (await request.json()) as { id: number; action: string; dueDate?: string | null; dueTime?: string | null };
     if (!Number.isInteger(id)) throw new Error('Falta el pendiente');
     if (action === 'done') completeTask(id);
-    else if (action === 'move') moveTask(id, dueDate ?? null);
+    else if (action === 'move') moveTask(id, dueDate ?? null, dueTime ?? null);
     else if (action === 'delete') deleteTask(id);
     else throw new Error('Acción inválida');
     return NextResponse.json({ ok: true });

@@ -217,6 +217,7 @@ function migrate(d: DatabaseSync) {
       contact_id INTEGER REFERENCES contacts(id) ON DELETE CASCADE,
       text TEXT NOT NULL,
       due_date TEXT,
+      due_time TEXT,
       repeat TEXT NOT NULL DEFAULT '',
       status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','done')),
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -230,6 +231,8 @@ function migrate(d: DatabaseSync) {
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
   `);
+  const taskCols = d.prepare('PRAGMA table_info(tasks)').all() as unknown as { name: string }[];
+  if (!taskCols.some((c) => c.name === 'due_time')) d.exec('ALTER TABLE tasks ADD COLUMN due_time TEXT');
 }
 
 /**

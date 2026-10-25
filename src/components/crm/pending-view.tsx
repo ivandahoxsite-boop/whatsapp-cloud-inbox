@@ -7,7 +7,7 @@ import { PENDING_INFO, type PendingChat, type PendingReason } from '@/lib/crm/pe
 import { api, card, formatPhone, relativeDays, useCrmData } from './shared';
 import { DatePick, TaskForm } from './task-form';
 import { TaskRow, tasksQuery } from './task-list';
-import { nextMonday, todayCo } from '@/lib/crm/tasks-info';
+import { dayProblem, nextMonday, todayCo } from '@/lib/crm/tasks-info';
 
 const REASON_COLOR: Record<PendingReason, string> = { sin_respuesta: 'text-rose-400', en_el_aire: 'text-amber-500', cotizacion: 'text-sky-400' };
 
@@ -152,7 +152,7 @@ export function PendingView({ onOpenCustomer }: { onOpenCustomer: (id: number) =
                 <div className="mt-2 space-y-2">
                   <p className="text-xs text-muted-foreground">Lo paso a Mis pendientes con esta fecha y sale de esta lista.</p>
                   <DatePick value={later.date} allowNone={false} onChange={(v) => setLater({ id: c.contactId, date: v })} />
-                  <button disabled={!later.date} onClick={() => postpone(c, later.date)} className="h-8 rounded-full bg-primary px-3 text-xs text-primary-foreground disabled:opacity-50">
+                  <button disabled={!later.date || !!dayProblem(later.date)} onClick={() => postpone(c, later.date)} className="h-8 rounded-full bg-primary px-3 text-xs text-primary-foreground disabled:opacity-50">
                     Guardar
                   </button>
                 </div>
