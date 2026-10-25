@@ -9,16 +9,29 @@ import { Key } from '@/components/crm/lock-gate';
 // Second step of the login: the 6-digit code from the authenticator app.
 function VerifyForm() {
   const params = useSearchParams();
-  const [code, setCode] = useState('');
+  const [digits, setDigits] = useState('');
+  const [code, setCode] = useState(''); // the 6-digit code, kept while the 4-digit key is typed
+  const [needPin, setNeedPin] = useState<boolean | null>(null);
   const [error, setError] = useState('');
   const [shake, setShake] = useState(0);
   const [busy, setBusy] = useState(false);
 
+  // Whether a 4-digit key exists decides if a second pad follows the code.
+  useEffect(() => {
+    fetch('/api/auth/verify')
+      .then((r) => r.json())
+      .then((d: { needPin?: boolean }) => setNeedPin(!!d.needPin))
+      .catch(() => setNeedPin(false));
+  }, []);
+
+  const asking = needPin && code ? 'pin' : 'code';
+  const length = asking === 'pin' ? 4 : 6;
+
   const submit = useCallback(
-    async (value: string) => {
+    async (otp: string, pin?: string) => {
       setBusy(true);
       try {
-        const res = await fetch('/api/auth/verify', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: value }) });
+        const res = await fetch('/api/auth/verify', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: otp, pin }) });
         const data = (await res.json().catch(() => ({}))) as { error?: string };
         if (!res.ok) throw new Error(data.error || 'Código incorrecto');
         const next = params.get('next') ?? '/crm';
@@ -26,6 +39,7 @@ function VerifyForm() {
       } catch (e) {
         setError((e as Error).message);
         setShake((n) => n + 1);
+        setDigits('');
         setCode('');
         setBusy(false);
       }
@@ -35,18 +49,26 @@ function VerifyForm() {
 
   const press = useCallback(
     (d: string) => {
-      if (busy) return;
+      if (busy || needPin === null) return;
       setError('');
-      setCode((c) => {
-        if (c.length >= 6) return c;
-        const next = c + d;
-        if (next.length === 6) setTimeout(() => submit(next), 120);
+      setDigits((cur) => {
+        if (cur.length >= length) return cur;
+        const next = cur + d;
+        if (next.length === length) {
+          setTimeout(() => {
+            if (asking === 'pin') submit(code, next);
+            else if (needPin) {
+              setCode(next);
+              setDigits('');
+            } else submit(next);
+          }, 120);
+        }
         return next;
       });
     },
-    [busy, submit]
+    [busy, needPin, length, asking, code, submit]
   );
-  const back = useCallback(() => !busy && setCode((c) => c.slice(0, -1)), [busy]);
+  const back = useCallback(() => !busy && setDigits((c) => c.slice(0, -1)), [busy]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -63,17 +85,19 @@ function VerifyForm() {
         <span className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-500 ring-1 ring-emerald-500/30">
           <ShieldCheck className="h-5 w-5" />
         </span>
-        <h1 className="mt-3 text-base font-semibold">Verificación en dos pasos</h1>
-        <p className="text-xs text-muted-foreground">Escribe el código de 6 números de tu app de autenticación</p>
+        <h1 className="mt-3 text-base font-semibold">{asking === 'pin' ? 'Ahora tu clave' : 'Verificación en dos pasos'}</h1>
+        <p className="text-xs text-muted-foreground">
+          {asking === 'pin' ? 'Escribe tu clave de 4 números' : 'Escribe el código de 6 números de tu app de autenticación'}
+        </p>
       </div>
 
-      <div key={shake} className={cn('mt-5 flex justify-center gap-3', shake > 0 && error && 'pin-shake')} role="status" aria-label={`${code.length} de 6 números`}>
-        {[0, 1, 2, 3, 4, 5].map((i) => (
+      <div key={shake} className={cn('mt-5 flex justify-center gap-3', shake > 0 && error && 'pin-shake')} role="status" aria-label={`${digits.length} de ${length} números`}>
+        {Array.from({ length }, (_, i) => i).map((i) => (
           <span
             key={i}
             className={cn(
               'h-3.5 w-3.5 rounded-full border transition-all duration-150',
-              i < code.length ? 'scale-110 border-emerald-400 bg-emerald-400 shadow-[0_0_12px_rgba(52,211,153,0.7)]' : 'border-muted-foreground/40'
+              i < digits.length ? 'scale-110 border-emerald-400 bg-emerald-400 shadow-[0_0_12px_rgba(52,211,153,0.7)]' : 'border-muted-foreground/40'
             )}
           />
         ))}
