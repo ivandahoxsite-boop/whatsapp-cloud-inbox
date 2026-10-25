@@ -57,7 +57,10 @@ export function listCustomers(): Customer[] {
 function computeCustomers(): Customer[] {
   const rows = getDb()
     .prepare(
-      `SELECT c.*, COUNT(s.id) AS sales_count, COALESCE(SUM(s.amount), 0) AS total_spent, MAX(s.sold_at) AS last_sale_at
+      // Only lines with a positive amount are purchases. Returns (negative) and free items (zero) still count in the
+      // money total (net) but are not a "purchase": they must not move the last purchase date or the buying rhythm.
+      `SELECT c.*, COUNT(CASE WHEN s.amount > 0 THEN 1 END) AS sales_count, COALESCE(SUM(s.amount), 0) AS total_spent,
+              MAX(CASE WHEN s.amount > 0 THEN s.sold_at END) AS last_sale_at
        FROM contacts c LEFT JOIN sales s ON s.contact_id = c.id
        GROUP BY c.id ORDER BY c.id`
     )
@@ -68,7 +71,7 @@ function computeCustomers(): Customer[] {
   );
 
   const salesByContact = new Map<number, { soldAt: string; product: string; amount: number }[]>();
-  const sales = getDb().prepare('SELECT contact_id, sold_at, product, amount FROM sales').all() as unknown as {
+  const sales = getDb().prepare('SELECT contact_id, sold_at, product, amount FROM sales WHERE amount > 0').all() as unknown as {
     contact_id: number; sold_at: string; product: string; amount: number;
   }[];
   for (const s of sales) {

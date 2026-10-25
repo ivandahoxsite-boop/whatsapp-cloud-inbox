@@ -96,8 +96,9 @@ export function salesReport(filter: SalesReportFilter = {}, now = new Date()): S
     add(get(month, l.soldAt.slice(0, 7)), l);
     add(get(seller, l.seller || 'Sin vendedor'), l);
     add(get(zone, l.zone || 'Sin zona'), l);
-    if (l.product) {
-      add(get(product, l.product), l);
+    if (l.product) add(get(product, l.product), l);
+    // Returns and free items say nothing about what people buy together or stopped buying.
+    if (l.product && l.amount > 0) {
       const bk = `${l.contactId}|${l.soldAt.slice(0, 7)}`;
       (basket.get(bk) ?? basket.set(bk, new Set()).get(bk)!).add(l.product);
       const pk = `${l.contactId}|${l.product}`;
@@ -107,7 +108,7 @@ export function salesReport(filter: SalesReportFilter = {}, now = new Date()): S
       if (l.soldAt > cp.lastAt) cp.lastAt = l.soldAt;
       perCustomerProduct.set(pk, cp);
     }
-    if (l.soldAt > (lastBought.get(l.contactId) ?? '')) lastBought.set(l.contactId, l.soldAt);
+    if (l.amount > 0 && l.soldAt > (lastBought.get(l.contactId) ?? '')) lastBought.set(l.contactId, l.soldAt);
   }
 
   const pairs = new Map<string, number>();
