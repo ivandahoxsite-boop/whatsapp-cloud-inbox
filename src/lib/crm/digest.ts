@@ -4,6 +4,7 @@ import { listOutbox } from './agent-store';
 import { getDb } from './db';
 import { receivablesSummary } from './receivables';
 import { callWindow, scheduledCalls } from './collections';
+import { offsiteWarning } from './offsite';
 
 const money = (n: number) => `$${Math.round(n).toLocaleString('es-CO')}`;
 const label = (c: Customer) => `${c.name || `+${c.phone}`}${c.city ? ` (${c.city})` : ''}`;
@@ -93,6 +94,8 @@ export function buildDigest(limit = 5) {
       lines.push(`• ${hh} — ${byId.get(t.contactId)?.name || 'Cliente'}`);
     }
   }
+  const backupWarning = offsiteWarning();
+  if (backupWarning) lines.push('', backupWarning);
   if (!callWindow().allowed) lines.push('', `🕒 Ahora no se puede llamar para cobrar: ${callWindow().reason}.`);
   if (pending) lines.push('', `📝 ${pending} mensaje${pending === 1 ? '' : 's'} por aprobar en el CRM (pestaña Aprobaciones).`);
   if (noPhone) lines.push('', `📵 ${noPhone} cliente${noPhone === 1 ? '' : 's'} con ventas sin teléfono: no se les puede escribir todavía.`);
