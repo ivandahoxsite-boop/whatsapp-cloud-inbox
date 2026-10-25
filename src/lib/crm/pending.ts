@@ -1,30 +1,13 @@
 import { getDb } from './db';
 import { needsReply } from './reply';
+import type { PendingChat, PendingReason } from './pending-info';
 
 /** Chats older than this are history, not a to-do. */
 export const PENDING_WINDOW_DAYS = 90;
 /** A chat where you answered last is only "in the air" once the customer has been quiet this long. */
 const STALE_DAYS = 2;
 
-export type PendingReason = 'sin_respuesta' | 'en_el_aire' | 'cotizacion';
-
-export type PendingChat = {
-  contactId: number;
-  name: string;
-  phone: string;
-  hasPhone: boolean;
-  reason: PendingReason;
-  /** The message that makes the chat pending (what they asked / what you promised). */
-  text: string;
-  at: string;
-  days: number;
-};
-
-export const PENDING_INFO: Record<PendingReason, { label: string; hint: string }> = {
-  sin_respuesta: { label: 'Sin respuesta', hint: 'Te escribió algo que pide respuesta y no le contestaste.' },
-  en_el_aire: { label: 'Quedó en el aire', hint: 'Le dijiste algo como "te confirmo" y el chat murió sin cierre.' },
-  cotizacion: { label: 'Pidió precio y no compró', hint: 'Preguntó precio, disponibilidad o cotización y no hay venta después.' }
-};
+export { PENDING_INFO, type PendingChat, type PendingReason } from './pending-info';
 
 // Things you say when you owe the customer something.
 const PROMISE = /te (confirmo|aviso|cuento|averiguo|reviso|cotizo|env[ií]o|mando|paso|escribo|llamo)|le (confirmo|aviso|cuento|averiguo|reviso|cotizo|env[ií]o|mando|paso|escribo|llamo)|d[eé]jame|d[eé]jeme|perm[ií]t(a|e)me|voy a (revisar|consultar|averiguar|preguntar|cotizar)|lo (reviso|averiguo|consulto|miro)|d[ée]me un (momento|momentico|rato)|en un momento|ahorita (le|te)|quedo pendiente|ma[ñn]ana (le|te)/i;

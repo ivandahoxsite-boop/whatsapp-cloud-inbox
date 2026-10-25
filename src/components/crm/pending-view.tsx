@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
-import { PENDING_INFO, type PendingChat, type PendingReason } from '@/lib/crm/pending';
+import { PENDING_INFO, type PendingChat, type PendingReason } from '@/lib/crm/pending-info';
 import { api, card, formatPhone, relativeDays } from './shared';
 
 const REASON_COLOR: Record<PendingReason, string> = { sin_respuesta: 'text-rose-400', en_el_aire: 'text-amber-500', cotizacion: 'text-sky-400' };
