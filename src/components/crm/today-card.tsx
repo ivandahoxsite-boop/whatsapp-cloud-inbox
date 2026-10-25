@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
 import type { TodayBoard } from '@/lib/crm/today';
 import { PENDING_INFO, type PendingReason } from '@/lib/crm/pending-info';
-import { dueLabel } from '@/lib/crm/tasks-info';
+import { coDateTime, dayWord, dueLabel } from '@/lib/crm/tasks-info';
 import { api, card, money } from './shared';
 
 const REASON_COLOR: Record<PendingReason, string> = { sin_respuesta: 'text-rose-400', en_el_aire: 'text-amber-500', cotizacion: 'text-sky-400' };
@@ -33,6 +33,14 @@ export function TodayCard({ onPending, onOpenCustomer }: { onPending: () => void
           Ver Pendientes
         </button>
       </div>
+      {data.receivables && (
+        <p className={cn('rounded-lg px-2 py-1.5 text-xs', data.receivables.stale ? 'bg-amber-500/10 text-amber-500' : 'bg-muted/50 text-muted-foreground')}>
+          {data.receivables.stale ? '⚠️' : '🔄'} Cartera traída por OpenClaw: <b>{dayWord(data.receivables.loadedAt)}{coDateTime(data.receivables.loadedAt)}</b>
+          {data.receivables.stale
+            ? ` · faltaron ${data.receivables.missed} actualizaci${data.receivables.missed === 1 ? 'ón' : 'ones'}`
+            : ` · próxima ${dayWord(data.receivables.nextAt)}${coDateTime(data.receivables.nextAt)}`}
+        </p>
+      )}
       {data.restDay && <p className="text-xs text-muted-foreground">Hoy es domingo o festivo: descansa, esto puede esperar.</p>}
       {empty && <p className="text-sm text-muted-foreground">Nada pendiente para hoy ✨</p>}
 

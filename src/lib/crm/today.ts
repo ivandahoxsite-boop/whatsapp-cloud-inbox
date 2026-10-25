@@ -1,6 +1,6 @@
 import { callsOn, paymentPromises } from './digest';
 import { pendingChats, type PendingReason } from './pending';
-import { receivablesSummary } from './receivables';
+import { receivablesFreshness, receivablesSummary } from './receivables';
 import { listTasks } from './tasks';
 import { dayProblem, todayCo } from './tasks-info';
 
@@ -20,7 +20,9 @@ export function todayBoard(now = Date.now()) {
     chats,
     promisesToday: dueToday,
     promisesBroken: broken,
-    calls: callsOn(today)
+    calls: callsOn(today),
+    /** When OpenClaw last brought the aging report from AnaliX (the only way receivables are loaded). */
+    receivables: receivablesFreshness(now)
   };
 }
 

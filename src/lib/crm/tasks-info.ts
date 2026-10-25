@@ -113,3 +113,10 @@ export function coDateTime(iso: string): string {
   const time = new Date(ms).toLocaleTimeString('es-CO', { hour: 'numeric', minute: '2-digit', timeZone: 'America/Bogota' });
   return `${date} · ${time}`;
 }
+
+/** "hoy, " / "ayer, " / "mañana, " before a Colombian date, or nothing (to put before `coDateTime`). */
+export function dayWord(iso: string, now = Date.now()): string {
+  const co = (ms: number) => new Date(ms - 5 * 3_600_000).toISOString().slice(0, 10);
+  const days = Math.round((Date.parse(co(Date.parse(iso))) - Date.parse(co(now))) / 86_400_000);
+  return days === 0 ? 'hoy, ' : days === -1 ? 'ayer, ' : days === 1 ? 'mañana, ' : '';
+}

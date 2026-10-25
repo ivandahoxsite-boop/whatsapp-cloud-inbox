@@ -5,17 +5,10 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import type { ReceivablesSummary } from '@/lib/crm/receivables';
-import { coDateTime } from '@/lib/crm/tasks-info';
+import { coDateTime, dayWord } from '@/lib/crm/tasks-info';
 import { api, card, formatPhone, money } from './shared';
 
 const select = 'h-9 rounded-full border border-border/60 bg-card/50 px-3 text-sm';
-/** "hoy, " / "ayer, " / "mañana, " before a Colombian date, or nothing. */
-function dayWord(iso: string): string {
-  const co = (ms: number) => new Date(ms - 5 * 3_600_000).toISOString().slice(0, 10);
-  const days = Math.round((Date.parse(co(Date.parse(iso))) - Date.parse(co(Date.now()))) / 86_400_000);
-  return days === 0 ? 'hoy, ' : days === -1 ? 'ayer, ' : days === 1 ? 'mañana, ' : '';
-}
-
 const AGING_COLOR = ['#34d399', '#fbbf24', '#fb923c', '#f87171', '#e11d48'];
 
 export function ReceivablesView({ onOpenCustomer }: { onOpenCustomer: (id: number) => void }) {
@@ -102,7 +95,7 @@ export function ReceivablesView({ onOpenCustomer }: { onOpenCustomer: (id: numbe
           )}
         >
           <p>
-            {data.freshness.stale ? '⚠️ ' : '🔄 '}Última actualización: <b>{dayWord(data.freshness.loadedAt)}{coDateTime(data.freshness.loadedAt)}</b>
+            {data.freshness.stale ? '⚠️ ' : '🔄 '}Última vez que OpenClaw trajo la cartera: <b>{dayWord(data.freshness.loadedAt)}{coDateTime(data.freshness.loadedAt)}</b>
           </p>
           {data.freshness.stale ? (
             <p className="mt-0.5">
