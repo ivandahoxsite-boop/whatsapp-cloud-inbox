@@ -30,6 +30,30 @@ export function callWindow(now = new Date()): CallWindow {
   return out(true, 'Dentro del horario permitido');
 }
 
+/** The first minute a collection call is allowed, from `from` on (looks up to 10 days ahead). */
+export function nextCallWindow(from = new Date()): Date | null {
+  const start = Math.floor(from.getTime() / 60_000) * 60_000;
+  for (let i = 1; i <= 10 * 24 * 60; i++) {
+    const t = new Date(start + i * 60_000);
+    if (callWindow(t).allowed) return t;
+  }
+  return null;
+}
+
+/** "2026-10-26T10:30" typed in Colombian time -> the instant it means. */
+export function parseBogotaLocal(value: string): Date | null {
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value)) return null;
+  const t = new Date(`${value}:00-05:00`);
+  return Number.isNaN(t.getTime()) ? null : t;
+}
+
+const toSql = (t: Date) => t.toISOString().slice(0, 19).replace('T', ' ');
+const fromSql = (v: string) => new Date(`${v.replace(' ', 'T')}Z`);
+/** For people: "sáb 25 oct, 10:30 a. m." in Colombian time. */
+export function formatBogota(t: Date): string {
+  return new Intl.DateTimeFormat('es-CO', { timeZone: 'America/Bogota', weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }).format(t);
+}
+
 export const CALL_OUTCOMES = ['promesa_pago', 'ya_pago', 'sin_respuesta', 'buzon', 'rechaza', 'pide_humano', 'numero_equivocado', 'no_llamar', 'otro'] as const;
 export type CallOutcome = (typeof CALL_OUTCOMES)[number];
 /** Outcomes where a person was actually reached. */
@@ -222,9 +246,58 @@ export function pendingCallIds(): number[] {
   return (getDb().prepare("SELECT contact_id AS id FROM call_requests WHERE status = 'pending' ORDER BY id").all() as unknown as { id: number }[]).map((r) => r.id);
 }
 
-/** What the agent reads: each marked customer with a fresh check (hours included). It dials only those with `allowed`. */
+/**
+ * What the agent reads: each marked or scheduled customer with a fresh check (hours included). `due` is true when the
+ * scheduled time has come (or there is none). It dials only those with `due` and `allowed`.
+ */
 export function requestedCalls(now = new Date()) {
   const window = callWindow(now);
-  const checks = pendingCallIds().flatMap((id) => checkCustomers({ customerId: id }, now).checks);
-  return { window, requested: checks };
+  const requested = scheduledCalls().flatMap((r) =>
+    checkCustomers({ customerId: r.contactId }, now).checks.map((c) => ({
+      ...c,
+      scheduledAt: r.scheduledAt,
+      scheduledLabel: r.label,
+      due: !r.scheduledAt || new Date(r.scheduledAt).getTime() <= now.getTime()
+    }))
+  );
+  return { window, requested };
+}
+
+/**
+ * Schedules a call for a date and time (typed in Colombian time). The moment must be in the future and inside the
+ * allowed hours, and nothing about the customer may rule a call out. Scheduling again replaces the previous time.
+ * Whoever makes the call (you with your phone today, the agent with Twilio later) checks the rules again at that moment.
+ */
+export function scheduleCall(
+  contactId: number,
+  whenLocal: string,
+  now = new Date()
+): { ok: true; scheduledAt: string; label: string } | { ok: false; reasons: string[]; suggest?: string; suggestLabel?: string } {
+  const when = parseBogotaLocal(whenLocal);
+  if (!when) throw new Error('Fecha y hora inválidas');
+  if (when.getTime() <= now.getTime()) return { ok: false, reasons: ['Esa hora ya pasó'] };
+
+  const { checks } = checkCustomers({ customerId: contactId }, now, { ignoreWindow: true });
+  const c = checks[0];
+  if (!c) throw new Error('Cliente no encontrado');
+  // "Called today" and "reached this week" describe the present, not the day it is scheduled for: those are re-checked when it is time.
+  const hard = c.reasons.filter((r) => r !== BLOCK_TEXT.llamadoHoy && r !== BLOCK_TEXT.contactoReciente);
+  if (hard.length) return { ok: false, reasons: hard };
+
+  const window = callWindow(when);
+  if (!window.allowed) {
+    const next = nextCallWindow(when);
+    const suggest = next ? new Date(next.getTime() + BOGOTA_OFFSET_MS).toISOString().slice(0, 16) : undefined;
+    return { ok: false, reasons: [`A esa hora no se puede cobrar: ${window.reason}`], suggest, suggestLabel: next ? formatBogota(next) : undefined };
+  }
+  const d = getDb();
+  d.prepare("UPDATE call_requests SET status = 'cancelled', closed_at = datetime('now') WHERE contact_id = ? AND status = 'pending'").run(contactId);
+  d.prepare('INSERT INTO call_requests (contact_id, scheduled_at) VALUES (?, ?)').run(contactId, toSql(when));
+  return { ok: true, scheduledAt: when.toISOString(), label: formatBogota(when) };
+}
+
+/** Pending calls with their scheduled time (ISO, or null for "whenever"). */
+export function scheduledCalls(): { contactId: number; scheduledAt: string | null; label: string | null }[] {
+  const rows = getDb().prepare("SELECT contact_id AS id, scheduled_at AS at FROM call_requests WHERE status = 'pending' ORDER BY COALESCE(scheduled_at, requested_at)").all() as unknown as { id: number; at: string | null }[];
+  return rows.map((r) => ({ contactId: r.id, scheduledAt: r.at ? fromSql(r.at).toISOString() : null, label: r.at ? formatBogota(fromSql(r.at)) : null }));
 }

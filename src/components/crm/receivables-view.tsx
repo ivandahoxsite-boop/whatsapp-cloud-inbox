@@ -16,6 +16,12 @@ export function ReceivablesView({ onOpenCustomer }: { onOpenCustomer: (id: numbe
   const [bucket, setBucket] = useState<string>('');
   const [note, setNote] = useState('');
   const [calling, setCalling] = useState<number | null>(null); // the customer whose call result is being typed
+  const [scheduling, setScheduling] = useState<number | null>(null); // the customer whose call time is being picked
+  const { data: sched } = useQuery({
+    queryKey: ['crm-call-requests'],
+    queryFn: () => api<{ requests: { contactId: number; scheduledAt: string | null; label: string | null }[] }>('/api/crm/collections/call-requests')
+  });
+  const scheduledOf = new Map((sched?.requests ?? []).map((r) => [r.contactId, r]));
   const { data, isLoading, error } = useQuery({
     queryKey: ['crm-receivables', seller, bucket],
     queryFn: () => {
@@ -118,6 +124,120 @@ export function ReceivablesView({ onOpenCustomer }: { onOpenCustomer: (id: numbe
                   <div className="h-full rounded-full" style={{ width: `${(a.amount / maxAging) * 100}%`, background: AGING_COLOR[i] }} />
                 </div>
               </button>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      {!seller && data.bySeller.length > 1 && (
+        <section className={card}>
+          <h2 className="mb-3 text-sm font-medium">Por vendedor</h2>
+          <ul className="space-y-2">
+            {data.bySeller.map((s) => (
+              <li key={s.name}>
+                <button className="block w-full text-left" onClick={() => s.name !== 'Sin vendedor' && setSeller(s.name)}>
+                  <div className="flex items-baseline gap-2 text-xs">
+                    <span className="min-w-0 flex-1 truncate">{s.name}</span>
+                    <span className="text-amber-500">{s.overdue > 0 ? `${money(s.overdue)} vencido` : ''}</span>
+                    <span className="tabular-nums">{money(s.balance)}</span>
+                  </div>
+                  <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-muted">
+                    <div className="h-full rounded-full bg-emerald-400" style={{ width: `${(s.balance / maxSeller) * 100}%` }} />
+                  </div>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      <section className={card}>
+        <h2 className="text-sm font-medium">{bucket ? `Quién debe · ${data.aging.find((a) => a.key === bucket)?.label ?? ''}` : 'Quién debe'}</h2>
+        {bucket ? (
+          <p className="mb-3 flex items-center gap-2 text-xs text-muted-foreground">
+            <span className="min-w-0 flex-1">
+              {data.listed.customers} cliente{data.listed.customers === 1 ? '' : 's'} · {money(data.listed.amount)} en este rango
+            </span>
+            <button onClick={() => setBucket('')} className="shrink-0 underline">
+              Quitar filtro
+            </button>
+          </p>
+        ) : (
+          <p className="mb-3 text-xs text-muted-foreground">Los que más tienen vencido primero. El recordatorio queda en Aprobaciones; no sale solo. <b>Llamar</b> abre el marcador de tu celular y después te deja anotar cómo te fue. <b>Programar</b> deja la llamada para una fecha y hora.</p>
+        )}
+        {note && <p className="mb-3 rounded-md border bg-background/40 p-2 text-xs">{note}</p>}
+        <ul className="space-y-2">
+          {data.debtors.length === 0 && <li className="text-xs text-muted-foreground">Nadie en este rango.</li>}
+          {data.debtors.map((d) => (
+            <li key={d.contactId} className="rounded-lg border border-border/60 bg-background/40 p-2">
+              <div className="flex items-center gap-2">
+                <button onClick={() => onOpenCustomer(d.contactId)} className="min-w-0 flex-1 text-left">
+                  <p className="truncate text-sm font-medium">{d.name || formatPhone(d.phone)}</p>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {d.hasPhone ? formatPhone(d.phone) : 'Sin teléfono'} · {d.invoices} factura{d.invoices === 1 ? '' : 's'}
+                    {d.seller ? ` · ${d.seller}` : ''}
+                  </p>
+                </button>
+                <div className="shrink-0 text-right">
+                  <p className="text-sm font-medium tabular-nums">{money(d.balance)}</p>
+                  <p className={cn('text-xs', d.oldestDays > 0 ? 'text-amber-500' : 'text-muted-foreground')}>
+                    {d.oldestDays > 0 ? `${d.oldestDays} días de mora` : 'al día'}
+                  </p>
+                </div>
+              </div>
+              {d.hasPhone && d.overdue > 0 && (
+                <>
+                  {scheduledOf.get(d.contactId)?.label && (
+                    <p className="mt-2 flex items-center gap-2 text-xs text-sky-400">
+                      <span className="min-w-0 flex-1">📅 Llamada programada: {scheduledOf.get(d.contactId)!.label}</span>
+                      <button
+                        className="shrink-0 underline"
+                        onClick={async () => {
+                          await api('/api/crm/collections/call-requests', 'DELETE', { contactId: d.contactId });
+                          qc.invalidateQueries({ queryKey: ['crm-call-requests'] });
+                        }}
+                      >
+                        Quitar
+                      </button>
+                    </p>
+                  )}
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <Button size="sm" variant="outline" onClick={() => remind(d.contactId, d.name)}>
+                      Recordar
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => dial(d.contactId, d.name, d.phone)}>
+                      📞 Llamar
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => setScheduling(scheduling === d.contactId ? null : d.contactId)}>
+                      📅 Programar
+                    </Button>
+                  </div>
+                </>
+              )}
+              {scheduling === d.contactId && (
+                <ScheduleCall
+                  contactId={d.contactId}
+                  name={d.name}
+                  onClose={() => setScheduling(null)}
+                  onSaved={(m) => {
+                    setScheduling(null);
+                    setNote(m);
+                    qc.invalidateQueries({ queryKey: ['crm-call-requests'] });
+                  }}
+                />
+              )}
+              {calling === d.contactId && (
+                <CallLog
+                  contactId={d.contactId}
+                  name={d.name}
+                  onClose={() => setCalling(null)}
+                  onSaved={(m) => {
+                    setCalling(null);
+                    setNote(m);
+                    qc.invalidateQueries({ queryKey: ['crm'] });
+                  }}
+                />
+              )}
             </li>
           ))}
         </ul>
@@ -278,6 +398,54 @@ function CallLog({ contactId, name, onClose, onSaved }: { contactId: number; nam
         </Button>
         <Button size="sm" variant="ghost" onClick={onClose}>
           Ahora no
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+/** Picks a date and time (Colombian time) for a call. The CRM refuses hours when collecting is not allowed and suggests the next slot. */
+function ScheduleCall({ contactId, name, onClose, onSaved }: { contactId: number; name: string; onClose: () => void; onSaved: (msg: string) => void }) {
+  const [when, setWhen] = useState('');
+  const [err, setErr] = useState('');
+  const [suggest, setSuggest] = useState<{ value: string; label: string } | null>(null);
+  // Colombian "now" for the picker's minimum (UTC-5, no daylight saving).
+  const min = new Date(Date.now() - 5 * 3_600_000).toISOString().slice(0, 16);
+
+  const save = async (value = when) => {
+    setErr('');
+    setSuggest(null);
+    try {
+      const r = await api<{ label: string }>('/api/crm/collections/call-requests', 'POST', { contactId, scheduledFor: value });
+      onSaved(`Llamada a ${name || 'el cliente'} programada: ${r.label}. Te la recordaré en el resumen de las 8:00 de ese día.`);
+    } catch (e) {
+      setErr((e as Error).message);
+      // when the hours are the problem, the answer carries the next allowed slot
+      const body = (e as { body?: { suggest?: string; suggestLabel?: string } }).body;
+      if (body?.suggest && body.suggestLabel) setSuggest({ value: body.suggest, label: body.suggestLabel });
+    }
+  };
+  const field = 'mt-1 w-full rounded-md border bg-transparent px-2 py-1.5 text-sm outline-none focus:border-primary/60';
+  return (
+    <div className="mt-2 space-y-2 border-t border-border/60 pt-2">
+      <p className="text-xs font-medium">¿Cuándo quieres llamar a {name || 'el cliente'}?</p>
+      <label className="block text-xs text-muted-foreground">
+        Fecha y hora (hora de Colombia)
+        <input type="datetime-local" value={when} min={min} onChange={(e) => setWhen(e.target.value)} className={field} />
+      </label>
+      <p className="text-[11px] text-muted-foreground">Solo se puede cobrar de lunes a viernes de 7 a. m. a 7 p. m. y sábados de 8 a. m. a 3 p. m., sin domingos ni festivos.</p>
+      {err && <p className="text-xs text-destructive">{err}</p>}
+      {suggest && (
+        <Button size="sm" variant="outline" onClick={() => { setWhen(suggest.value); save(suggest.value); }}>
+          Usar {suggest.label}
+        </Button>
+      )}
+      <div className="flex gap-2">
+        <Button size="sm" onClick={() => save()} disabled={!when}>
+          Programar
+        </Button>
+        <Button size="sm" variant="ghost" onClick={onClose}>
+          Cancelar
         </Button>
       </div>
     </div>

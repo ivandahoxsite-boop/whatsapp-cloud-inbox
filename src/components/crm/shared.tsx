@@ -28,7 +28,7 @@ export async function api<T = unknown>(url: string, method = 'GET', body?: unkno
   });
   const data = await res.json().catch(() => ({}));
   if (res.status === 423 && typeof window !== 'undefined') window.dispatchEvent(new Event('crm-locked'));
-  if (!res.ok) throw new Error((data as { error?: string }).error || 'Error');
+  if (!res.ok) throw Object.assign(new Error((data as { error?: string }).error || 'Error'), { body: data });
   return data as T;
 }
 

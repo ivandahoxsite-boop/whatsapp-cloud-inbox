@@ -3,7 +3,7 @@ import { buildActions } from './actions';
 import { listOutbox } from './agent-store';
 import { getDb } from './db';
 import { receivablesSummary } from './receivables';
-import { callWindow } from './collections';
+import { callWindow, scheduledCalls } from './collections';
 
 const money = (n: number) => `$${Math.round(n).toLocaleString('es-CO')}`;
 const label = (c: Customer) => `${c.name || `+${c.phone}`}${c.city ? ` (${c.city})` : ''}`;
@@ -82,6 +82,16 @@ export function buildDigest(limit = 5) {
   if (broken.length) {
     lines.push('', `⚠️ Prometieron pagar y no lo han hecho (${broken.length})`);
     for (const p of broken.slice(0, limit)) lines.push(`• ${p.name || 'Cliente'} — prometió el ${p.due}`);
+  }
+  // Calls the user scheduled for today (Colombian calendar), with the time.
+  const todays = scheduledCalls().filter((c) => c.scheduledAt && new Date(new Date(c.scheduledAt).getTime() - 5 * 3_600_000).toISOString().slice(0, 10) === today);
+  if (todays.length) {
+    const byId = new Map(listCustomers().map((c) => [c.id, c]));
+    lines.push('', `📅 Llamadas que programaste para hoy (${todays.length})`);
+    for (const t of todays.slice(0, limit)) {
+      const hh = new Date(new Date(t.scheduledAt!).getTime() - 5 * 3_600_000).toISOString().slice(11, 16);
+      lines.push(`• ${hh} — ${byId.get(t.contactId)?.name || 'Cliente'}`);
+    }
   }
   if (!callWindow().allowed) lines.push('', `🕒 Ahora no se puede llamar para cobrar: ${callWindow().reason}.`);
   if (pending) lines.push('', `📝 ${pending} mensaje${pending === 1 ? '' : 's'} por aprobar en el CRM (pestaña Aprobaciones).`);

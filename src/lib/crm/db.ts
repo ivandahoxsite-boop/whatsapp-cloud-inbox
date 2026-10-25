@@ -116,6 +116,9 @@ function migrate(d: DatabaseSync) {
     d.exec(`UPDATE contacts SET city = trim(COALESCE(json_extract(data, '$.ciudad'), json_extract(data, '$.city'), ''))`);
     d.exec("DELETE FROM fields WHERE entity = 'contact' AND key IN ('ciudad', 'city')");
   }
+  // call_requests.scheduled_at (UTC) is when the user wants the call made; null means "whenever the rules allow it".
+  const crCols = d.prepare("PRAGMA table_info(call_requests)").all() as unknown as { name: string }[];
+  if (crCols.length && !crCols.some((c) => c.name === 'scheduled_at')) d.exec('ALTER TABLE call_requests ADD COLUMN scheduled_at TEXT');
   d.exec(`
     CREATE INDEX IF NOT EXISTS contacts_city_idx ON contacts(city);
     -- Lets the webhook and the history sync skip WhatsApp messages that are already stored.
@@ -173,7 +176,8 @@ function migrate(d: DatabaseSync) {
       contact_id INTEGER NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
       status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','done','cancelled')),
       requested_at TEXT NOT NULL DEFAULT (datetime('now')),
-      closed_at TEXT
+      closed_at TEXT,
+      scheduled_at TEXT
     );
     CREATE INDEX IF NOT EXISTS call_requests_idx ON call_requests(status, contact_id);
     -- WhatsApp template campaigns: one row per recipient; nothing is sent until a person starts the campaign.
