@@ -211,6 +211,18 @@ function migrate(d: DatabaseSync) {
       kind TEXT NOT NULL DEFAULT 'resolved' CHECK (kind IN ('resolved','ignored')),
       resolved_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+    -- To-dos the user writes by hand ("llevarle el imán a Jesús", Monday), optionally tied to a customer and repeating.
+    CREATE TABLE IF NOT EXISTS tasks (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      contact_id INTEGER REFERENCES contacts(id) ON DELETE CASCADE,
+      text TEXT NOT NULL,
+      due_date TEXT,
+      repeat TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','done')),
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      done_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS tasks_status_idx ON tasks(status, due_date);
     CREATE TABLE IF NOT EXISTS segments (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,

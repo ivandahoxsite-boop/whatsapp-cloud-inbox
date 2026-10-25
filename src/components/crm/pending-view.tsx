@@ -4,7 +4,10 @@ import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
 import { PENDING_INFO, type PendingChat, type PendingReason } from '@/lib/crm/pending-info';
-import { api, card, formatPhone, relativeDays } from './shared';
+import { api, card, formatPhone, relativeDays, useCrmData } from './shared';
+import { DatePick, TaskForm } from './task-form';
+import { TaskRow, tasksQuery } from './task-list';
+import { nextMonday, todayCo } from '@/lib/crm/tasks-info';
 
 const REASON_COLOR: Record<PendingReason, string> = { sin_respuesta: 'text-rose-400', en_el_aire: 'text-amber-500', cotizacion: 'text-sky-400' };
 
@@ -12,6 +15,10 @@ export function PendingView({ onOpenCustomer }: { onOpenCustomer: (id: number) =
   const qc = useQueryClient();
   const [reason, setReason] = useState<PendingReason | ''>('');
   const [error, setError] = useState('');
+  const [adding, setAdding] = useState(false);
+  const [later, setLater] = useState<{ id: number; date: string } | null>(null); // detected chat being moved to another day
+  const { data: crm } = useCrmData();
+  const { data: tdata } = useQuery(tasksQuery());
   const { data, isLoading, error: loadError } = useQuery({
     queryKey: ['crm-pending'],
     queryFn: () => api<{ chats: PendingChat[] }>('/api/crm/pending')
@@ -27,14 +34,69 @@ export function PendingView({ onOpenCustomer }: { onOpenCustomer: (id: number) =
     }
   };
 
+  const postpone = async (c: PendingChat, date: string) => {
+    setError('');
+    try {
+      const snippet = c.text.length > 80 ? `${c.text.slice(0, 80)}…` : c.text;
+      await api('/api/crm/tasks', 'POST', {
+        contactId: c.contactId,
+        text: c.reason === 'en_el_aire' ? `Cumplir lo que le dije: ${snippet}` : `Responderle: ${snippet}`,
+        dueDate: date || null
+      });
+      await api('/api/crm/pending', 'POST', { contactId: c.contactId, kind: 'resolved' });
+      setLater(null);
+      await Promise.all([qc.invalidateQueries({ queryKey: ['crm-pending'] }), qc.invalidateQueries({ queryKey: ['crm-tasks'] })]);
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+
   if (isLoading) return <p className="text-sm text-muted-foreground">Buscando chats pendientes…</p>;
   if (loadError) return <p className="text-sm text-destructive">{(loadError as Error).message}</p>;
   const all = data?.chats ?? [];
   const chats = reason ? all.filter((c) => c.reason === reason) : all;
   const count = (r: PendingReason) => all.filter((c) => c.reason === r).length;
 
+  const today = tdata?.today ?? todayCo();
+  const tasks = tdata?.tasks ?? [];
+  const groups: [string, typeof tasks][] = [
+    ['Atrasados y de hoy', tasks.filter((t) => t.dueDate && t.dueDate <= today)],
+    ['Próximos', tasks.filter((t) => t.dueDate && t.dueDate > today)],
+    ['Sin fecha', tasks.filter((t) => !t.dueDate)]
+  ];
+
   return (
     <div className="space-y-4">
+      <section className={card}>
+        <div className="mb-3 flex items-center gap-2">
+          <h2 className="min-w-0 flex-1 text-sm font-medium">Mis pendientes</h2>
+          <button onClick={() => setAdding(!adding)} className="h-8 shrink-0 rounded-full bg-primary px-3 text-xs text-primary-foreground">
+            + Nuevo
+          </button>
+        </div>
+        {adding && (
+          <div className="mb-3">
+            <TaskForm customers={crm?.customers} onDone={() => setAdding(false)} />
+          </div>
+        )}
+        {tasks.length === 0 && !adding && (
+          <p className="text-xs text-muted-foreground">Aún no has anotado nada. Toca <b>+ Nuevo</b> (ej: «Llevarle el imán a Jesús», lunes).</p>
+        )}
+        {groups.map(
+          ([title, list]) =>
+            list.length > 0 && (
+              <div key={title} className="mb-3 last:mb-0">
+                <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">{title}</h3>
+                <ul className="space-y-2">
+                  {list.map((t) => (
+                    <TaskRow key={t.id} t={t} today={today} showWho onOpenCustomer={onOpenCustomer} />
+                  ))}
+                </ul>
+              </div>
+            )
+        )}
+      </section>
+
       <div className="grid grid-cols-3 gap-3">
         {(Object.keys(PENDING_INFO) as PendingReason[]).map((r) => (
           <button
@@ -50,7 +112,7 @@ export function PendingView({ onOpenCustomer }: { onOpenCustomer: (id: number) =
       </div>
 
       <section className={card}>
-        <h2 className="text-sm font-medium">Chats pendientes · últimos 90 días</h2>
+        <h2 className="text-sm font-medium">Chats por atender · últimos 90 días</h2>
         <p className="mb-3 text-xs text-muted-foreground">
           Toca un cuadro para filtrar. <b>Resuelto</b> o <b>Ignorar</b> lo saca de la lista; si el cliente vuelve a escribir, reaparece solo.
         </p>
@@ -79,10 +141,22 @@ export function PendingView({ onOpenCustomer }: { onOpenCustomer: (id: number) =
                 <button onClick={() => close(c.contactId, 'resolved')} className="h-8 rounded-full bg-emerald-500/20 px-3 text-emerald-400">
                   ✓ Resuelto
                 </button>
+                <button onClick={() => setLater(later?.id === c.contactId ? null : { id: c.contactId, date: nextMonday(todayCo()) })} className="h-8 rounded-full border px-3">
+                  📅 Otro día
+                </button>
                 <button onClick={() => close(c.contactId, 'ignored')} className="h-8 rounded-full border px-3 text-muted-foreground">
                   Ignorar
                 </button>
               </div>
+              {later?.id === c.contactId && (
+                <div className="mt-2 space-y-2">
+                  <p className="text-xs text-muted-foreground">Lo paso a Mis pendientes con esta fecha y sale de esta lista.</p>
+                  <DatePick value={later.date} allowNone={false} onChange={(v) => setLater({ id: c.contactId, date: v })} />
+                  <button disabled={!later.date} onClick={() => postpone(c, later.date)} className="h-8 rounded-full bg-primary px-3 text-xs text-primary-foreground disabled:opacity-50">
+                    Guardar
+                  </button>
+                </div>
+              )}
             </li>
           ))}
         </ul>

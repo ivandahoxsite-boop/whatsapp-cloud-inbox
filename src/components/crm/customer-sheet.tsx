@@ -9,6 +9,8 @@ import { Input } from '@/components/ui/input';
 import { RECURRENCE_INFO } from '@/lib/crm/scoring';
 import type { Customer } from '@/lib/crm/customers';
 import type { CustomField } from '@/lib/crm/db';
+import { TaskForm } from './task-form';
+import { CustomerTasks } from './task-list';
 import { QUERY_KEY, RecurrencePill, SegmentPill, TagPill, ago, api, cityOptions, formatPhone, money, relativeDays, type CrmData } from './shared';
 
 type Sale = { id: number; soldAt: string; amount: number; product: string };
@@ -58,6 +60,7 @@ function SheetBody({ c, data, onClose }: { c: Customer; data: CrmData; onClose: 
   const [newTag, setNewTag] = useState('');
   const [note, setNote] = useState('');
   const [newPhone, setNewPhone] = useState('');
+  const [addingTask, setAddingTask] = useState(false);
   const [sale, setSale] = useState<{ soldAt: string; amount: string; product: string; qty: string } | null>(null);
 
   const run = async (fn: () => Promise<unknown>) => {
@@ -312,6 +315,18 @@ function SheetBody({ c, data, onClose }: { c: Customer; data: CrmData; onClose: 
           ) : (
             <Button size="sm" variant="outline" onClick={() => setSale({ soldAt: new Date().toLocaleDateString('en-CA'), amount: '', product: '', qty: '' })}>
               <ShoppingBag className="mr-1.5 h-4 w-4" /> Registrar venta
+            </Button>
+          )}
+        </section>
+
+        <section className="space-y-2">
+          <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Pendientes</h3>
+          <CustomerTasks contactId={c.id} />
+          {addingTask ? (
+            <TaskForm fixed={c.id} onDone={() => setAddingTask(false)} />
+          ) : (
+            <Button size="sm" variant="outline" onClick={() => setAddingTask(true)}>
+              + Pendiente
             </Button>
           )}
         </section>

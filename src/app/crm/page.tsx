@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import { useQuery } from '@tanstack/react-query';
 import { ArrowLeft, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ThemeToggle } from '@/components/theme-toggle';
@@ -18,7 +19,9 @@ import { Importer } from '@/components/crm/importer';
 import { Structure } from '@/components/crm/structure';
 import { Approvals } from '@/components/crm/approvals';
 import { PendingView } from '@/components/crm/pending-view';
-import { useCrmData, useLiveSync } from '@/components/crm/shared';
+import { tasksQuery } from '@/components/crm/task-list';
+import type { PendingChat } from '@/lib/crm/pending-info';
+import { api, useCrmData, useLiveSync } from '@/components/crm/shared';
 import type { CustomerFilter } from '@/lib/crm/filters';
 
 const TAB_LABEL: Record<CrmTab, string> = {
@@ -43,6 +46,10 @@ export default function CrmPage() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const { data, error, isLoading } = useCrmData();
   const { newBuild } = useLiveSync();
+  // Red number on "Pendientes": detected chats to attend + your own to-dos due today or overdue.
+  const { data: pend } = useQuery({ queryKey: ['crm-pending'], queryFn: () => api<{ chats: PendingChat[] }>('/api/crm/pending') });
+  const { data: tasks } = useQuery(tasksQuery());
+  const pendingCount = (pend?.chats.length ?? 0) + (tasks?.tasks.filter((t) => t.dueDate && t.dueDate <= tasks.today).length ?? 0);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -102,6 +109,9 @@ export default function CrmPage() {
               )}
             >
               {TAB_LABEL[t]}
+              {t === 'pendientes' && pendingCount > 0 && (
+                <span className="ml-1.5 rounded-full bg-rose-500 px-1.5 py-0.5 text-[10px] font-medium text-white">{pendingCount}</span>
+              )}
             </button>
           ))}
         </nav>
