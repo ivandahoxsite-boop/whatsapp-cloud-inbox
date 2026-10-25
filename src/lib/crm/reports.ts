@@ -18,6 +18,8 @@ export type SalesReport = {
   droppedProducts: { customerId: number; customer: string; product: string; lastAt: string; times: number; amount: number }[];
   sellers: string[];
   zones: string[];
+  /** Years that have sales, newest first (for the year menu). Not narrowed by the filters. */
+  years: string[];
 };
 
 const bucket = (): Bucket => ({ amount: 0, qty: 0, sales: 0, customers: new Set() });
@@ -145,7 +147,8 @@ export function salesReport(filter: SalesReportFilter = {}, now = new Date()): S
       .slice(0, 15),
     droppedProducts: dropped,
     sellers: [...sellers].sort(),
-    zones: [...zones].sort()
+    zones: [...zones].sort(),
+    years: (getDb().prepare('SELECT DISTINCT substr(sold_at, 1, 4) AS y FROM sales ORDER BY y DESC').all() as unknown as { y: string }[]).map((r) => r.y)
   };
 }
 

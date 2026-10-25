@@ -48,7 +48,6 @@ const Section = ({ title, hint, children }: { title: string; hint?: string; chil
 );
 
 export function SalesReportView({ onOpenCustomer }: { onOpenCustomer: (id: number) => void }) {
-  const thisYear = new Date().getFullYear();
   const [year, setYear] = useState<string>('');
   const [seller, setSeller] = useState('');
   const [zone, setZone] = useState('');
@@ -66,7 +65,7 @@ export function SalesReportView({ onOpenCustomer }: { onOpenCustomer: (id: numbe
     placeholderData: (prev) => prev
   });
 
-  const years = Array.from({ length: thisYear - 2019 }, (_, i) => String(thisYear - i));
+  const years = data?.years ?? [];
   const monthly = data?.byMonth ?? [];
 
   return (
