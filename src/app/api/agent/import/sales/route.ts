@@ -21,7 +21,15 @@ export async function POST(request: Request) {
     if (sales.length > MAX) return json({ error: `Máximo ${MAX} por envío; divide en lotes` }, 400);
     const onConflict = options.onConflict === 'skip' ? 'skip' : 'allow';
     const sharedPhones = Array.isArray(options.sharedPhones) ? options.sharedPhones : [];
-    return json(upsertSales(sales, { dryRun: options.dryRun === true, onConflict, sharedPhones }));
+    return json(
+      upsertSales(sales, {
+        dryRun: options.dryRun === true,
+        onConflict,
+        sharedPhones,
+        allowNoPhone: options.allowNoPhone === true,
+        updateExisting: options.updateExisting === true
+      })
+    );
   } catch (e) {
     return fail(e);
   }
