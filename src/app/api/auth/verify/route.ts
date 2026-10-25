@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { verifyTotp } from '@/lib/crm/totp';
-import { hasPin, unlockCookie, verifyPin } from '@/lib/crm/lock';
+import { hasPin, verifyPin } from '@/lib/crm/lock';
 import { TWOFA_COOKIE, makeToken, twofaKey } from '@/lib/twofa-token';
 
 export const runtime = 'nodejs';
@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic';
 
 // Second step of the login. The middleware has already checked the password (or private link); this checks the
 // 6-digit code from the authenticator app and, when a 4-digit key has been created for Ventas, that key too.
-// Only when everything is right does it set the cookie that lets this browser in (and unlocks Ventas for 30 min).
+// Only when everything is right does it set the cookie that lets this browser in. Ventas keeps asking for its own key.
 const attempts = { fails: 0, until: 0 };
 let lastStep = 0; // a code can be used once
 
@@ -48,7 +48,6 @@ export async function POST(request: Request) {
   const token = await makeToken(twofaKey(password, secret), days * 86_400);
   const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
   const res = NextResponse.json({ ok: true });
-  if (needPin) res.headers.append('Set-Cookie', unlockCookie());
   res.headers.append('Set-Cookie', `${TWOFA_COOKIE}=${token}; Path=/; Max-Age=${days * 86_400}; HttpOnly; SameSite=Lax${secure}`);
   return res;
 }
