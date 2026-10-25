@@ -4,7 +4,8 @@ import { fail, guardAgent, json } from '@/lib/crm/agent-http';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-// GET ?limit=5 -> { text, counts, ... }. `text` is ready to post in Telegram as is.
+// GET ?limit=5 -> { quiet, reason, text, counts, ... }. `text` is ready to post in Telegram as is.
+// `quiet: true` (Sunday or Colombian holiday): post NOTHING.
 export async function GET(request: Request) {
   const denied = guardAgent(request);
   if (denied) return denied;

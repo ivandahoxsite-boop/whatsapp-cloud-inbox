@@ -27,7 +27,7 @@ Base URL: `$CRM_BASE_URL` (on the same server: `http://127.0.0.1:4000`). Every r
 | Can this customer be called about a debt now? (customers the user picked) | `GET /api/agent/collections/check?q=<name>` or `?customerId=<id>` |
 | Who may be called about a debt right now (only if the user asks for a list) | `GET /api/agent/collections/queue?minDays=30&minAmount=0&limit=10` |
 | Log a finished collection call | `POST /api/agent/customers/{id}/calls` body `{"outcome":"promesa_pago","summary":"...","promiseDate":"2026-10-30","promiseAmount":1500000,"durationSec":80}` |
-| Morning brief (ready-made text) | `GET /api/agent/digest` → post `text` as is |
+| Morning brief (ready-made text) | `GET /api/agent/digest` → post `text` as is. **If `quiet` is `true` (Sunday or Colombian holiday) post nothing at all.** |
 | Sales report (totals, seller, zone, products) | `GET /api/agent/reports/sales?from=2026-01-01&to=2026-12-31&seller=<name>&zone=<zone>` |
 | See pending/sent proposals | `GET /api/agent/messages?status=pending` |
 
@@ -64,7 +64,7 @@ The CRM decides WHO may be called and WHEN; you only dial what it returns.
 - Report the batch result to the user in Telegram: how many reached, promises (customer, date, amount), who asked for a person.
 
 ## Daily brief and recurring loads
-- **Morning brief.** When asked (or on the schedule the user sets, e.g. every weekday at 8:00), call `GET /api/agent/digest` and send its `text` to Telegram unchanged. Do not invent customers or numbers that are not in it, and never say a message was sent.
+- **Morning brief.** When asked (or on the schedule the user sets: Monday to Saturday at 8:00), call `GET /api/agent/digest` and send its `text` to Telegram unchanged. If the response has `quiet: true` (Sunday or a Colombian holiday) send nothing, not even a note. It already includes the user's own to-dos ("📌 Tus pendientes", written in the CRM's Pendientes tab); never add or invent to-dos. Do not invent customers or numbers that are not in it, and never say a message was sent.
 - **Sales questions.** "¿Cuánto vendió Ivan en 2025 por zona?" → `GET /api/agent/reports/sales?from=2025-01-01&to=2025-12-31&seller=IVAN HOYOS`; answer from `totals`, `byZone`, `topProducts`. `droppedProducts` lists customers who stopped taking a product (good reason to message them); `combos` lists products bought together.
 - **Weekly reload from the billing system.** Because `externalId` makes re-sending safe, the same load can be repeated every week or month: (1) read only the new period from the billing system, (2) run it with `"dryRun": true` first, (3) if `conflicts` is empty and `skipped` is as expected, send it for real, (4) report `created`, `duplicates`, `skipped` and any `conflicts` to the user. If there are conflicts, stop and ask which client owns each phone.
 

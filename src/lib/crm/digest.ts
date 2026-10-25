@@ -5,6 +5,9 @@ import { getDb } from './db';
 import { receivablesSummary } from './receivables';
 import { callWindow, scheduledCalls } from './collections';
 import { offsiteWarning } from './offsite';
+import { listTasks } from './tasks';
+import { pendingChats } from './pending';
+import { addDays, dayProblem, dueLabel, todayCo } from './tasks-info';
 
 const money = (n: number) => `$${Math.round(n).toLocaleString('es-CO')}`;
 const label = (c: Customer) => `${c.name || `+${c.phone}`}${c.city ? ` (${c.city})` : ''}`;
@@ -20,7 +23,20 @@ function ago(iso: string | null): string {
 const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 
 /** The morning brief: who is waiting for an answer, who is due to buy, who to win back, and how sales are going. */
-export function buildDigest(limit = 5) {
+export function buildDigest(limit = 5, now = Date.now()) {
+  // Sundays and Colombian holidays: nothing is sent (the caller posts nothing when `quiet` is true).
+  const day = todayCo(now);
+  const closed = dayProblem(day);
+  if (closed) {
+    return {
+      quiet: true as const,
+      reason: closed,
+      text: '',
+      counts: { overdueReceivables: 0, awaiting: 0, due: 0, pendingApprovals: 0, noPhoneWithSales: 0, tasksToday: 0, tasksOverdue: 0 },
+      sales30: 0,
+      salesPrev30: 0
+    };
+  }
   const customers = listCustomers().filter((c) => c.hasPhone);
   const awaiting = customers
     .filter((c) => c.awaitingReply)
@@ -44,6 +60,28 @@ export function buildDigest(limit = 5) {
 
   const lines: string[] = ['☀️ Resumen del día'];
   lines.push(`Ventas últimos 30 días: ${money(sales.last30)}${delta == null ? '' : ` (${delta >= 0 ? '+' : ''}${delta}% vs los 30 anteriores)`}`);
+
+  // The user's own to-dos (written in the CRM's Pendientes tab): overdue and today, then the next 3 days.
+  const tasks = listTasks();
+  const overdueTasks = tasks.filter((t) => t.dueDate && t.dueDate < day);
+  const todayTasks = tasks.filter((t) => t.dueDate === day);
+  const soon = tasks.filter((t) => t.dueDate && t.dueDate > day && t.dueDate <= addDays(day, 3));
+  const taskLine = (t: (typeof tasks)[number]) => {
+    const when = dueLabel(t.dueDate, day, t.dueTime);
+    return `• ${t.dueTime || t.dueDate !== day ? `${when} · ` : ''}${clip(t.text, 90)}${t.name ? ` — ${t.name}` : ''}`;
+  };
+  if (overdueTasks.length + todayTasks.length) {
+    lines.push('', `📌 Tus pendientes (${overdueTasks.length + todayTasks.length})`);
+    const shown = [...overdueTasks, ...todayTasks];
+    for (const t of shown.slice(0, limit * 2)) lines.push(taskLine(t));
+    if (shown.length > limit * 2) lines.push(`… y ${shown.length - limit * 2} más en la pestaña Pendientes`);
+  }
+  if (soon.length) {
+    lines.push('', `🗓 Próximos 3 días (${soon.length})`);
+    for (const t of soon.slice(0, limit)) lines.push(taskLine(t));
+  }
+  const loose = pendingChats().filter((c) => c.reason !== 'sin_respuesta').length;
+  if (loose) lines.push('', `🗂 ${loose} chat${loose === 1 ? '' : 's'} quedaron en el aire o sin cotización cerrada (pestaña Pendientes).`);
 
   if (awaiting.length) {
     lines.push('', `⏳ Esperan tu respuesta (${awaiting.length})`);
@@ -102,8 +140,18 @@ export function buildDigest(limit = 5) {
   if (lines.length === 2 && !awaiting.length && !due.length) lines.push('', 'Nada urgente hoy.');
 
   return {
+    quiet: false as const,
+    reason: '',
     text: lines.join('\n'),
-    counts: { overdueReceivables: owed.totals.overdue, awaiting: awaiting.length, due: due.length, pendingApprovals: pending, noPhoneWithSales: noPhone },
+    counts: {
+      overdueReceivables: owed.totals.overdue,
+      awaiting: awaiting.length,
+      due: due.length,
+      pendingApprovals: pending,
+      noPhoneWithSales: noPhone,
+      tasksToday: todayTasks.length,
+      tasksOverdue: overdueTasks.length
+    },
     sales30: sales.last30,
     salesPrev30: sales.prev30
   };
