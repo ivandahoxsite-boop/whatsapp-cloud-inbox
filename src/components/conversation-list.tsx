@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
+import { DebtBadge, phoneKey, useDebts } from '@/components/debt-badge';
 import { differenceInDays, differenceInHours, differenceInMinutes, format, isValid, isYesterday } from 'date-fns';
 import { Bell, BellOff, Check, ChevronDown, Plus, RefreshCw, Search, Settings, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -151,6 +152,7 @@ export function ConversationList({ onSelectThread, selectedThreadKey, isHidden =
   const searchInputRef = useRef<HTMLInputElement>(null);
   const previousThreadSnapshotsRef = useRef<Map<string, ThreadNotificationSnapshot>>(new Map());
   const hasInitializedNotificationSnapshotsRef = useRef(false);
+  const debts = useDebts();
 
   const {
     data: conversations = [],
@@ -573,6 +575,7 @@ export function ConversationList({ onSelectThread, selectedThreadKey, isHidden =
                       <p className="truncate text-sm font-semibold leading-5 text-foreground">
                         {thread.contactName || thread.phoneNumber || 'Unknown phone number'}
                       </p>
+                      <DebtBadge debt={debts[phoneKey(thread.phoneNumber)]} className="max-w-full" />
                       {thread.lastMessage && (
                         <p className="truncate text-xs leading-4 text-muted-foreground">
                           {thread.lastMessage.direction === 'outbound' && (

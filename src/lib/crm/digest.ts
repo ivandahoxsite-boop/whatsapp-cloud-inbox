@@ -22,6 +22,35 @@ function ago(iso: string | null): string {
 
 const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
 
+export type Promise_ = { id: number; name: string; due: string; amount: number | null };
+
+/** Promises of payment taken in collection calls: due today, and broken ones (promised date passed, still owing). */
+export function paymentPromises(today: string, owing: Set<number>): { dueToday: Promise_[]; broken: Promise_[] } {
+  const promises = getDb()
+    .prepare(
+      `SELECT c.id, c.name, json_extract(a.meta,'$.promiseDate') AS due, json_extract(a.meta,'$.promiseAmount') AS amount
+       FROM activities a JOIN contacts c ON c.id = a.contact_id
+       WHERE a.kind = 'call' AND json_extract(a.meta,'$.outcome') = 'promesa_pago'
+         AND a.id = (SELECT MAX(a2.id) FROM activities a2 WHERE a2.contact_id = a.contact_id AND a2.kind = 'call')
+         AND json_extract(a.meta,'$.promiseDate') <= ? AND json_extract(a.meta,'$.promiseDate') >= date(?, '-7 day')`
+    )
+    .all(today, today) as unknown as Promise_[];
+  return { dueToday: promises.filter((p) => p.due === today), broken: promises.filter((p) => p.due < today && owing.has(p.id)) };
+}
+
+/** Calls the user scheduled for that day (Colombian calendar), with the time, earliest first. */
+export function callsOn(day: string): { contactId: number; name: string; time: string }[] {
+  const co = (iso: string) => new Date(new Date(iso).getTime() - 5 * 3_600_000).toISOString();
+  const todays = scheduledCalls().filter((c) => c.scheduledAt && co(c.scheduledAt).slice(0, 10) === day);
+  if (!todays.length) return [];
+  const names = new Map(
+    (getDb().prepare('SELECT id, name FROM contacts').all() as unknown as { id: number; name: string }[]).map((c) => [c.id, c.name])
+  );
+  return todays
+    .map((t) => ({ contactId: t.contactId, name: names.get(t.contactId) ?? '', time: co(t.scheduledAt!).slice(11, 16) }))
+    .sort((a, b) => a.time.localeCompare(b.time));
+}
+
 /** The morning brief: who is waiting for an answer, who is due to buy, who to win back, and how sales are going. */
 export function buildDigest(limit = 5, now = Date.now()) {
   // Sundays and Colombian holidays: nothing is sent (the caller posts nothing when `quiet` is true).
@@ -100,20 +129,8 @@ export function buildDigest(limit = 5, now = Date.now()) {
     lines.push('', `💰 Cartera vencida: ${money(owed.totals.overdue)} de ${money(owed.totals.balance)} por cobrar`);
     for (const d of owed.debtors.filter((x) => x.overdue > 0).slice(0, 3)) lines.push(`• ${d.name || d.phone} — ${money(d.overdue)} · ${d.oldestDays} días de mora`);
   }
-  // Promises of payment taken in collection calls: due today, and broken ones (promised date passed, still owing).
-  const today = new Date(Date.now() - 5 * 3_600_000).toISOString().slice(0, 10);
-  const promises = getDb()
-    .prepare(
-      `SELECT c.id, c.name, json_extract(a.meta,'$.promiseDate') AS due, json_extract(a.meta,'$.promiseAmount') AS amount
-       FROM activities a JOIN contacts c ON c.id = a.contact_id
-       WHERE a.kind = 'call' AND json_extract(a.meta,'$.outcome') = 'promesa_pago'
-         AND a.id = (SELECT MAX(a2.id) FROM activities a2 WHERE a2.contact_id = a.contact_id AND a2.kind = 'call')
-         AND json_extract(a.meta,'$.promiseDate') <= ? AND json_extract(a.meta,'$.promiseDate') >= date(?, '-7 day')`
-    )
-    .all(today, today) as unknown as { id: number; name: string; due: string; amount: number | null }[];
-  const owing = new Set(owed.debtors.map((x) => x.contactId));
-  const dueToday = promises.filter((p) => p.due === today);
-  const broken = promises.filter((p) => p.due < today && owing.has(p.id));
+  const today = day;
+  const { dueToday, broken } = paymentPromises(today, new Set(owed.debtors.map((x) => x.contactId)));
   if (dueToday.length) {
     lines.push('', `📞 Prometieron pagar hoy (${dueToday.length})`);
     for (const p of dueToday.slice(0, limit)) lines.push(`• ${p.name || 'Cliente'}${p.amount ? ` — ${money(p.amount)}` : ''}`);
@@ -122,15 +139,10 @@ export function buildDigest(limit = 5, now = Date.now()) {
     lines.push('', `⚠️ Prometieron pagar y no lo han hecho (${broken.length})`);
     for (const p of broken.slice(0, limit)) lines.push(`• ${p.name || 'Cliente'} — prometió el ${p.due}`);
   }
-  // Calls the user scheduled for today (Colombian calendar), with the time.
-  const todays = scheduledCalls().filter((c) => c.scheduledAt && new Date(new Date(c.scheduledAt).getTime() - 5 * 3_600_000).toISOString().slice(0, 10) === today);
+  const todays = callsOn(today);
   if (todays.length) {
-    const byId = new Map(listCustomers().map((c) => [c.id, c]));
     lines.push('', `📅 Llamadas que programaste para hoy (${todays.length})`);
-    for (const t of todays.slice(0, limit)) {
-      const hh = new Date(new Date(t.scheduledAt!).getTime() - 5 * 3_600_000).toISOString().slice(11, 16);
-      lines.push(`• ${hh} — ${byId.get(t.contactId)?.name || 'Cliente'}`);
-    }
+    for (const t of todays.slice(0, limit)) lines.push(`• ${t.time} — ${t.name || 'Cliente'}`);
   }
   const backupWarning = offsiteWarning();
   if (backupWarning) lines.push('', backupWarning);

@@ -131,7 +131,7 @@ export default function CrmPage() {
       <main className="relative z-10 mx-auto max-w-6xl p-3 sm:p-4">
         {isLoading && <p className="text-sm text-muted-foreground">Cargando…</p>}
         {error && <p className="text-sm text-destructive">{(error as Error).message}</p>}
-        {data && tab === 'resumen' && <Overview data={data} onFilter={showCustomers} />}
+        {data && tab === 'resumen' && <Overview data={data} onFilter={showCustomers} onPending={() => setTab('pendientes')} onOpenCustomer={setOpenId} />}
         {data && tab === 'clientes' && (
           <CustomersView
             data={data}

@@ -231,3 +231,28 @@ export function customerReceivables(contactId: number, now = new Date()): Custom
 export function markReceivablePaid(id: number) {
   getDb().prepare("UPDATE receivables SET status = 'paid', balance = 0, paid_at = date('now'), updated_at = datetime('now') WHERE id = ?").run(id);
 }
+
+export type DebtFlag = { contactId: number; balance: number; overdue: number; days: number };
+
+/**
+ * What each customer owes, keyed by WhatsApp number (digits), for the warning in the inbox and the customer file.
+ * Only customers with an open balance appear.
+ */
+export function debtsByPhone(now = new Date()): Record<string, DebtFlag> {
+  const rows = getDb()
+    .prepare(
+      `SELECT r.contact_id, r.issued_at, r.due_at, r.balance, c.phone FROM receivables r JOIN contacts c ON c.id = r.contact_id
+       WHERE r.status = 'open' AND r.balance > 0`
+    )
+    .all() as unknown as { contact_id: number; issued_at: string | null; due_at: string | null; balance: number; phone: string }[];
+  const out: Record<string, DebtFlag> = {};
+  for (const r of rows) {
+    if (!/^\d{7,}$/.test(r.phone)) continue;
+    const f = (out[r.phone] ??= { contactId: r.contact_id, balance: 0, overdue: 0, days: 0 });
+    const late = daysLate(r, now);
+    f.balance += r.balance;
+    if (late > 0) f.overdue += r.balance;
+    f.days = Math.max(f.days, late);
+  }
+  return out;
+}

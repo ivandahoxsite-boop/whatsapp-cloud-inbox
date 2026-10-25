@@ -8,13 +8,24 @@ import { RECURRENCE_INFO, SEGMENT_INFO, type Recurrence, type Segment } from '@/
 import { buildActions } from '@/lib/crm/actions';
 import { cityKey, type CustomerFilter } from '@/lib/crm/filters';
 import type { Summary } from '@/app/api/crm/summary/route';
+import { TodayCard } from './today-card';
 import { RECURRENCE_COLOR, SEGMENT_COLOR, TagPill, ago, api, card, cityOptions, displayName, money, type CrmData } from './shared';
 
 const MONTHS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 const monthLabel = (ym: string) => `${MONTHS[Number(ym.slice(5)) - 1]} ${ym.slice(2, 4)}`;
 const pct = (a: number, b: number) => (b > 0 ? Math.round((a / b) * 100) : 0);
 
-export function Overview({ data, onFilter }: { data: CrmData; onFilter: (f: CustomerFilter) => void }) {
+export function Overview({
+  data,
+  onFilter,
+  onPending,
+  onOpenCustomer
+}: {
+  data: CrmData;
+  onFilter: (f: CustomerFilter) => void;
+  onPending: () => void;
+  onOpenCustomer: (id: number) => void;
+}) {
   const [city, setCity] = useState('');
   const { data: summary } = useQuery({
     queryKey: ['crm-summary', data.customers.length],
@@ -96,6 +107,7 @@ export function Overview({ data, onFilter }: { data: CrmData; onFilter: (f: Cust
 
   return (
     <div className="space-y-4">
+      <TodayCard onPending={onPending} onOpenCustomer={onOpenCustomer} />
       <div className="flex items-center gap-2">
         <MapPin className="h-4 w-4 text-muted-foreground" />
         <select value={city} onChange={(e) => setCity(e.target.value)} className="h-9 rounded-full border border-border/60 bg-card/50 px-3 text-sm">

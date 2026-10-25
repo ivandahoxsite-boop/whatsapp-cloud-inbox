@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { DebtBadge, phoneKey, useDebts } from "@/components/debt-badge";
 import {
   format,
   formatDistanceToNow,
@@ -336,6 +337,7 @@ export function MessageView({
   const queryClient = useQueryClient();
   const lastSeenText = formatLastSeen(lastActiveAt);
   const displayPhoneNumber = formatDisplayPhoneNumber(phoneNumber);
+  const debts = useDebts();
   const displayInboxPhoneNumber = formatDisplayPhoneNumber(inboxPhoneNumber);
   const threadConversationIds = useMemo(() => {
     const conversationIds = conversations.map(
@@ -870,6 +872,7 @@ export function MessageView({
               <h2 className="truncate text-sm font-medium text-foreground sm:text-base">
                 {contactName || phoneNumber || "Conversation"}
               </h2>
+              <DebtBadge debt={debts[phoneKey(phoneNumber)]} className="max-w-full" />
               {displayPhoneNumber && (
                 <p className="truncate text-xs text-muted-foreground">
                   {lastSeenText

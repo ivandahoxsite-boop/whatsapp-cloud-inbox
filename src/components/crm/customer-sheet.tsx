@@ -123,6 +123,25 @@ function SheetBody({ c, data, onClose }: { c: Customer; data: CrmData; onClose: 
           />
         </DialogTitle>
         <DialogDescription className="text-xs">{formatPhone(c.phone)}</DialogDescription>
+        {(() => {
+          // Debt warning before you answer or sell: overdue amount and the oldest invoice's days late.
+          const open = detail?.receivables ?? [];
+          const late = open.filter((r) => r.daysLate > 0);
+          if (!open.length) return null;
+          const owed = late.length ? late.reduce((a, r) => a + r.balance, 0) : open.reduce((a, r) => a + r.balance, 0);
+          const days = Math.max(0, ...open.map((r) => r.daysLate));
+          return (
+            <p
+              className={
+                late.length
+                  ? `mt-2 rounded-lg px-2 py-1.5 text-sm font-medium ${days > 60 ? 'bg-rose-500/15 text-rose-500' : 'bg-amber-500/15 text-amber-500'}`
+                  : 'mt-2 rounded-lg bg-muted px-2 py-1.5 text-sm text-muted-foreground'
+              }
+            >
+              {late.length ? `⚠️ Debe $${money(owed)} · ${days} días de mora` : `Debe $${money(owed)} · al día`}
+            </p>
+          );
+        })()}
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
           <RecurrencePill recurrence={c.recurrence} />
           <SegmentPill segment={c.segment} />
