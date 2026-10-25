@@ -4,6 +4,7 @@ import { getDb } from './db';
 import { addActivity, fillContactName, findOrCreateContactByPhone, hasMessageActivity } from './agent-store';
 import { messageText } from './kapso-events';
 import { normalizePhone } from './customers';
+import { fillTranscripts } from './transcripts';
 
 // One-shot import of the WhatsApp history Kapso already stored, so the CRM is not limited
 // to messages that arrive after the webhook was created. Read-only on Kapso's side:
@@ -255,6 +256,8 @@ export function startSync(phoneNumberId: string, mode: SyncMode = 'full'): SyncS
         state.phase = 'nombres';
         await fillNamesFromContacts(phoneNumberId);
       }
+      // Voice notes stored before Kapso had transcribed them (every crm-update runs an incremental sync).
+      await fillTranscripts(phoneNumberId, 90).catch(() => 0);
     } catch (e) {
       state.error = e instanceof Error ? e.message : String(e);
     } finally {

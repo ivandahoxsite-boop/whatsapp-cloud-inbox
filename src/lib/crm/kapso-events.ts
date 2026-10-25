@@ -15,7 +15,14 @@ type KapsoPayload = {
   is_new_conversation?: boolean;
 };
 
-export type EventResult = { handled: boolean; duplicate?: boolean; contactId?: number; created?: boolean };
+export type EventResult = {
+  handled: boolean;
+  duplicate?: boolean;
+  contactId?: number;
+  created?: boolean;
+  /** A voice note stored without its transcript yet (Kapso adds it a bit later). */
+  needsTranscript?: boolean;
+};
 
 const transcriptText = (t: unknown) => (typeof t === 'string' ? t : t && typeof t === 'object' && typeof (t as { text?: unknown }).text === 'string' ? (t as { text: string }).text : '');
 
@@ -65,5 +72,5 @@ export function handleKapsoEvent(event: string, payload: KapsoPayload, idempoten
     message_id: payload.message?.id,
     type: payload.message?.type
   });
-  return { handled: true, contactId: id, created };
+  return { handled: true, contactId: id, created, needsTranscript: text === '🎤 Audio' || text === '[audio]' };
 }

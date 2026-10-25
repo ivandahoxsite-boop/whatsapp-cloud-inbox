@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { kapsoSignatureOk } from '@/lib/crm/auth';
 import { handleKapsoEvent } from '@/lib/crm/kapso-events';
+import { scheduleTranscriptFill } from '@/lib/crm/transcripts';
 
 export const runtime = 'nodejs';
 
@@ -29,6 +30,8 @@ export async function POST(request: Request) {
   items.forEach((item, i) => {
     const r = handleKapsoEvent(event, item as never, key ? `${key}:${i}` : undefined);
     if (r.handled && !r.duplicate) processed++;
+    const phoneNumberId = (item as { phone_number_id?: string }).phone_number_id || process.env.PHONE_NUMBER_ID;
+    if (r.needsTranscript && phoneNumberId) scheduleTranscriptFill(phoneNumberId);
   });
   return NextResponse.json({ ok: true, processed });
 }
