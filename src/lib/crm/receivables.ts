@@ -262,7 +262,12 @@ export function debtsByPhone(now = new Date()): Record<string, DebtFlag> {
 }
 
 /** When OpenClaw loads the aging report from AnaliX: Monday to Saturday (not holidays), Colombian time. */
-export const LOAD_TIMES = ['09:00', '13:00', '17:40'];
+export const LOAD_TIMES = ['10:45', '15:00', '17:45'];
+
+/** "lun-sáb 10:45 a. m., 3:00 p. m. y 5:45 p. m." */
+export const LOAD_SCHEDULE_LABEL = `lun-sáb ${LOAD_TIMES.map((t) => `${Number(t.slice(0, 2)) % 12 || 12}:${t.slice(3)} ${Number(t.slice(0, 2)) < 12 ? 'a. m.' : 'p. m.'}`)
+  .join(', ')
+  .replace(/, ([^,]*)$/, ' y $1')}`;
 /** A load counts as missed this long after its time (it takes a few minutes). */
 const GRACE_MS = 20 * 60_000;
 
@@ -273,6 +278,8 @@ export type ReceivablesFreshness = {
   stale: boolean;
   /** Next scheduled load (ISO). */
   nextAt: string;
+  /** The load schedule in words, for the screen. */
+  schedule: string;
 };
 
 /** Instant of a "HH:MM" Colombian time on a "YYYY-MM-DD" day (Colombia is UTC-5 all year). */
@@ -302,12 +309,12 @@ export function receivablesFreshness(now = Date.now()): ReceivablesFreshness | n
     const t = LOAD_TIMES.find((x) => slotMs(day, x) > now);
     if (t) nextAt = new Date(slotMs(day, t)).toISOString();
   }
-  return { loadedAt, missed, stale: missed > 0, nextAt };
+  return { loadedAt, missed, stale: missed > 0, nextAt, schedule: LOAD_SCHEDULE_LABEL };
 }
 
 /** One line for the morning brief, or null when the report is up to date. */
 export function receivablesStaleWarning(now = Date.now()): string | null {
   const f = receivablesFreshness(now);
   if (!f?.stale) return null;
-  return `⚠️ La cartera no se actualiza desde el ${coDateTime(f.loadedAt)}: faltaron ${f.missed} actualizaci${f.missed === 1 ? 'ón' : 'ones'} programada${f.missed === 1 ? '' : 's'} (lun-sáb 9:00 a. m., 1:00 p. m. y 5:40 p. m.). Los avisos de deuda pueden estar viejos: revisa las cargas de OpenClaw.`;
+  return `⚠️ La cartera no se actualiza desde el ${coDateTime(f.loadedAt)}: faltaron ${f.missed} actualizaci${f.missed === 1 ? 'ón' : 'ones'} programada${f.missed === 1 ? '' : 's'} (${LOAD_SCHEDULE_LABEL}). Los avisos de deuda pueden estar viejos: revisa las cargas de OpenClaw.`;
 }

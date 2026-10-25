@@ -103,7 +103,7 @@ export function ReceivablesView({ onOpenCustomer }: { onOpenCustomer: (id: numbe
               OpenClaw.
             </p>
           ) : (
-            <p className="mt-0.5">Próxima: {dayWord(data.freshness.nextAt)}{coDateTime(data.freshness.nextAt)} · se actualiza lun-sáb 9:00 a. m., 1:00 p. m. y 5:40 p. m.</p>
+            <p className="mt-0.5">Próxima: {dayWord(data.freshness.nextAt)}{coDateTime(data.freshness.nextAt)} · se actualiza {data.freshness.schedule}</p>
           )}
         </div>
       )}
