@@ -43,6 +43,8 @@ export type CallInput = {
   promiseDate?: string;
   promiseAmount?: number;
   durationSec?: number;
+  /** Who made the call: the agent (default) or the user from the CRM. */
+  by?: 'agent' | 'user';
 };
 
 /** Stores a finished call on the customer's timeline. Returns a warning when it was made outside the allowed window. */
@@ -63,7 +65,7 @@ export function recordCall(contactId: number, input: CallInput, now = new Date()
     promiseAmount: Number.isFinite(amount) && amount > 0 ? amount : undefined,
     durationSec: Number.isFinite(Number(input.durationSec)) ? Number(input.durationSec) : undefined,
     outsideWindow: !window.allowed,
-    by: 'agent'
+    by: input.by === 'user' ? 'user' : 'agent'
   }, now.toISOString().slice(0, 19).replace('T', ' '));
   if (input.outcome === 'no_llamar') addTags([contactId], [ensureTag('No llamar')]);
   getDb().prepare("UPDATE call_requests SET status = 'done', closed_at = datetime('now') WHERE contact_id = ? AND status = 'pending'").run(contactId);

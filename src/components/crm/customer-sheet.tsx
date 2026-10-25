@@ -126,14 +126,22 @@ function SheetBody({ c, data, onClose }: { c: Customer; data: CrmData; onClose: 
           <span className="text-xs text-muted-foreground">Potencial {c.score}/100</span>
         </div>
         {c.hasPhone ? (
-          <a
-            href={`https://wa.me/${c.phone}`}
-            target="_blank"
-            rel="noreferrer"
-            className="mt-3 inline-flex h-9 items-center gap-2 rounded-full bg-emerald-500/15 px-4 text-sm font-medium text-emerald-500 hover:bg-emerald-500/25"
-          >
-            <MessageCircle className="h-4 w-4" /> Escribir por WhatsApp
-          </a>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <a
+              href={`https://wa.me/${c.phone}`}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex h-9 items-center gap-2 rounded-full bg-emerald-500/15 px-4 text-sm font-medium text-emerald-500 hover:bg-emerald-500/25"
+            >
+              <MessageCircle className="h-4 w-4" /> Escribir por WhatsApp
+            </a>
+            <a
+              href={`tel:+${c.phone}`}
+              className="inline-flex h-9 items-center gap-2 rounded-full bg-sky-500/15 px-4 text-sm font-medium text-sky-400 hover:bg-sky-500/25"
+            >
+              <Phone className="h-4 w-4" /> Llamar
+            </a>
+          </div>
         ) : (
           <form
             className="mt-3 flex gap-2"

@@ -15,8 +15,7 @@ export function ReceivablesView({ onOpenCustomer }: { onOpenCustomer: (id: numbe
   const [seller, setSeller] = useState('');
   const [bucket, setBucket] = useState<string>('');
   const [note, setNote] = useState('');
-  const { data: marked } = useQuery({ queryKey: ['crm-call-requests'], queryFn: () => api<{ ids: number[] }>('/api/crm/collections/call-requests') });
-  const toCall = new Set(marked?.ids ?? []);
+  const [calling, setCalling] = useState<number | null>(null); // the customer whose call result is being typed
   const { data, isLoading, error } = useQuery({
     queryKey: ['crm-receivables', seller, bucket],
     queryFn: () => {
@@ -39,25 +38,19 @@ export function ReceivablesView({ onOpenCustomer }: { onOpenCustomer: (id: numbe
     }
   };
 
-  // Marks (or un-marks) a customer to be called. The CRM checks right away whether the customer can be called.
-  const toggleCall = async (contactId: number, name: string) => {
+  // Opens the phone's dialer. Before that the CRM checks the collection rules (hours, holidays, asked not to be called...)
+  // and warns; the decision to call anyway is yours.
+  const dial = async (contactId: number, name: string, phone: string) => {
     setNote('');
     try {
-      if (toCall.has(contactId)) {
-        await api('/api/crm/collections/call-requests', 'DELETE', { contactId });
-        setNote(`${name || 'El cliente'} ya no está en la lista para llamar.`);
-      } else {
-        const r = await api<{ callableNow: boolean; window: string }>('/api/crm/collections/call-requests', 'POST', { contactId });
-        setNote(
-          r.callableNow
-            ? `${name || 'El cliente'} quedó en la lista para llamar. OpenClaw te pedirá tu OK por Telegram antes de marcar.`
-            : `${name || 'El cliente'} quedó en la lista. Ahora no se puede llamar: ${r.window}. Se llamará cuando abra el horario.`
-        );
-      }
-      qc.invalidateQueries({ queryKey: ['crm-call-requests'] });
-    } catch (e) {
-      setNote(`No se puede llamar a ${name || 'este cliente'}: ${(e as Error).message}`);
+      const r = await api<{ checks: { allowed: boolean; reasons: string[] }[] }>(`/api/crm/collections/check?customerId=${contactId}`);
+      const c = r.checks[0];
+      if (c && !c.allowed && !confirm(`No es buen momento para cobrar a ${name || 'este cliente'}:\n\n• ${c.reasons.join('\n• ')}\n\n¿Llamar de todos modos?`)) return;
+    } catch {
+      /* if the check fails, do not stop the call */
     }
+    setCalling(contactId);
+    window.location.href = `tel:+${phone}`;
   };
 
   if (isLoading) return <p className="text-sm text-muted-foreground">Calculando…</p>;
@@ -164,13 +157,14 @@ export function ReceivablesView({ onOpenCustomer }: { onOpenCustomer: (id: numbe
             </button>
           </p>
         ) : (
-          <p className="mb-3 text-xs text-muted-foreground">Los que más tienen vencido primero. El recordatorio queda en Aprobaciones; no sale solo. <b>Llamar</b> marca al cliente para que OpenClaw lo llame (con tu OK).</p>
+          <p className="mb-3 text-xs text-muted-foreground">Los que más tienen vencido primero. El recordatorio queda en Aprobaciones; no sale solo. <b>Llamar</b> abre el marcador de tu celular y después te deja anotar cómo te fue.</p>
         )}
         {note && <p className="mb-3 rounded-md border bg-background/40 p-2 text-xs">{note}</p>}
         <ul className="space-y-2">
           {data.debtors.length === 0 && <li className="text-xs text-muted-foreground">Nadie en este rango.</li>}
           {data.debtors.map((d) => (
-            <li key={d.contactId} className="flex items-center gap-2 rounded-lg border border-border/60 bg-background/40 p-2">
+            <li key={d.contactId} className="rounded-lg border border-border/60 bg-background/40 p-2">
+              <div className="flex items-center gap-2">
               <button onClick={() => onOpenCustomer(d.contactId)} className="min-w-0 flex-1 text-left">
                 <p className="truncate text-sm font-medium">{d.name || formatPhone(d.phone)}</p>
                 <p className="truncate text-xs text-muted-foreground">
@@ -189,20 +183,103 @@ export function ReceivablesView({ onOpenCustomer }: { onOpenCustomer: (id: numbe
                   <Button size="sm" variant="outline" onClick={() => remind(d.contactId, d.name)}>
                     Recordar
                   </Button>
-                  <Button
-                    size="sm"
-                    variant={toCall.has(d.contactId) ? 'default' : 'outline'}
-                    onClick={() => toggleCall(d.contactId, d.name)}
-                    aria-pressed={toCall.has(d.contactId)}
-                  >
-                    {toCall.has(d.contactId) ? '📞 En la lista' : 'Llamar'}
+                  <Button size="sm" variant="outline" onClick={() => dial(d.contactId, d.name, d.phone)}>
+                    📞 Llamar
                   </Button>
                 </div>
+              )}
+              </div>
+              {calling === d.contactId && (
+                <CallLog
+                  contactId={d.contactId}
+                  name={d.name}
+                  onClose={() => setCalling(null)}
+                  onSaved={(m) => {
+                    setCalling(null);
+                    setNote(m);
+                    qc.invalidateQueries({ queryKey: ['crm'] });
+                  }}
+                />
               )}
             </li>
           ))}
         </ul>
       </section>
+    </div>
+  );
+}
+
+const OUTCOMES: [string, string][] = [
+  ['promesa_pago', 'Prometió pagar'],
+  ['ya_pago', 'Dice que ya pagó'],
+  ['sin_respuesta', 'No contestó'],
+  ['buzon', 'Buzón de voz'],
+  ['rechaza', 'No quiso hablar'],
+  ['numero_equivocado', 'Número equivocado'],
+  ['no_llamar', 'Pidió que no lo llamen'],
+  ['otro', 'Otro']
+];
+
+/** Short form to leave what happened on a call; it lands in the customer's timeline as "Llamada de cobro". */
+function CallLog({ contactId, name, onClose, onSaved }: { contactId: number; name: string; onClose: () => void; onSaved: (msg: string) => void }) {
+  const [outcome, setOutcome] = useState('promesa_pago');
+  const [summary, setSummary] = useState('');
+  const [promiseDate, setPromiseDate] = useState('');
+  const [promiseAmount, setPromiseAmount] = useState('');
+  const [err, setErr] = useState('');
+  const save = async () => {
+    setErr('');
+    try {
+      await api(`/api/crm/customers/${contactId}/calls`, 'POST', {
+        outcome,
+        summary,
+        promiseDate: outcome === 'promesa_pago' ? promiseDate : undefined,
+        promiseAmount: outcome === 'promesa_pago' && promiseAmount ? Number(promiseAmount.replace(/\D/g, '')) : undefined
+      });
+      onSaved(`Llamada a ${name || 'el cliente'} guardada en su ficha.`);
+    } catch (e) {
+      setErr((e as Error).message);
+    }
+  };
+  const field = 'mt-1 w-full rounded-md border bg-transparent px-2 py-1.5 text-sm outline-none focus:border-primary/60';
+  return (
+    <div className="mt-2 space-y-2 border-t border-border/60 pt-2">
+      <p className="text-xs font-medium">¿Cómo te fue con {name || 'el cliente'}?</p>
+      <select value={outcome} onChange={(e) => setOutcome(e.target.value)} className={cn(field, 'h-9')} aria-label="Resultado">
+        {OUTCOMES.map(([v, l]) => (
+          <option key={v} value={v}>
+            {l}
+          </option>
+        ))}
+      </select>
+      {outcome === 'promesa_pago' && (
+        <div className="grid grid-cols-2 gap-2">
+          <label className="text-xs text-muted-foreground">
+            Pagará el
+            <input type="date" value={promiseDate} onChange={(e) => setPromiseDate(e.target.value)} className={field} />
+          </label>
+          <label className="text-xs text-muted-foreground">
+            Monto (opcional)
+            <input inputMode="numeric" value={promiseAmount} onChange={(e) => setPromiseAmount(e.target.value)} placeholder="1500000" className={field} />
+          </label>
+        </div>
+      )}
+      <textarea
+        value={summary}
+        onChange={(e) => setSummary(e.target.value)}
+        rows={2}
+        placeholder="Resumen: con quién hablaste y qué dijo"
+        className={field}
+      />
+      {err && <p className="text-xs text-destructive">{err}</p>}
+      <div className="flex gap-2">
+        <Button size="sm" onClick={save} disabled={!summary.trim()}>
+          Guardar llamada
+        </Button>
+        <Button size="sm" variant="ghost" onClick={onClose}>
+          Ahora no
+        </Button>
+      </div>
     </div>
   );
 }
