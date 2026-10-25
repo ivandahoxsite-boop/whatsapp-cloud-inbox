@@ -19,12 +19,34 @@ function unauthorized(): NextResponse {
   });
 }
 
+/**
+ * A change (POST, PATCH, DELETE...) sent by another website from this browser. Browsers attach the saved Basic Auth
+ * password to those requests, so without this check a malicious page could send WhatsApp messages or change data.
+ * Scripts on the server (curl) send no Origin and no Sec-Fetch-Site, so they are not affected.
+ */
+function crossSiteWrite(request: NextRequest): boolean {
+  if (['GET', 'HEAD', 'OPTIONS'].includes(request.method)) return false;
+  const origin = request.headers.get('origin');
+  if (origin) {
+    const host = request.headers.get('x-forwarded-host') || request.headers.get('host') || request.nextUrl.host;
+    try {
+      return new URL(origin).host !== host;
+    } catch {
+      return true;
+    }
+  }
+  return request.headers.get('sec-fetch-site') === 'cross-site';
+}
+
 // Protects every page and API route with HTTP Basic Auth.
 // Fails closed: without INBOX_PASSWORD the inbox is not served at all.
 export async function middleware(request: NextRequest) {
   const password = process.env.INBOX_PASSWORD?.trim();
   if (!password) {
     return new NextResponse('INBOX_PASSWORD environment variable is not set', { status: 503 });
+  }
+  if (crossSiteWrite(request)) {
+    return NextResponse.json({ error: 'Origen no permitido' }, { status: 403 });
   }
 
   // Optional private access link: open /?key=<INBOX_ACCESS_KEY> once and this browser stays signed in

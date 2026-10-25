@@ -33,6 +33,8 @@ export function getDb(): DatabaseSync {
   db.exec(`
     PRAGMA journal_mode = WAL;
     PRAGMA foreign_keys = ON;
+    -- Wait (instead of failing with "database is locked") while a server script writes at the same time.
+    PRAGMA busy_timeout = 5000;
     CREATE TABLE IF NOT EXISTS fields (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       entity TEXT NOT NULL CHECK (entity IN ('contact','sale')),

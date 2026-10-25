@@ -32,7 +32,7 @@ export async function GET(
     return new NextResponse(buffer, {
       headers: {
         'Content-Type': metadata.mimeType || 'application/octet-stream',
-        'Cache-Control': 'public, max-age=86400'
+        'Cache-Control': 'private, max-age=86400' // customers' photos and voice notes: never in a shared cache
       }
     });
   } catch (error) {
