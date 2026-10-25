@@ -1,4 +1,5 @@
 import { getDb } from './db';
+import { addDays, dayProblem, todayCo } from './tasks-info';
 import { findContactByNit, normalizeCity, normalizePhone, parseAmount, parseDate, placeholderKey, normalizeNit } from './customers';
 
 export type ReceivableUpsert = {
@@ -117,6 +118,8 @@ export function upsertReceivables(items: ReceivableUpsert[], options: Receivable
         res.closed++;
       }
     }
+    // When the last real load happened: the debt warnings are only as fresh as this.
+    if (!options.dryRun && seen.size) d.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('receivables_loaded_at', datetime('now'))").run();
     d.exec(options.dryRun ? 'ROLLBACK' : 'COMMIT');
   } catch (e) {
     d.exec('ROLLBACK');
@@ -214,7 +217,8 @@ export function receivablesSummary(filter: { seller?: string; bucket?: AgingKey 
     bucket: filter.bucket ?? null,
     bySeller: [...bySeller].map(([name, v]) => ({ name, ...v })).sort((a, b) => b.overdue - a.overdue || b.balance - a.balance),
     debtors: [...debtors.values()].sort((a, b) => b.overdue - a.overdue || b.balance - a.balance).slice(0, 100),
-    sellers: [...sellers].sort()
+    sellers: [...sellers].sort(),
+    freshness: receivablesFreshness(now.getTime())
   };
 }
 export type ReceivablesSummary = ReturnType<typeof receivablesSummary>;
@@ -255,4 +259,39 @@ export function debtsByPhone(now = new Date()): Record<string, DebtFlag> {
     f.days = Math.max(f.days, late);
   }
   return out;
+}
+
+export type ReceivablesFreshness = { loadedAt: string; workdaysOld: number; stale: boolean };
+
+/**
+ * How old the loaded aging report is, in working days (Monday-Saturday, not Colombian holidays). Today counts from
+ * 7:50 in Colombia, when the daily 7:30 load should already have run (so the 8:00 brief notices a failed load). Null when no receivables were ever loaded.
+ */
+export function receivablesFreshness(now = Date.now()): ReceivablesFreshness | null {
+  const d = getDb();
+  const set = d.prepare("SELECT value FROM settings WHERE key = 'receivables_loaded_at'").get() as { value: string } | undefined;
+  // Loads made before this was recorded: the newest change to any invoice.
+  const last = set?.value ?? (d.prepare('SELECT MAX(updated_at) AS t FROM receivables').get() as { t: string | null }).t;
+  if (!last) return null;
+  const loadedAt = `${last.replace(' ', 'T')}Z`;
+  const loadedDay = todayCo(Date.parse(loadedAt));
+  const today = todayCo(now);
+  const co = new Date(now - 5 * 3_600_000);
+  const minuteCo = co.getUTCHours() * 60 + co.getUTCMinutes();
+  let workdaysOld = 0;
+  for (let day = addDays(loadedDay, 1); day <= today; day = addDays(day, 1)) {
+    if (dayProblem(day)) continue;
+    if (day === today && minuteCo < 7 * 60 + 50) continue;
+    workdaysOld++;
+  }
+  return { loadedAt, workdaysOld, stale: workdaysOld >= 1 };
+}
+
+/** One line for the morning brief, or null when the report is up to date. */
+export function receivablesStaleWarning(now = Date.now()): string | null {
+  const f = receivablesFreshness(now);
+  if (!f?.stale) return null;
+  const day = new Date(Date.parse(f.loadedAt) - 5 * 3_600_000).toISOString().slice(0, 10);
+  const label = new Date(`${day}T12:00:00Z`).toLocaleDateString('es-CO', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
+  return `⚠️ La cartera no se actualiza desde hace ${f.workdaysOld} día${f.workdaysOld === 1 ? '' : 's'} hábil${f.workdaysOld === 1 ? '' : 'es'} (última carga: ${label}). Los avisos de deuda pueden estar viejos: revisa la carga diaria de OpenClaw.`;
 }

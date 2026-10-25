@@ -2,7 +2,7 @@ import { listCustomers, type Customer } from './customers';
 import { buildActions } from './actions';
 import { listOutbox } from './agent-store';
 import { getDb } from './db';
-import { receivablesSummary } from './receivables';
+import { receivablesStaleWarning, receivablesSummary } from './receivables';
 import { callWindow, scheduledCalls } from './collections';
 import { offsiteWarning } from './offsite';
 import { listTasks } from './tasks';
@@ -144,6 +144,8 @@ export function buildDigest(limit = 5, now = Date.now()) {
     lines.push('', `📅 Llamadas que programaste para hoy (${todays.length})`);
     for (const t of todays.slice(0, limit)) lines.push(`• ${t.time} — ${t.name || 'Cliente'}`);
   }
+  const staleReceivables = receivablesStaleWarning(now);
+  if (staleReceivables) lines.push('', staleReceivables);
   const backupWarning = offsiteWarning();
   if (backupWarning) lines.push('', backupWarning);
   if (!callWindow().allowed) lines.push('', `🕒 Ahora no se puede llamar para cobrar: ${callWindow().reason}.`);

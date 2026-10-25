@@ -8,6 +8,16 @@ import type { ReceivablesSummary } from '@/lib/crm/receivables';
 import { api, card, formatPhone, money } from './shared';
 
 const select = 'h-9 rounded-full border border-border/60 bg-card/50 px-3 text-sm';
+/** "hoy 7:31 a. m.", "ayer 7:30 a. m." or "lun 20 oct 7:30 a. m." in Colombian time. */
+function loadedLabel(iso: string): string {
+  const co = (ms: number) => new Date(ms - 5 * 3_600_000).toISOString().slice(0, 10);
+  const day = co(Date.parse(iso));
+  const days = Math.round((Date.parse(co(Date.now())) - Date.parse(day)) / 86_400_000);
+  const time = new Date(iso).toLocaleTimeString('es-CO', { hour: 'numeric', minute: '2-digit', timeZone: 'America/Bogota' });
+  const when = days === 0 ? 'hoy' : days === 1 ? 'ayer' : new Date(`${day}T12:00:00Z`).toLocaleDateString('es-CO', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
+  return `${when} ${time}`;
+}
+
 const AGING_COLOR = ['#34d399', '#fbbf24', '#fb923c', '#f87171', '#e11d48'];
 
 export function ReceivablesView({ onOpenCustomer }: { onOpenCustomer: (id: number) => void }) {
@@ -85,6 +95,19 @@ export function ReceivablesView({ onOpenCustomer }: { onOpenCustomer: (id: numbe
           </option>
         ))}
       </select>
+
+      {data.freshness && (
+        <p
+          className={cn(
+            'rounded-xl border px-3 py-2 text-xs',
+            data.freshness.stale ? 'border-amber-500/40 bg-amber-500/10 text-amber-500' : 'border-border/60 text-muted-foreground'
+          )}
+        >
+          {data.freshness.stale ? '⚠️ ' : ''}Cartera cargada {loadedLabel(data.freshness.loadedAt)}
+          {data.freshness.stale &&
+            ` · lleva ${data.freshness.workdaysOld} día${data.freshness.workdaysOld === 1 ? '' : 's'} hábil${data.freshness.workdaysOld === 1 ? '' : 'es'} sin actualizarse: los saldos pueden estar viejos. Revisa la carga diaria de OpenClaw.`}
+        </p>
+      )}
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {[
