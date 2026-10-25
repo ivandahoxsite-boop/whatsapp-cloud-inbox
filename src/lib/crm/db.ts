@@ -205,6 +205,12 @@ function migrate(d: DatabaseSync) {
     );
     CREATE INDEX IF NOT EXISTS campaign_items_status_idx ON campaign_items(campaign_id, status);
     CREATE INDEX IF NOT EXISTS campaign_items_sent_idx ON campaign_items(sent_at);
+    -- Chats the user closed from the "Pendientes" tab; they come back only if the customer writes again.
+    CREATE TABLE IF NOT EXISTS chat_resolutions (
+      contact_id INTEGER PRIMARY KEY REFERENCES contacts(id) ON DELETE CASCADE,
+      kind TEXT NOT NULL DEFAULT 'resolved' CHECK (kind IN ('resolved','ignored')),
+      resolved_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
     CREATE TABLE IF NOT EXISTS segments (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,

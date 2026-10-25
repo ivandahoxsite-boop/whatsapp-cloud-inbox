@@ -17,6 +17,7 @@ import { SegmentsView } from '@/components/crm/segments-view';
 import { Importer } from '@/components/crm/importer';
 import { Structure } from '@/components/crm/structure';
 import { Approvals } from '@/components/crm/approvals';
+import { PendingView } from '@/components/crm/pending-view';
 import { useCrmData, useLiveSync } from '@/components/crm/shared';
 import type { CustomerFilter } from '@/lib/crm/filters';
 
@@ -25,6 +26,7 @@ const TAB_LABEL: Record<CrmTab, string> = {
   clientes: 'Clientes',
   ventas: 'Ventas',
   cartera: 'Cartera',
+  pendientes: 'Pendientes',
   segmentos: 'Segmentos',
   campanas: 'Campañas',
   aprobaciones: 'Aprobaciones',
@@ -138,6 +140,7 @@ export default function CrmPage() {
           </LockGate>
         )}
         {data && tab === 'cartera' && <ReceivablesView onOpenCustomer={setOpenId} />}
+        {tab === 'pendientes' && <PendingView onOpenCustomer={setOpenId} />}
         {data && tab === 'segmentos' && <SegmentsView data={data} draft={draft} setDraft={setDraft} onOpen={showCustomers} />}
         {data && tab === 'campanas' && <Campaigns data={data} />}
         {tab === 'aprobaciones' && <Approvals />}
