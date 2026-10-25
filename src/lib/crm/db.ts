@@ -167,6 +167,15 @@ function migrate(d: DatabaseSync) {
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
     CREATE INDEX IF NOT EXISTS receivables_contact_idx ON receivables(contact_id, status);
+    -- Customers the user marked "to call" about a debt. OpenClaw dials only these, only when the rules allow it.
+    CREATE TABLE IF NOT EXISTS call_requests (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      contact_id INTEGER NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
+      status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','done','cancelled')),
+      requested_at TEXT NOT NULL DEFAULT (datetime('now')),
+      closed_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS call_requests_idx ON call_requests(status, contact_id);
     -- WhatsApp template campaigns: one row per recipient; nothing is sent until a person starts the campaign.
     CREATE TABLE IF NOT EXISTS campaigns (
       id INTEGER PRIMARY KEY AUTOINCREMENT,

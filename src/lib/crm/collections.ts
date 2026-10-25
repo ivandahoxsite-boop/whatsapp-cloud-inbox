@@ -66,6 +66,7 @@ export function recordCall(contactId: number, input: CallInput, now = new Date()
     by: 'agent'
   }, now.toISOString().slice(0, 19).replace('T', ' '));
   if (input.outcome === 'no_llamar') addTags([contactId], [ensureTag('No llamar')]);
+  getDb().prepare("UPDATE call_requests SET status = 'done', closed_at = datetime('now') WHERE contact_id = ? AND status = 'pending'").run(contactId);
   if (promiseDate) {
     getDb()
       .prepare("UPDATE contacts SET data = json_set(data, '$.promesa_pago', ?) WHERE id = ?")
@@ -160,7 +161,7 @@ export type CallCheck = {
  * For customers the user picked by hand: can each one be called right now, and if not, why. `q` finds customers by name
  * (up to 5), `customerId` checks one.
  */
-export function checkCustomers(by: { customerId?: number; q?: string }, now = new Date()) {
+export function checkCustomers(by: { customerId?: number; q?: string }, now = new Date(), options: { ignoreWindow?: boolean } = {}) {
   const window = callWindow(now);
   const d = getDb();
   const block = blocks(now);
@@ -180,7 +181,7 @@ export function checkCustomers(by: { customerId?: number; q?: string }, now = ne
   const checks: CallCheck[] = rows.map((r) => {
     const debt = debtors.get(r.id);
     const reasons: string[] = [];
-    if (!window.allowed) reasons.push(window.reason);
+    if (!window.allowed && !options.ignoreWindow) reasons.push(window.reason);
     if (!/^\d{7,}$/.test(r.phone)) reasons.push('No tiene teléfono');
     if (!debt || debt.overdue <= 0) reasons.push('No tiene deuda vencida');
     const why = block.get(r.id);
@@ -189,4 +190,39 @@ export function checkCustomers(by: { customerId?: number; q?: string }, now = ne
     return { customerId: r.id, name: r.name, phone: r.phone, allowed: reasons.length === 0, reasons, overdue: Math.round(debt?.overdue ?? 0), oldestDays: debt?.oldestDays ?? 0, docs };
   });
   return { window, checks };
+}
+
+// ---- Customers marked "to call" in the CRM --------------------------------------------------------------------
+
+/**
+ * Marks a customer to be called. Refuses when something about the customer makes a call impossible (no phone, no
+ * overdue debt, asked not to be called, promise pending, reached this week). The hours are NOT checked here, so
+ * calls can be lined up for tomorrow; they are checked again when the agent is about to dial.
+ */
+export function requestCall(contactId: number, now = new Date()): { ok: true; window: CallWindow } | { ok: false; reasons: string[] } {
+  const { checks, window } = checkCustomers({ customerId: contactId }, now, { ignoreWindow: true });
+  const c = checks[0];
+  if (!c) throw new Error('Cliente no encontrado');
+  if (!c.allowed) return { ok: false, reasons: c.reasons };
+  const d = getDb();
+  if (!d.prepare("SELECT 1 FROM call_requests WHERE contact_id = ? AND status = 'pending'").get(contactId)) {
+    d.prepare('INSERT INTO call_requests (contact_id) VALUES (?)').run(contactId);
+  }
+  return { ok: true, window };
+}
+
+export function cancelCallRequest(contactId: number) {
+  getDb().prepare("UPDATE call_requests SET status = 'cancelled', closed_at = datetime('now') WHERE contact_id = ? AND status = 'pending'").run(contactId);
+}
+
+/** Ids of the customers currently marked to call. */
+export function pendingCallIds(): number[] {
+  return (getDb().prepare("SELECT contact_id AS id FROM call_requests WHERE status = 'pending' ORDER BY id").all() as unknown as { id: number }[]).map((r) => r.id);
+}
+
+/** What the agent reads: each marked customer with a fresh check (hours included). It dials only those with `allowed`. */
+export function requestedCalls(now = new Date()) {
+  const window = callWindow(now);
+  const checks = pendingCallIds().flatMap((id) => checkCustomers({ customerId: id }, now).checks);
+  return { window, requested: checks };
 }

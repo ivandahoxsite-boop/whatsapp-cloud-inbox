@@ -15,6 +15,8 @@ export function ReceivablesView({ onOpenCustomer }: { onOpenCustomer: (id: numbe
   const [seller, setSeller] = useState('');
   const [bucket, setBucket] = useState<string>('');
   const [note, setNote] = useState('');
+  const { data: marked } = useQuery({ queryKey: ['crm-call-requests'], queryFn: () => api<{ ids: number[] }>('/api/crm/collections/call-requests') });
+  const toCall = new Set(marked?.ids ?? []);
   const { data, isLoading, error } = useQuery({
     queryKey: ['crm-receivables', seller, bucket],
     queryFn: () => {
@@ -34,6 +36,27 @@ export function ReceivablesView({ onOpenCustomer }: { onOpenCustomer: (id: numbe
       setNote(`Recordatorio para ${name || 'el cliente'} listo en la pestaña Aprobaciones. No se envía hasta que lo apruebes.`);
     } catch (e) {
       setNote((e as Error).message);
+    }
+  };
+
+  // Marks (or un-marks) a customer to be called. The CRM checks right away whether the customer can be called.
+  const toggleCall = async (contactId: number, name: string) => {
+    setNote('');
+    try {
+      if (toCall.has(contactId)) {
+        await api('/api/crm/collections/call-requests', 'DELETE', { contactId });
+        setNote(`${name || 'El cliente'} ya no está en la lista para llamar.`);
+      } else {
+        const r = await api<{ callableNow: boolean; window: string }>('/api/crm/collections/call-requests', 'POST', { contactId });
+        setNote(
+          r.callableNow
+            ? `${name || 'El cliente'} quedó en la lista para llamar. OpenClaw te pedirá tu OK por Telegram antes de marcar.`
+            : `${name || 'El cliente'} quedó en la lista, pero ahora no se puede llamar (${r.window}). Se llamará cuando abra el horario.`
+        );
+      }
+      qc.invalidateQueries({ queryKey: ['crm-call-requests'] });
+    } catch (e) {
+      setNote(`No se puede llamar a ${name || 'este cliente'}: ${(e as Error).message}`);
     }
   };
 
@@ -141,7 +164,7 @@ export function ReceivablesView({ onOpenCustomer }: { onOpenCustomer: (id: numbe
             </button>
           </p>
         ) : (
-          <p className="mb-3 text-xs text-muted-foreground">Los que más tienen vencido primero. El recordatorio queda en Aprobaciones; no sale solo.</p>
+          <p className="mb-3 text-xs text-muted-foreground">Los que más tienen vencido primero. El recordatorio queda en Aprobaciones; no sale solo. <b>Llamar</b> marca al cliente para que OpenClaw lo llame (con tu OK).</p>
         )}
         {note && <p className="mb-3 rounded-md border bg-background/40 p-2 text-xs">{note}</p>}
         <ul className="space-y-2">
@@ -162,9 +185,19 @@ export function ReceivablesView({ onOpenCustomer }: { onOpenCustomer: (id: numbe
                 </p>
               </div>
               {d.hasPhone && d.overdue > 0 && (
-                <Button size="sm" variant="outline" onClick={() => remind(d.contactId, d.name)}>
-                  Recordar
-                </Button>
+                <div className="flex shrink-0 flex-col gap-1">
+                  <Button size="sm" variant="outline" onClick={() => remind(d.contactId, d.name)}>
+                    Recordar
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant={toCall.has(d.contactId) ? 'default' : 'outline'}
+                    onClick={() => toggleCall(d.contactId, d.name)}
+                    aria-pressed={toCall.has(d.contactId)}
+                  >
+                    {toCall.has(d.contactId) ? '📞 En la lista' : 'Llamar'}
+                  </Button>
+                </div>
               )}
             </li>
           ))}
