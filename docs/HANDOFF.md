@@ -1,53 +1,72 @@
-# Estado del proyecto CRM (para retomar en otro chat)
+# CRM de Ivan (Xsite Group): estado y cómo retomar en otro chat
 
-Rama de trabajo: `ccr-a1c0a3f6-mh5l7b`. Todo lo descrito aquí ya está subido.
+Última actualización: 2026-10-25. Léelo completo antes de tocar nada.
 
-## Qué es
-CRM de ventas sobre la bandeja de WhatsApp (Next.js + SQLite), conectado a **Kapso** (WhatsApp) y a **OpenClaw** (agente en Telegram que corre en el mismo VPS).
+## 0. Cómo trabajar con este usuario (importante)
+- Habla español. Trabaja **solo desde el celular Android** (Chrome + **Termius 7.11.2**, que NO tiene Port Forwarding; no usa Termux ni computador). Dar **comandos de una sola línea y pasos cortos y numerados**. Explicar sin jerga.
+- Suele **pegar comandos en la app equivocada** (Termius vs otra) y **pegar secretos en el chat** (contraseñas, claves, tokens, la clave TOTP). Recordarle SIEMPRE que no pegue claves aquí. Si pega un secreto, tratarlo como filtrado y rotarlo.
+- Después de cada actualización debe **cerrar y abrir la pestaña del CRM** (abre como app "WhatsApp inbox" y guarda la versión vieja en caché).
+- **Antes de borrar o cambiar datos reales:** vista previa, copia de seguridad y confirmación escrita. Nunca asumir que algo está en su servidor: verificar con él.
+- Le molesta la lentitud y las vueltas. Cuando pide "stop/cancela" hay que detenerse de inmediato.
+- Verificar lo que dice OpenClaw (agente de Telegram) con consultas propias: ya se equivocó una vez en un desglose (se corrigió él solo).
 
-## Dónde corre (VPS Ubuntu 24.04, Contabo)
-- Código: `/opt/crm` (usuario de sistema `crm`), servicio systemd `crm`, escucha solo en `127.0.0.1:4000`.
-- HTTPS público con Caddy (`/etc/caddy/Caddyfile`, dominio `*.sslip.io` del VPS). `/api/agent/*` NO se expone a internet.
-- Datos: `/var/lib/crm/crm.db` (fuera del código, no se toca al actualizar). Copias: `/var/backups/crm` (diarias, 14 días) y antes de cada actualización.
-- Configuración y secretos: `/etc/crm/crm.env` (contraseña, API key de Kapso, tokens). `/etc/crm/agent.env` solo con `CRM_AGENT_TOKEN` y `CRM_BASE_URL`, cargado en los servicios `openclaw-gateway` y `openclaw-cali` (drop-in `crm.conf`).
-- Actualizar: `crm-update` (ejecuta `deploy/update.sh`: muestra datos antes/después, compila, respalda, reinicia y trae mensajes nuevos de Kapso).
-- Ver contraseña: `grep '^INBOX_PASSWORD=' /etc/crm/crm.env` (usuario `admin`).
-- El usuario trabaja desde el celular (Termius + Chrome). Darle comandos de una sola línea y pasos cortos.
+## 1. Qué es y dónde corre
+CRM de ventas sobre la bandeja de WhatsApp (Next.js 15 + SQLite `node:sqlite`), conectado a **Kapso** (WhatsApp Cloud API) y a **OpenClaw** (agente en Telegram, mismo VPS).
+- VPS Contabo Ubuntu 24.04, `root@157.173.105.21`. CRM público: **https://157-173-105-21.sslip.io/crm** (usuario `admin`). Caddy con compresión gzip/zstd activada.
+- Código `/opt/crm` (usuario `crm`), servicio systemd `crm` en `127.0.0.1:4000`. `/api/agent/*` NO se expone a internet (solo local, token Bearer `CRM_AGENT_TOKEN`).
+- Datos `/var/lib/crm/crm.db`. Copias locales diarias a las 3:15 en `/var/backups/crm` (14 días) y antes de cada `crm-update`.
+- Secretos en `/etc/crm/crm.env` (nunca en el repo ni en el chat). Kapso: número **+57 318 7349615**, `PHONE_NUMBER_ID` 2792573494138965.
+- **Actualizar el servidor:** el usuario ejecuta `crm-update` (hace `git checkout -B` de `origin/<rama>`, compila, respalda, reinicia). Antes: `git -C /opt/crm status --short` (solo deben salir `.config/` y `.npm/`).
 
-## Funciones hechas
-- Clientes con ciudad, etiquetas, etapas, campos personalizados, notas e historial (compras + WhatsApp).
-- Recurrencia por cliente (primera compra, una vez, recurrente, le toca recomprar, perdido) y valor RFM.
-- Segmentos guardados + filtros + exportar CSV. Resumen (dashboard) móvil.
-- Kapso: webhook firmado (mensajes en vivo) + "Traer historial" (completo o solo lo nuevo), audios transcritos, sin duplicados, resultado guardado en `sync_runs`.
-- "Esperan tu respuesta": último mensaje del cliente sin contestar en los últimos 14 días.
-- API del agente (`docs/openclaw/SKILL.md`): consultar clientes/acciones, notas, etapas, proponer mensajes (aprobación humana), e importar clientes y ventas (`/api/agent/import/customers`, `/api/agent/import/sales`, dedupe por `externalId`, teléfonos colombianos sin 57 se unen al contacto de WhatsApp).
-- Probado con 45.000 ventas / 720 clientes (lista de clientes 0,2 s).
+## 2. Ramas y flujo de despliegue
+- Rama desplegada: **`ccr-a1c0a3f6-mh5l7b`** (la que baja `crm-update`). Rama de trabajo de la sesión anterior: `claude/crm-whatsapp-analixsales-odjlr4` (iguales al cierre de esta sesión).
+- Flujo: commit en la rama de trabajo, probar, y **avance directo** (`git push origin HEAD:ccr-a1c0a3f6-mh5l7b`, comprobar antes con `git merge-base --is-ancestor`). El usuario siempre ha dicho "sí" a pasarlo; aun así avisarle que **solo llega a su servidor cuando él corre `crm-update`**, y que si algo "no aparece" casi siempre es que no lo había pasado o no cerró la pestaña.
+- No hacer PR salvo que lo pida.
 
-## En curso: cargar ventas desde AnaliX vía OpenClaw
-OpenClaw tiene acceso a AnaliX (caché local). Lo que encontró:
-- 44.933 líneas de venta (cliente × producto × mes), 2020–2026, 720 clientes, 2.256 productos. Campos: mes, año, vendedor, zona (11 zonas), producto, descripción, cliente, total, cantidad.
-- **No tiene**: teléfono, número de factura, ciudad (solo zona), día exacto.
-- Plan acordado: cruzar con la hoja de Google Sheets **BD_Clientes** (tiene NIT y teléfonos) por nombre normalizado / NIT.
-- Reglas de carga ya enviadas a OpenClaw: `soldAt` = primer día del mes; `externalId` = `ANX-cliente-año-mes-producto` (estable); producto = código + descripción; `data` = {seller, zone, qty}; etiquetas "Zona X" y "Vendedor Y"; ciudad desde BD_Clientes; lotes de 500; prueba de 10 primero.
-- **Siguiente paso**: OpenClaw debe reportar cuántos de los 720 clientes cruzan con teléfono y cuáles no. Decidir qué hacer con los que no tienen teléfono (el CRM hoy exige teléfono como clave).
+## 3. Seguridad configurada
+- Entrada: contraseña (Basic Auth) o enlace privado (`INBOX_ACCESS_KEY`) → **verificación en dos pasos TOTP** (`/verify`, cookie `crm_2fa` 30 días) que pide código de 6 dígitos **y** la clave de 4 dígitos si ya existe. Activar/desactivar: `bash /opt/crm/deploy/setup-2fa.sh [--off]` (exige un código válido antes de activar). Scripts locales por 127.0.0.1 (crm-update, set-password) entran sin código; `/api/agent` y `/api/webhooks` no cambian.
+- **Clave de 4 dígitos para la pestaña Ventas** (hash en tabla `settings`, cookie de 30 min). **Solo Ventas**: el usuario pidió expresamente que Cartera NO tenga clave. Entrar al CRM NO desbloquea Ventas.
+- `deploy/set-password.sh [--rotate-key]` cambia la contraseña sin mostrarla. **No se sabe si ya la cambió**: confirmarlo.
+- ⚠️ Una clave TOTP se pegó una vez en el chat (la que mostró el script esa vez). Se le dijo que cancelara y regenerara; **confirmar que la activa es una nueva** (si hay duda, volver a correr `setup-2fa.sh`).
+- ⚠️ En `/root` hay `anthropic.key` (clave de API en texto): `chmod 600` y rotarla si estuvo expuesta. También carpeta `evidencia-ataque` y archivos con comandos sobre el puerto 3333/`cnrun.service`: el servidor pareció sufrir un ataque (minero) antes; carga actual baja (~0,3). Ofrecida una revisión de solo lectura; no se hizo.
 
-## Hecho después (carga de AnaliX terminada y mejoras)
-- Cargados 251 clientes / 35.808 ventas ($21.357.561.988) con clave = teléfono; 30 nombres compartían teléfono (221 contactos). Se corrigieron nombres pisados y se revisaron pares dudosos (R2 CAR CUSTOM = antes QUALITA AUDIO; LUXURIOS CAR'S TOY'S = Diego Armando, tel. 3148840643 → pendiente de cargar).
-- Importación de ventas: `dryRun`, detector de teléfonos con clientes distintos (`conflicts`, `onConflict:"skip"`, `sharedPhones`); cada venta guarda `data.client`.
-- El import de clientes ya no pisa nombres existentes (`overwriteName:true` para hacerlo a propósito); `externalId` de más de 80 caracteres se acorta con hash.
-- Clientes sin teléfono: `allowNoPhone:true` + `nit`/`name`; filtro "📵 Sin teléfono"; se agrega el teléfono en la ficha o con `PATCH {phone}` y se fusiona con el chat de WhatsApp si ya existe.
-- Pestaña **Ventas** (por mes, vendedor, zona, productos, combos, productos que dejaron de llevar) y `GET /api/agent/reports/sales`.
-- "Registrar venta" en la ficha del cliente; `GET /api/agent/digest` (resumen diario listo para Telegram).
-- Pestaña **Cartera** (cuentas por cobrar): `POST /api/agent/import/receivables` (por factura, `dryRun`, `closeMissing`+`source`), antigüedad de la deuda, por vendedor, quién debe y botón "Recordar" (queda en Aprobaciones). Se busca al cliente por teléfono o NIT; la cartera aparece también en la ficha del cliente y en el resumen diario.
-- **Clave para ver el dinero**: la pestaña Ventas (solo esa; Cartera queda abierta a propósito) muestra XXXX hasta escribir una clave propia (se crea la primera vez; se guarda con hash en la tabla `settings`). El servidor responde 423 sin la cookie de desbloqueo (30 min). Resumen y Clientes todavía muestran montos. La API del agente (OpenClaw, solo local) no usa esta clave.
-- Pestaña **Campañas**: plantilla de WhatsApp a un segmento. Se arma la lista de destinatarios (sin teléfono, descansando 7 días y sin datos quedan fuera), se revisa/quita gente y un humano pulsa "Aprobar y enviar"; envía hasta `CRM_MAX_CAMPAIGN_SENDS_PER_HOUR` (40) por hora y se detiene tras 3 errores seguidos. El agente NO puede crear ni enviar campañas. Plantillas con botones con variables no se admiten todavía.
-- **Verificación en dos pasos (TOTP)**: `bash /opt/crm/deploy/setup-2fa.sh` (pide un código de la app antes de activar; `--off` la desactiva). Con `CRM_TOTP_SECRET` en `/etc/crm/crm.env`, tras la contraseña/enlace privado el navegador debe pasar por `/verify`: código de 6 dígitos y, si ya existe la clave de 4 dígitos de Ventas, también esa clave (mensaje de error genérico); al pasar, cookie `crm_2fa` (`CRM_2FA_DAYS`=30). Ventas sigue pidiendo su propia clave (no se desbloquea al entrar). Scripts locales (crm-update, set-password) entran directo por 127.0.0.1 sin código; `/api/agent` y `/api/webhooks` no cambian. Si pierdes el celular: por SSH, `setup-2fa.sh --off`.
-- `deploy/prune-sales.sh [--before AAAA-MM-DD]`: borra las ventas anteriores a esa fecha (por defecto 2024-01-01) tras vista previa, copia de seguridad y confirmación escrita (BORRAR). Después, las cargas de AnaliX deben filtrar desde esa fecha o volverán a entrar las ventas viejas.
-- **Cobranza por teléfono (lado CRM)**: `GET /api/agent/collections/queue` (a quién se puede llamar ahora; vacío fuera de horario Ley 2300: L-V 7-19, sáb 8-15 hora Colombia, sin domingos ni festivos; excluye sin teléfono, "no llamar", llamados hoy, alcanzados o con recordatorio en 7 días, promesa vigente) y `POST /api/agent/customers/{id}/calls` (resumen, resultado, promesa de pago → línea de tiempo "Llamada de cobro", y promesas en el resumen diario). Festivos en `src/lib/crm/holidays.ts`. En Cartera, **📞 Llamar** abre el marcador del celular (`tel:`), antes comprueba las reglas y avisa (el usuario decide si llama igual), y un formulario corto guarda la llamada en la ficha (`POST /api/crm/customers/{id}/calls`). La ficha del cliente también tiene Llamar. 📅 **Programar** guarda fecha y hora (hora Colombia, solo dentro del horario permitido; si no, sugiere el siguiente turno) en `call_requests.scheduled_at`; sale en el resumen de las 8:00 de ese día y OpenClaw (cuando haya Twilio) lo lee en `GET /api/agent/collections/requested` con `due`/`allowed`. Antes de eso, marcar clientes (`call_requests`; rechaza si no se puede: sin teléfono, sin deuda vencida, no llamar, promesa vigente, contactado esta semana; el horario se revisa al momento de marcar la llamada) y OpenClaw los lee en `GET /api/agent/collections/requested`. La llamada en sí la hace OpenClaw con el plugin `@openclaw/voice-call` + Twilio (por configurar).
-- **Copia de seguridad fuera del servidor (Google Drive, cifrada)**: `bash /opt/crm/deploy/setup-offsite-backup.sh` (una vez: pide el token de Drive —sacado con `rclone authorize` en Termux— y una frase de cifrado; prueba subir/bajar y deja un cron a las 3:45). `deploy/offsite-backup.sh` hace la copia (comprime, cifra con rclone crypt, sube, verifica, borra las de >30 días, escribe `/var/lib/crm/offsite-backup.json`); `deploy/restore-offsite-backup.sh` lista, baja y descifra una copia a `/var/backups/crm/restored-*.db` sin tocar la base viva. El resumen de las 8:00 avisa si no hay copia buena en 36 h (`src/lib/crm/offsite.ts`). La frase de cifrado debe guardarse aparte: sin ella no se abren las copias. No incluye `/etc/crm/crm.env` (claves).
-- `deploy/set-password.sh` cambia la contraseña sin mostrarla (`--rotate-key` renueva el enlace privado).
-- Pendiente fuera del repo: programar en OpenClaw el resumen de las 8:00 y la recarga semanal (ver `docs/openclaw/SKILL.md`); 465 clientes de AnaliX sin teléfono ($6.55 mil millones; los grandes: JAIMAR, RALLY PASSION, CAMILO SANCHEZ AGUILERA, ORION LUJOS Y SONIDO); 6 pares de teléfonos compartidos por revisar.
+## 4. Estado de los datos (24-oct-2026)
+- 1.207 contactos, ~86.600 mensajes, **14.421 ventas** (2024–2026, $11,3 mil millones). Se **borraron las anteriores a 2024** (`prune-sales.sh`, había copia previa en `/var/backups/crm`).
+- Todas las ventas son de AnaliX (`externalId` `ANX-…`), con `data` {seller, zone, qty, client}. Total cargado antes de podar: 36.790 líneas / $23.185.952.964 (cuadró con AnaliX para los clientes cargados).
+- **Cartera cargada por OpenClaw** (ejemplo del día): ~271 facturas abiertas, ~$602,8M por cobrar, ~$314M vencida, 104 clientes.
+- Clientes de AnaliX **sin teléfono** (eran 465, ~$6,5 mil millones históricos antes de cargar los 4 grandes; ya con filtro 📵 y carga por NIT posible). Los 4 grandes (JAIMAR, RALLY PASSION, CAMILO SANCHEZ AGUILERA, ORION LUJOS Y SONIDO) se cargaron con otro script de OpenClaw sobre contactos de WhatsApp: **JAIMAR→"YESID SANCHEZ Q 🚦" (id 80)** y **RALLY PASSION→"Mile Salazar 🦋" (id 95)**: el usuario NO ha confirmado esos cruces.
+- Devoluciones (411 líneas negativas) y bonificaciones (416 en cero) — conteos de antes de podar los años viejos: el dinero es neto, pero **no cuentan como compra** para recurrencia/último compró.
+- Nombres: R2 CAR CUSTOM = antes QUALITA AUDIO (mismo negocio, $741M bien atribuidos); LUXURIOS CAR'S TOY'S ahora "Diego Armando", tel. 3148840643 (contacto 167); "jefe" = Jose Alfredo Hurtado (hecho, id 17); "Miles"→"Rally Pasión (Mile Salazar)" pedido pero **no confirmado**.
 
-## Pendientes / ideas
-- Campañas: seguimiento de respuestas por campaña, y estados de entrega/lectura vía webhook.
-- Seguridad: cambiar la contraseña con `bash /opt/crm/deploy/set-password.sh --rotate-key` (se cambió varias veces durante la configuración).
+## 5. Funciones (qué hay en el CRM)
+Pestañas: **Resumen, Clientes, Ventas, Cartera, Segmentos, Campañas, Aprobaciones, Importar, Estructura**. En vivo: consulta `/api/crm/version` cada 5 s y recarga solo; aviso "hay versión nueva" si el servidor se actualizó con la pestaña abierta. Lista de clientes en caché hasta que algo se escribe (`dataVersion`).
+- **Clientes/ficha:** ciudad, etiquetas, etapas, campos propios, notas, línea de tiempo (compras, WhatsApp, "Llamada de cobro"), botón WhatsApp y **Llamar** (`tel:`), "Registrar venta", agregar teléfono (fusiona con el chat si ya existe), sección Cartera.
+- **Ventas** (con clave): totales por mes/vendedor/zona/producto, combos, "dejaron de llevar un producto"; zona/vendedor salen de la venta o, si faltan, de las etiquetas `Zona …`/`Vendedor …`; menú de años solo con años que tienen ventas.
+- **Cartera:** por cobrar/vencida, antigüedad por rangos (tocar un rango filtra "Quién debe"), por vendedor, botones **Recordar** (mensaje a Aprobaciones; no sale solo), **📞 Llamar** (revisa reglas, abre el marcador, formulario para guardar resultado/resumen/promesa) y **📅 Programar** (fecha y hora en horario permitido; si no, sugiere el siguiente turno). Detalle en `docs/openclaw/SKILL.md`.
+- **Campañas:** plantilla de WhatsApp a un segmento; lista revisable; un humano pulsa "Aprobar y enviar"; máx. `CRM_MAX_CAMPAIGN_SENDS_PER_HOUR` (40)/h; se detiene tras 3 errores; **nunca probada con clientes reales** (hacer primero una prueba con 2–3 números propios). No admite plantillas con botones con variables.
+- **Reglas de cobranza** (`src/lib/crm/collections.ts`, `holidays.ts`): L–V 7–19, sáb 8–15 (hora Colombia, margen de 15 min), sin domingos ni festivos (Ley Emiliani calculados); una llamada al día; tras contacto efectivo o recordatorio, descanso de 7 días; "no llamar" permanente; promesa vigente bloquea. **No es asesoría legal**: pendiente que un abogado confirme (no está claro que la Ley 2300 aplique igual a deudores empresas).
+- **API del agente** (`docs/openclaw/SKILL.md`): clientes, acciones, notas, mensajes propuestos (aprobación humana), importar clientes/ventas/cartera (`dryRun`, `onConflict`, `sharedPhones`, `allowNoPhone`, `updateExisting` —que NUNCA crea ventas—, `closeMissing`+`source`), reportes de ventas/cartera, **resumen diario** `GET /api/agent/digest` (ventas, esperan respuesta, recompras, cartera vencida, promesas de hoy/incumplidas, llamadas programadas, aviso si la copia en Drive falla).
+- **Scripts de servidor** (`deploy/`): `update.sh`, `install.sh`, `set-password.sh`, `setup-2fa.sh`, `prune-sales.sh [--before]`, `enable-compression.sh`, `diagnose.sh`, `access-check.sh`, y los de copia en Drive (abajo).
+
+## 6. Pendientes (por prioridad) y estado
+1. **OpenClaw, tareas programadas** (mensaje ya entregado al usuario; **no se sabe si lo pegó/ejecutó**): carga diaria de cartera a las 7:30 (con `dryRun` + `closeMissing` y frenos: <70 % de facturas, >15 % cerradas, >5 % omitidas) y resumen a las 8:00 por Telegram. Las cargas de ventas deben pedir solo desde **2024-01-01**.
+2. Confirmar cruces **JAIMAR/Rally Passion**, quién es **Lina Charry** (id 191, $1,1 mil millones en 101 ventas), y que OpenClaw entregue los **totales por año desde AnaliX** para compararlos (nunca los dio). Pendiente cargar LUXURIOS, resolver 6 pares de teléfonos compartidos "negocios distintos" (~$399M) y 17 contactos sin zona (381 ventas, $401M).
+3. Cargar por NIT los clientes sin teléfono restantes y conseguir teléfonos de los grandes.
+4. Prueba pequeña de una **campaña**; cambiar **contraseña** y confirmar TOTP nueva; ícono de pantalla de inicio (el actual es el de plantilla; falta que mande su logo; hay que crear manifest + íconos y re-agregar el acceso directo).
+5. Idea elegida por el usuario: **aviso de deuda en la ficha y en la bandeja** ("⚠️ Debe $X, N días de mora"). Otras ideas de la lista: pedido sugerido ("lo de siempre"), etiquetas por tipo de negocio (BD_Clientes: CAR AUDIO, PROTEC, TOYOTA, ACCESORIOS, CANAM), aviso de caída de compras, metas por vendedor, lista de visitas por ciudad, resumen semanal por vendedor, entradas por vendedor.
+
+## 7. Intentos descartados (no repetir sin motivo)
+- **Copia en Google Drive cifrada** (`setup-offsite-backup.sh`, `offsite-backup.sh`, `restore-offsite-backup.sh`, aviso en el resumen): construida y probada con rclone simulado, **nunca activada**. El usuario desistió: no pudo sacar el token OAuth (Termius sin Port Forwarding; no usó Termux). rclone quedó instalado sin configurar, sin cron. Alternativa mencionada: instantáneas del panel de Contabo.
+- **Agente de voz con IA** para cobrar: investigado (OpenClaw `@openclaw/voice-call`+Twilio, Pipecat, LiveKit, Retell/Vapi/ElevenLabs). **Se decidió no hacerlo por ahora**: el usuario llama desde su celular con el botón. Quedó construido en el CRM lo útil para cuando haya Twilio (`call_requests`, `GET /api/agent/collections/{queue,check,requested}`). Fase 1 propuesta (cerebro + simulador sin teléfono) sin empezar: faltan nombre legal, nombre del asistente, cómo se paga, plazo máximo, quién atiende disputas y tono.
+- **Llamadas por WhatsApp con el número de Kapso:** hoy **no** (llamadas desactivadas en el número; límite de mensajes TIER_250 < 2.000 que Meta exige; verificación de empresa "no revisada"; número en coexistencia sin confirmar compatibilidad; el cliente debe dar permiso).
+- Port Forwarding de Termius: no existe en su versión.
+
+## 8. Trampas técnicas aprendidas
+- `python str.replace` **falla en silencio** si el texto no coincide: usar `assert old in s`. Ya hubo un cambio que no se aplicó (ruta de importación) y OpenClaw lo detectó. Probar por HTTP real (`next start` + `curl`/Playwright), no solo la librería.
+- Next.js rellena `X-Forwarded-For` incluso en llamadas locales: la detección de "llamada local" usa Host + XFF loopback.
+- Builds largos a veces mueren con exit 137 sin causa de recursos: reintentar por partes.
+- Pruebas: `CRM_DB_PATH=/tmp/x.db npx tsx test.ts`; no correr dos veces sobre la misma base; recordar zonas horarias (Colombia UTC-5).
+- Los datos de pruebas con navegador usan Playwright preinstalado.
+
+## 9. Mapa rápido de archivos
+`src/lib/crm/` (db, customers, scoring, receivables, collections, holidays, reports, digest, campaigns, lock, totp, offsite…), `src/app/api/crm/*` (UI), `src/app/api/agent/*` (OpenClaw), `src/components/crm/*` (pantallas), `src/middleware.ts` (auth + 2FA), `deploy/*` (servidor), `docs/openclaw/SKILL.md` (instrucciones del agente).
