@@ -43,10 +43,11 @@ export function collectionMessage(name: string, items: DebtItem[]): { tier: Coll
   const who = greetName(name);
 
   const texts: Record<CollectionTier['level'], string> = {
+    // Level 1: only the oldest overdue invoice, and ask for a payment date (user's choice, 26-oct-2026).
     1:
-      `Hola${who ? ` ${who}` : ''} 👋 Te saludamos de *Xsite Group* · cartera 💼\n\n` +
-      `Tienes pendiente:\n${facturas}\n💰 *Total: ${total}*\n\n` +
-      `¿Nos confirmas la fecha de pago? 🙏 Si ya pagaste, envíanos el soporte ✅`,
+      `Hola${who ? ` ${who}` : ''} 👋 Te escribimos de *Xsite Group* · cartera 💼\n\n` +
+      `Tienes pendiente la factura *${overdue[0].doc}* por *${money(overdue[0].balance)}* (vencida hace ${days} días) 🧾\n\n` +
+      `¿Qué fecha te programamos para el pago? 📅 Respóndenos con el día y lo dejamos agendado ✅`,
     2:
       `Hola${who ? ` ${who}` : ''} 👋 Te escribimos de *Xsite Group* · cartera.\n\n` +
       `Tienes facturas vencidas ⚠️\n${facturas}\n💰 *Total vencido: ${total}*\n\n` +
