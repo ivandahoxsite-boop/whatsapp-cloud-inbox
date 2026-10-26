@@ -22,10 +22,11 @@ export function collectionTier(days: number): CollectionTier | null {
 
 const money = (n: number) => `$${Math.round(n).toLocaleString('es-CO', { maximumFractionDigits: 0, useGrouping: true })}`;
 
-/** First readable word(s) of a WhatsApp/AnaliX name, without emojis; '' when there is nothing usable. */
+/** First name without emojis ("Carlos Serviteca 🙏" -> "Carlos"); two words when the first is very short ("R2 Car"). */
 function greetName(name: string): string {
-  const clean = name.replace(/[^\p{L}\p{N}\s.'-]/gu, ' ').replace(/\s+/g, ' ').trim();
-  return clean && !/^\d+$/.test(clean) ? clean : '';
+  const words = name.replace(/[^\p{L}\p{N}\s.'-]/gu, ' ').replace(/\s+/g, ' ').trim().split(' ').filter(Boolean);
+  if (!words.length || /^\d+$/.test(words.join(''))) return '';
+  return words[0].length <= 2 && words[1] ? `${words[0]} ${words[1]}` : words[0];
 }
 
 export function collectionMessage(name: string, items: DebtItem[]): { tier: CollectionTier; text: string } | null {
@@ -35,34 +36,29 @@ export function collectionMessage(name: string, items: DebtItem[]): { tier: Coll
   const tier = collectionTier(days);
   if (!tier) return null;
   const total = money(overdue.reduce((a, i) => a + i.balance, 0));
-  const shown = overdue.slice(0, 8);
-  const list = shown.map((i) => `• Factura ${i.doc}: ${money(i.balance)} (vencida hace ${i.daysLate} días)`).join('\n');
-  const more = overdue.length > shown.length ? `\n• y ${overdue.length - shown.length} factura(s) más` : '';
+  const shown = overdue.slice(0, 6);
+  const facturas =
+    shown.map((i) => `🧾 ${i.doc}: ${money(i.balance)} (${i.daysLate} días)`).join('\n') +
+    (overdue.length > shown.length ? `\n🧾 y ${overdue.length - shown.length} más` : '');
   const who = greetName(name);
-  const hola = `Hola${who ? ` ${who}` : ''}`;
-  const facturas = `${list}${more}`;
 
   const texts: Record<CollectionTier['level'], string> = {
     1:
-      `${hola}, te saludamos de *Xsite Group*, área de cartera. 😊\n\n` +
-      `Te recordamos que tienes pendiente:\n${facturas}\n\n*Total: ${total}*\n\n` +
-      `¿Nos ayudas confirmando la fecha de pago? Si ya pagaste, por favor envíanos el soporte para descargarlo. ¡Gracias!`,
+      `Hola${who ? ` ${who}` : ''} 👋 Te saludamos de *Xsite Group* · cartera 💼\n\n` +
+      `Tienes pendiente:\n${facturas}\n💰 *Total: ${total}*\n\n` +
+      `¿Nos confirmas la fecha de pago? 🙏 Si ya pagaste, envíanos el soporte ✅`,
     2:
-      `${hola}, te escribimos de *Xsite Group*, área de cartera.\n\n` +
-      `Tu cuenta presenta facturas vencidas:\n${facturas}\n\n*Total vencido: ${total}*\n\n` +
-      `Necesitamos que nos confirmes hoy la fecha de pago para mantener tu cuenta al día y seguir despachando sin inconvenientes. ` +
-      `Si ya pagaste, envíanos el soporte.`,
+      `Hola${who ? ` ${who}` : ''} 👋 Te escribimos de *Xsite Group* · cartera.\n\n` +
+      `Tienes facturas vencidas ⚠️\n${facturas}\n💰 *Total vencido: ${total}*\n\n` +
+      `Por favor confírmanos *hoy* la fecha de pago 📅 para seguir despachando sin inconvenientes 🚚`,
     3:
-      `${hola}. Te contactamos de *Xsite Group*, área de cartera, por el saldo vencido de tu cuenta:\n${facturas}\n\n` +
-      `*Total vencido: ${total}* (${days} días de mora).\n\n` +
-      `Requerimos el pago o un acuerdo de pago en los próximos 3 días hábiles. ` +
-      `Mientras la cuenta tenga saldo vencido, los nuevos despachos a crédito quedan sujetos a revisión de cartera.`,
+      `Hola${who ? ` ${who}` : ''}. *Xsite Group* · cartera ⚠️\n\n` +
+      `Tu cuenta tiene saldo vencido:\n${facturas}\n💰 *Total vencido: ${total}*\n\n` +
+      `Necesitamos el pago o un acuerdo de pago en los próximos *3 días hábiles* ⏳ ¿Cuándo nos puedes pagar?`,
     4:
-      `${hola}. Te contactamos de *Xsite Group*, área de cartera. Tu cuenta tiene un saldo con ${days} días de mora:\n${facturas}\n\n` +
-      `*Total vencido: ${total}*\n\n` +
-      `Este es un llamado formal: si en los próximos 5 días hábiles no recibimos el pago o un acuerdo de pago, ` +
-      `se suspenderán los despachos a crédito y la cuenta pasará a cobro prejurídico. ` +
-      `Queremos evitarlo: respóndenos hoy con tu propuesta de pago.`
+      `${who ? `${who}, t` : 'T'}e contactamos de *Xsite Group* · cartera 🔴\n\n` +
+      `Tu cuenta lleva *${days} días* en mora:\n${facturas}\n💰 *Total vencido: ${total}*\n\n` +
+      `Es un llamado formal 📌 Si en *5 días hábiles* no recibimos el pago o un acuerdo, la cuenta pasa a cobro prejurídico. Respóndenos hoy 🙏`
   };
   return { tier, text: texts[tier.level] };
 }
