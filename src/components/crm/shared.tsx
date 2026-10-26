@@ -209,3 +209,34 @@ export function downloadCustomersCsv(customers: Customer[], data: CrmData, filen
   a.click();
   URL.revokeObjectURL(url);
 }
+
+/** True on a computer (mouse/trackpad, not Android/iPhone): there WhatsApp opens in WhatsApp Web instead of the app. */
+function useDesktop(): boolean {
+  const [desktop, setDesktop] = useState(false);
+  useEffect(() => {
+    setDesktop(!/Android|iPhone|iPad|iPod/i.test(navigator.userAgent) && window.matchMedia('(pointer: fine)').matches);
+  }, []);
+  return desktop;
+}
+
+/**
+ * "Escribir por WhatsApp". On a computer it opens the chat straight in WhatsApp Web, always in the same browser tab
+ * (named "whatsapp-web") instead of a new one each time; on a phone it opens the WhatsApp app (wa.me).
+ */
+export function WhatsAppLink({ phone, text, className, children }: { phone: string; text?: string; className?: string; children: React.ReactNode }) {
+  const desktop = useDesktop();
+  const q = text ? `text=${encodeURIComponent(text)}` : '';
+  if (desktop) {
+    // No rel="noopener": the browser must be able to find and reuse the tab it opened the first time.
+    return (
+      <a href={`https://web.whatsapp.com/send?phone=${phone}${q ? `&${q}` : ''}`} target="whatsapp-web" className={className}>
+        {children}
+      </a>
+    );
+  }
+  return (
+    <a href={`https://wa.me/${phone}${q ? `?${q}` : ''}`} target="_blank" rel="noreferrer" className={className}>
+      {children}
+    </a>
+  );
+}

@@ -11,7 +11,7 @@ import type { Customer } from '@/lib/crm/customers';
 import type { CustomField } from '@/lib/crm/db';
 import { TaskForm } from './task-form';
 import { CustomerTasks } from './task-list';
-import { QUERY_KEY, RecurrencePill, SegmentPill, TagPill, ago, api, cityOptions, formatPhone, money, relativeDays, type CrmData } from './shared';
+import { WhatsAppLink, QUERY_KEY, RecurrencePill, SegmentPill, TagPill, ago, api, cityOptions, formatPhone, money, relativeDays, type CrmData } from './shared';
 
 type Sale = { id: number; soldAt: string; amount: number; product: string };
 type Activity = { id: number; kind: string; text: string; createdAt: string };
@@ -149,14 +149,12 @@ function SheetBody({ c, data, onClose }: { c: Customer; data: CrmData; onClose: 
         </div>
         {c.hasPhone ? (
           <div className="mt-3 flex flex-wrap gap-2">
-            <a
-              href={`https://wa.me/${c.phone}`}
-              target="_blank"
-              rel="noreferrer"
+            <WhatsAppLink
+              phone={c.phone}
               className="inline-flex h-9 items-center gap-2 rounded-full bg-emerald-500/15 px-4 text-sm font-medium text-emerald-500 hover:bg-emerald-500/25"
             >
               <MessageCircle className="h-4 w-4" /> Escribir por WhatsApp
-            </a>
+            </WhatsAppLink>
             <a
               href={`tel:+${c.phone}`}
               className="inline-flex h-9 items-center gap-2 rounded-full bg-sky-500/15 px-4 text-sm font-medium text-sky-400 hover:bg-sky-500/25"

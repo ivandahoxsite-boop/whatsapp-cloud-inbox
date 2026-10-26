@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
 import { PENDING_INFO, type PendingChat, type PendingReason } from '@/lib/crm/pending-info';
-import { api, card, formatPhone, relativeDays, useCrmData } from './shared';
+import { WhatsAppLink, api, card, formatPhone, relativeDays, useCrmData } from './shared';
 import { DatePick, TaskForm } from './task-form';
 import { TaskRow, tasksQuery } from './task-list';
 import { dayProblem, nextMonday, todayCo } from '@/lib/crm/tasks-info';
@@ -134,9 +134,9 @@ export function PendingView({ onOpenCustomer }: { onOpenCustomer: (id: number) =
               </button>
               <div className="mt-2 flex flex-wrap gap-2 text-xs">
                 {c.hasPhone && (
-                  <a href={`https://wa.me/${c.phone}`} target="_blank" rel="noreferrer" className="h-8 rounded-full border px-3 leading-8">
+                  <WhatsAppLink phone={c.phone} className="h-8 rounded-full border px-3 leading-8">
                     WhatsApp
-                  </a>
+                  </WhatsAppLink>
                 )}
                 <button onClick={() => close(c.contactId, 'resolved')} className="h-8 rounded-full bg-emerald-500/20 px-3 text-emerald-400">
                   ✓ Resuelto

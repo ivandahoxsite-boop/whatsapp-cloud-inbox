@@ -9,7 +9,7 @@ import { buildActions } from '@/lib/crm/actions';
 import { cityKey, type CustomerFilter } from '@/lib/crm/filters';
 import type { Summary } from '@/app/api/crm/summary/route';
 import { TodayCard } from './today-card';
-import { RECURRENCE_COLOR, SEGMENT_COLOR, TagPill, ago, api, card, cityOptions, displayName, money, type CrmData } from './shared';
+import { WhatsAppLink, RECURRENCE_COLOR, SEGMENT_COLOR, TagPill, ago, api, card, cityOptions, displayName, money, type CrmData } from './shared';
 
 const MONTHS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 const monthLabel = (ym: string) => `${MONTHS[Number(ym.slice(5)) - 1]} ${ym.slice(2, 4)}`;
@@ -162,14 +162,12 @@ export function Overview({
                   <span className="ml-auto shrink-0 text-[11px] text-amber-500">{ago(c.lastInboundAt)}</span>
                 </div>
                 <p className="line-clamp-2 text-xs text-muted-foreground">“{c.lastInboundText}”</p>
-                <a
-                  href={`https://wa.me/${c.phone}`}
-                  target="_blank"
-                  rel="noreferrer"
+                <WhatsAppLink
+                  phone={c.phone}
                   className="mt-1 inline-flex items-center justify-center gap-1.5 rounded-lg bg-emerald-500/15 px-3 py-1.5 text-xs font-medium text-emerald-500 hover:bg-emerald-500/25"
                 >
                   <MessageCircle className="h-3.5 w-3.5" /> Responder
-                </a>
+                </WhatsAppLink>
               </li>
             ))}
           </ul>
@@ -241,14 +239,13 @@ export function Overview({
                       <p className="text-xs text-muted-foreground">{a.reason}</p>
                     </div>
                   </div>
-                  <a
-                    href={`https://wa.me/${a.customer.phone}?text=${encodeURIComponent(a.message)}`}
-                    target="_blank"
-                    rel="noreferrer"
+                  <WhatsAppLink
+                    phone={a.customer.phone}
+                    text={a.message}
                     className="mt-auto inline-flex items-center justify-center gap-1.5 rounded-lg bg-emerald-500/15 px-3 py-2 text-xs font-medium text-emerald-500 hover:bg-emerald-500/25"
                   >
                     <MessageCircle className="h-3.5 w-3.5" /> Escribir con mensaje sugerido
-                  </a>
+                  </WhatsAppLink>
                 </li>
               ))}
             </ul>
