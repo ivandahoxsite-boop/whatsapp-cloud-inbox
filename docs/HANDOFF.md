@@ -73,5 +73,7 @@ Pestañas: **Resumen, Clientes, Ventas, Cartera, Segmentos, Campañas, Aprobacio
 - Pruebas: `CRM_DB_PATH=/tmp/x.db npx tsx test.ts`; no correr dos veces sobre la misma base; recordar zonas horarias (Colombia UTC-5).
 - Los datos de pruebas con navegador usan Playwright preinstalado.
 
+- **"Application error: a client-side exception"** (26-oct): era la página vieja en el celular pidiendo piezas de código que ya no existen tras una actualización (404 → ChunkLoadError). Arreglo: `dynamic = 'force-dynamic'` en el layout raíz (HTML `no-store`), script que recarga una vez ante ChunkLoadError, `app/error.tsx` y `app/global-error.tsx` con mensaje y botón Recargar, y reporte al servidor (`/api/client-error`). **Ver errores del navegador:** `journalctl -u crm --since today --no-pager | grep CLIENT-ERROR | tail -20`.
+
 ## 9. Mapa rápido de archivos
 `src/lib/crm/` (db, customers, scoring, receivables, collections, holidays, reports, digest, campaigns, lock, totp, offsite…), `src/app/api/crm/*` (UI), `src/app/api/agent/*` (OpenClaw), `src/components/crm/*` (pantallas), `src/middleware.ts` (auth + 2FA), `deploy/*` (servidor), `docs/openclaw/SKILL.md` (instrucciones del agente).
