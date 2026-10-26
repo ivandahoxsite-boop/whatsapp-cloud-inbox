@@ -53,10 +53,11 @@ export function collectionMessage(name: string, items: DebtItem[]): { tier: Coll
       `Hola${who ? ` ${who}` : ''} 👋 Te escribimos de *Xsite Group* · cartera ⚠️\n\n` +
       `La factura *${overdue[0].doc}* por *${money(overdue[0].balance)}* ya lleva *${days} días* vencida 🧾\n\n` +
       `Necesitamos que nos confirmes *hoy* la fecha de pago 📅 para seguir despachando sin inconvenientes 🚚`,
+    // Level 3: only the oldest overdue invoice; keep the relationship, ask which day (user's choice, 26-oct-2026).
     3:
       `Hola${who ? ` ${who}` : ''} 👋 Te escribimos de *Xsite Group* · cartera.\n\n` +
-      `${facturas}\n💰 *Total vencido: ${total}*\n\n` +
-      `Queremos seguir trabajando contigo 🤝 pero necesitamos que te pongas al día. Confírmanos hoy cuándo realizas el pago 🙏`,
+      `La factura *${overdue[0].doc}* por *${money(overdue[0].balance)}* lleva *${days} días* vencida 🧾\n\n` +
+      `Queremos seguir trabajando contigo 🤝 pero necesitamos que te pongas al día. Confírmanos hoy *qué día* realizas el pago 📅🙏`,
     4:
       `${who ? `${who}, t` : 'T'}e contactamos de *Xsite Group* · cartera 🔴\n\n` +
       `Tu cuenta lleva *${days} días* en mora:\n${facturas}\n💰 *Total vencido: ${total}*\n\n` +
