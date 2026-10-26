@@ -261,3 +261,21 @@ export function WhatsAppLink({
     </a>
   );
 }
+
+/**
+ * Before opening WhatsApp with a payment reminder: checks the collection rules (hours, Sundays and holidays, a payment
+ * promise in force, already contacted today). Returns true to open with the message, '' to open the chat without it,
+ * false to cancel. If the check itself fails it does not block.
+ */
+export async function checkCollection(contactId: number): Promise<boolean | string> {
+  try {
+    const r = await api<{ checks: { allowed: boolean; reasons: string[] }[] }>(`/api/crm/collections/check?customerId=${contactId}`);
+    const ch = r.checks[0];
+    if (ch && !ch.allowed) {
+      return confirm(`No es buen momento para cobrarle:\n\n• ${ch.reasons.join('\n• ')}\n\n¿Abrir el chat SIN el mensaje de cobro?`) ? '' : false;
+    }
+  } catch {
+    /* if the check fails, do not block the message */
+  }
+  return true;
+}

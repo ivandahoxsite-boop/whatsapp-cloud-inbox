@@ -6,9 +6,14 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import type { ReceivablesSummary } from '@/lib/crm/receivables';
 import { coDateTime, dayWord } from '@/lib/crm/tasks-info';
-import { api, card, formatPhone, money } from './shared';
+import { WhatsAppLink, api, card, checkCollection, formatPhone, money } from './shared';
+import { collectionMessage } from '@/lib/crm/collection-messages';
 
 const select = 'h-9 rounded-full border border-border/60 bg-card/50 px-3 text-sm';
+/** The tiered payment reminder for a debtor (oldest overdue invoice), or undefined under 30 days: then the chat opens empty. */
+const cobroText = (d: { name: string; oldestDoc: string; oldestBalance: number; oldestDays: number }) =>
+  d.oldestDoc ? collectionMessage(d.name, [{ doc: d.oldestDoc, balance: d.oldestBalance, daysLate: d.oldestDays }])?.text : undefined;
+
 const AGING_COLOR = ['#34d399', '#fbbf24', '#fb923c', '#f87171', '#e11d48'];
 
 export function ReceivablesView({ onOpenCustomer }: { onOpenCustomer: (id: number) => void }) {
@@ -185,7 +190,7 @@ export function ReceivablesView({ onOpenCustomer }: { onOpenCustomer: (id: numbe
             </button>
           </p>
         ) : (
-          <p className="mb-3 text-xs text-muted-foreground">Los que más tienen vencido primero. El recordatorio queda en Aprobaciones; no sale solo. <b>Llamar</b> abre el marcador de tu celular y después te deja anotar cómo te fue. <b>Programar</b> deja la llamada para una fecha y hora.</p>
+          <p className="mb-3 text-xs text-muted-foreground">Los que más tienen vencido primero. <b>WhatsApp</b> abre el chat con el mensaje de cobro listo para enviar. El recordatorio queda en Aprobaciones; no sale solo. <b>Llamar</b> abre el marcador de tu celular y después te deja anotar cómo te fue. <b>Programar</b> deja la llamada para una fecha y hora.</p>
         )}
         {note && <p className="mb-3 rounded-md border bg-background/40 p-2 text-xs">{note}</p>}
         <ul className="space-y-2">
@@ -224,6 +229,14 @@ export function ReceivablesView({ onOpenCustomer }: { onOpenCustomer: (id: numbe
                     </p>
                   )}
                   <div className="mt-2 flex flex-wrap gap-2">
+                    <WhatsAppLink
+                      phone={d.phone}
+                      text={cobroText(d)}
+                      beforeOpen={cobroText(d) ? () => checkCollection(d.contactId) : undefined}
+                      className="inline-flex h-8 items-center rounded-md border border-emerald-500/40 bg-emerald-500/10 px-3 text-xs font-medium text-emerald-500 hover:bg-emerald-500/20"
+                    >
+                      💬 WhatsApp
+                    </WhatsAppLink>
                     <Button size="sm" variant="outline" onClick={() => remind(d.contactId, d.name)}>
                       Recordar
                     </Button>
@@ -299,7 +312,7 @@ export function ReceivablesView({ onOpenCustomer }: { onOpenCustomer: (id: numbe
             </button>
           </p>
         ) : (
-          <p className="mb-3 text-xs text-muted-foreground">Los que más tienen vencido primero. El recordatorio queda en Aprobaciones; no sale solo. <b>Llamar</b> abre el marcador de tu celular y después te deja anotar cómo te fue.</p>
+          <p className="mb-3 text-xs text-muted-foreground">Los que más tienen vencido primero. <b>WhatsApp</b> abre el chat con el mensaje de cobro listo para enviar. El recordatorio queda en Aprobaciones; no sale solo. <b>Llamar</b> abre el marcador de tu celular y después te deja anotar cómo te fue.</p>
         )}
         {note && <p className="mb-3 rounded-md border bg-background/40 p-2 text-xs">{note}</p>}
         <ul className="space-y-2">
@@ -322,6 +335,14 @@ export function ReceivablesView({ onOpenCustomer }: { onOpenCustomer: (id: numbe
               </div>
               {d.hasPhone && d.overdue > 0 && (
                 <div className="flex shrink-0 flex-col gap-1">
+                  <WhatsAppLink
+                    phone={d.phone}
+                    text={cobroText(d)}
+                    beforeOpen={cobroText(d) ? () => checkCollection(d.contactId) : undefined}
+                    className="inline-flex h-8 items-center rounded-md border border-emerald-500/40 bg-emerald-500/10 px-3 text-xs font-medium text-emerald-500 hover:bg-emerald-500/20"
+                  >
+                    💬 WhatsApp
+                  </WhatsAppLink>
                   <Button size="sm" variant="outline" onClick={() => remind(d.contactId, d.name)}>
                     Recordar
                   </Button>

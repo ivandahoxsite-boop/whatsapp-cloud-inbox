@@ -138,6 +138,9 @@ export type Debtor = {
   overdue: number;
   /** Days the oldest unpaid invoice is past due (0 if nothing is overdue). */
   oldestDays: number;
+  /** The oldest overdue invoice (for the collection message), or '' when nothing is overdue. */
+  oldestDoc: string;
+  oldestBalance: number;
   invoices: number;
 };
 
@@ -200,10 +203,11 @@ export function receivablesSummary(filter: { seller?: string; bucket?: AgingKey 
     allDebtors.add(r.contact_id);
     if (filter.bucket && AGING_KEYS[bucket] !== filter.bucket) continue;
     const dbt = debtors.get(r.contact_id) ?? {
-      contactId: r.contact_id, name: r.name, phone: r.phone, hasPhone: /^\d{7,}$/.test(r.phone), seller: r.seller, balance: 0, overdue: 0, oldestDays: 0, invoices: 0
+      contactId: r.contact_id, name: r.name, phone: r.phone, hasPhone: /^\d{7,}$/.test(r.phone), seller: r.seller, balance: 0, overdue: 0, oldestDays: 0, oldestDoc: '', oldestBalance: 0, invoices: 0
     };
     dbt.balance += r.balance;
     if (late > 0) dbt.overdue += r.balance;
+    if (late > 0 && late >= dbt.oldestDays) Object.assign(dbt, { oldestDoc: r.doc, oldestBalance: r.balance });
     dbt.oldestDays = Math.max(dbt.oldestDays, late);
     dbt.invoices++;
     debtors.set(r.contact_id, dbt);

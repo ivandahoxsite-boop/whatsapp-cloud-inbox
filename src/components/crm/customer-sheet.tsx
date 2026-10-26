@@ -12,7 +12,7 @@ import type { CustomField } from '@/lib/crm/db';
 import { collectionMessage } from '@/lib/crm/collection-messages';
 import { TaskForm } from './task-form';
 import { CustomerTasks } from './task-list';
-import { WhatsAppLink, QUERY_KEY, RecurrencePill, SegmentPill, TagPill, ago, api, cityOptions, formatPhone, money, relativeDays, type CrmData } from './shared';
+import { WhatsAppLink, checkCollection, QUERY_KEY, RecurrencePill, SegmentPill, TagPill, ago, api, cityOptions, formatPhone, money, relativeDays, type CrmData } from './shared';
 
 type Sale = { id: number; soldAt: string; amount: number; product: string };
 type Activity = { id: number; kind: string; text: string; createdAt: string };
@@ -66,18 +66,7 @@ function SheetBody({ c, data, onClose }: { c: Customer; data: CrmData; onClose: 
   // Overdue 30+ days: "Escribir por WhatsApp" opens with the payment reminder for its tier, after checking the
   // collection rules (hours, holidays, promises, one contact a day).
   const cobro = collectionMessage(c.name, detail?.receivables ?? []);
-  const checkCobro = async (): Promise<boolean | string> => {
-    try {
-      const r = await api<{ checks: { allowed: boolean; reasons: string[] }[] }>(`/api/crm/collections/check?customerId=${c.id}`);
-      const ch = r.checks[0];
-      if (ch && !ch.allowed) {
-        return confirm(`No es buen momento para cobrarle:\n\n• ${ch.reasons.join('\n• ')}\n\n¿Abrir el chat SIN el mensaje de cobro?`) ? '' : false;
-      }
-    } catch {
-      /* if the check fails, do not block the message */
-    }
-    return true;
-  };
+  const checkCobro = () => checkCollection(c.id);
   const [sale, setSale] = useState<{ soldAt: string; amount: string; product: string; qty: string } | null>(null);
 
   const run = async (fn: () => Promise<unknown>) => {
