@@ -30,6 +30,7 @@ Base URL: `$CRM_BASE_URL` (on the same server: `http://127.0.0.1:4000`). Every r
 | Morning brief (ready-made text) | `GET /api/agent/digest` → post `text` as is. **If `quiet` is `true` (Sunday or Colombian holiday) post nothing at all.** |
 | Sales report (totals, seller, zone, products) | `GET /api/agent/reports/sales?from=2026-01-01&to=2026-12-31&seller=<name>&zone=<zone>` |
 | See pending/sent proposals | `GET /api/agent/messages?status=pending` |
+| Report the nightly CRM backup to Drive | `POST /api/agent/backup-status` body `{"ok":true,"file":"crm-2026-10-26-0315.db.gz.gpg","bytes":9118653}` or `{"ok":false,"error":"..."}` |
 
 Segments: `campeon`, `leal`, `potencial`, `en_riesgo`, `dormido_valioso`, `perdido`, `sin_compras`.
 Recurrence: `prospecto`, `primera_compra`, `una_vez`, `recurrente`, `por_recomprar` (past their usual buying rhythm: contact now), `recurrente_perdido`.
@@ -63,6 +64,10 @@ The CRM decides WHO may be called and WHEN; you only dial what it returns.
 - If someone other than the customer answers, do not mention the debt: ask for a good time to call or end the call.
 - **After every call** (even without answer) `POST /api/agent/customers/{id}/calls`: `outcome` is `promesa_pago` (needs `promiseDate`), `ya_pago`, `sin_respuesta`, `buzon`, `rechaza`, `pide_humano`, `numero_equivocado`, `no_llamar` or `otro`; `summary` is 2-4 lines: who answered, what they said, what was agreed. A `no_llamar` makes the CRM never queue that customer again.
 - Report the batch result to the user in Telegram: how many reached, promises (customer, date, amount), who asked for a person.
+
+## CRM backup to Google Drive
+- After each nightly backup upload (and after checking the file is really in Drive), report it: `POST /api/agent/backup-status` with `ok:true`, the file name and size. If it failed, report `ok:false` with a short reason. The CRM warns in the morning brief when no good copy was reported for 36 hours.
+- **Never install root cron jobs or root scripts that read files you control** (status files, scripts in your workspace): that would let anyone who tricks you run things as root. Report through the API instead.
 
 ## Daily brief and recurring loads
 - **Morning brief.** When asked (or on the schedule the user sets: Monday to Saturday at 8:00), call `GET /api/agent/digest` and send its `text` to Telegram unchanged. If the response has `quiet: true` (Sunday or a Colombian holiday) send nothing, not even a note. It already includes the user's own to-dos ("📌 Tus pendientes", written in the CRM's Pendientes tab); never add or invent to-dos. Do not invent customers or numbers that are not in it, and never say a message was sent.
