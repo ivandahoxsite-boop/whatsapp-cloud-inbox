@@ -29,17 +29,13 @@ function greetName(name: string): string {
   return words[0].length <= 2 && words[1] ? `${words[0]} ${words[1]}` : words[0];
 }
 
+/** Every level names only the oldest overdue invoice and asks the customer for a payment date. */
 export function collectionMessage(name: string, items: DebtItem[]): { tier: CollectionTier; text: string } | null {
   const overdue = items.filter((i) => i.daysLate > 0 && i.balance > 0).sort((a, b) => b.daysLate - a.daysLate);
   if (!overdue.length) return null;
   const days = overdue[0].daysLate;
   const tier = collectionTier(days);
   if (!tier) return null;
-  const total = money(overdue.reduce((a, i) => a + i.balance, 0));
-  const shown = overdue.slice(0, 6);
-  const facturas =
-    shown.map((i) => `🧾 ${i.doc}: ${money(i.balance)} (${i.daysLate} días)`).join('\n') +
-    (overdue.length > shown.length ? `\n🧾 y ${overdue.length - shown.length} más` : '');
   const who = greetName(name);
 
   const texts: Record<CollectionTier['level'], string> = {
@@ -58,10 +54,11 @@ export function collectionMessage(name: string, items: DebtItem[]): { tier: Coll
       `Hola${who ? ` ${who}` : ''} 👋 Te escribimos de *Xsite Group* · cartera.\n\n` +
       `La factura *${overdue[0].doc}* por *${money(overdue[0].balance)}* lleva *${days} días* vencida 🧾\n\n` +
       `Queremos seguir trabajando contigo 🤝 pero necesitamos que te pongas al día. Confírmanos hoy *qué día* realizas el pago 📅🙏`,
+    // Level 4: only the oldest overdue invoice; formal notice before prejudicial collection (confirmed by the user).
     4:
       `${who ? `${who}, t` : 'T'}e contactamos de *Xsite Group* · cartera 🔴\n\n` +
-      `Tu cuenta lleva *${days} días* en mora:\n${facturas}\n💰 *Total vencido: ${total}*\n\n` +
-      `Es un llamado formal 📌 Si en *5 días hábiles* no recibimos el pago o un acuerdo, la cuenta pasa a cobro prejurídico. Respóndenos hoy 🙏`
+      `La factura *${overdue[0].doc}* por *${money(overdue[0].balance)}* lleva *${days} días* en mora 🧾\n\n` +
+      `Es un llamado formal 📌 Si en *5 días hábiles* no recibimos el pago o un acuerdo, la cuenta pasa a cobro prejurídico. Respóndenos hoy con la *fecha de pago* 📅`
   };
   return { tier, text: texts[tier.level] };
 }
