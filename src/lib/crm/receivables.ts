@@ -87,8 +87,9 @@ export function upsertReceivables(items: ReceivableUpsert[], options: Receivable
       if (contact.created) res.contactsCreated++;
 
       seen.add(externalId);
-      const balance = Math.max(0, balanceRaw);
-      const status = balance > 0 ? 'open' : 'paid';
+      // A credit note (N3) arrives with a negative balance: it stays open and is subtracted from the customer's debt.
+      const balance = balanceRaw;
+      const status = balance !== 0 ? 'open' : 'paid';
       const row = [
         contact.id, String(it.doc ?? externalId).slice(0, 60), issuedAt, dueAt, Number.isFinite(amount) ? amount : balance, balance,
         String(it.seller ?? '').trim().slice(0, 80), source, status, JSON.stringify(it.data && typeof it.data === 'object' ? it.data : {})
@@ -151,10 +152,19 @@ export const isAgingKey = (v: unknown): v is AgingKey => AGING_KEYS.includes(v a
 
 type OpenRow = { id: number; contact_id: number; doc: string; issued_at: string | null; due_at: string | null; balance: number; seller: string; name: string; phone: string };
 
+/**
+ * Days of arrears the way the business counts them: an invoice is overdue once its due date has passed, and its days
+ * are counted from the day it was issued (fecha de expedición), not from the due date. 0 while it is not due yet.
+ * Example: issued 2026-09-07, due 2026-10-07, on 2026-10-26 -> 49 days.
+ */
 function daysLate(r: { issued_at: string | null; due_at: string | null }, today: Date): number {
-  const due = r.due_at ?? (r.issued_at ? isoDay(new Date(Date.parse(r.issued_at) + TERMS_DAYS() * DAY)) : null);
-  if (!due) return 0;
-  return Math.floor((Date.parse(isoDay(today)) - Date.parse(due)) / DAY);
+  const terms = TERMS_DAYS() * DAY;
+  const issued = r.issued_at ? Date.parse(r.issued_at) : r.due_at ? Date.parse(r.due_at) - terms : NaN;
+  const due = r.due_at ? Date.parse(r.due_at) : issued + terms;
+  if (!Number.isFinite(issued) || !Number.isFinite(due)) return 0;
+  const day = Date.parse(isoDay(today));
+  if (day <= due) return 0;
+  return Math.max(1, Math.floor((day - issued) / DAY));
 }
 
 /**
@@ -207,8 +217,11 @@ export function receivablesSummary(filter: { seller?: string; bucket?: AgingKey 
     };
     dbt.balance += r.balance;
     if (late > 0) dbt.overdue += r.balance;
-    if (late > 0 && late >= dbt.oldestDays) Object.assign(dbt, { oldestDoc: r.doc, oldestBalance: r.balance });
-    dbt.oldestDays = Math.max(dbt.oldestDays, late);
+    // Credit notes reduce the amounts but never count as "the oldest invoice" to collect.
+    if (r.balance > 0) {
+      if (late > 0 && late >= dbt.oldestDays) Object.assign(dbt, { oldestDoc: r.doc, oldestBalance: r.balance });
+      dbt.oldestDays = Math.max(dbt.oldestDays, late);
+    }
     dbt.invoices++;
     debtors.set(r.contact_id, dbt);
   }
@@ -250,7 +263,7 @@ export function debtsByPhone(now = new Date()): Record<string, DebtFlag> {
   const rows = getDb()
     .prepare(
       `SELECT r.contact_id, r.issued_at, r.due_at, r.balance, c.phone FROM receivables r JOIN contacts c ON c.id = r.contact_id
-       WHERE r.status = 'open' AND r.balance > 0`
+       WHERE r.status = 'open'`
     )
     .all() as unknown as { contact_id: number; issued_at: string | null; due_at: string | null; balance: number; phone: string }[];
   const out: Record<string, DebtFlag> = {};
@@ -260,8 +273,10 @@ export function debtsByPhone(now = new Date()): Record<string, DebtFlag> {
     const late = daysLate(r, now);
     f.balance += r.balance;
     if (late > 0) f.overdue += r.balance;
-    f.days = Math.max(f.days, late);
+    if (r.balance > 0) f.days = Math.max(f.days, late);
   }
+  // Credit notes can cover the whole debt: nothing to warn about then.
+  for (const [phone, f] of Object.entries(out)) if (f.balance <= 0) delete out[phone];
   return out;
 }
 

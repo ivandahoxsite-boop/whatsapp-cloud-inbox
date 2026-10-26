@@ -135,7 +135,9 @@ function SheetBody({ c, data, onClose }: { c: Customer; data: CrmData; onClose: 
           const late = open.filter((r) => r.daysLate > 0);
           if (!open.length) return null;
           const owed = late.length ? late.reduce((a, r) => a + r.balance, 0) : open.reduce((a, r) => a + r.balance, 0);
-          const days = Math.max(0, ...open.map((r) => r.daysLate));
+          if (owed <= 0 && open.reduce((a, r) => a + r.balance, 0) <= 0) return null; // credit notes cover everything
+          // Days from the oldest real invoice; credit notes (negative) do not count.
+          const days = Math.max(0, ...open.filter((r) => r.balance > 0).map((r) => r.daysLate));
           return (
             <p
               className={
@@ -301,8 +303,8 @@ function SheetBody({ c, data, onClose }: { c: Customer; data: CrmData; onClose: 
                 <li key={r.id} className="flex items-center gap-2 rounded-md border px-2 py-1.5 text-sm">
                   <div className="min-w-0 flex-1">
                     <p className="truncate font-medium">{r.doc}</p>
-                    <p className={r.daysLate > 0 ? 'text-xs text-amber-500' : 'text-xs text-muted-foreground'}>
-                      {r.daysLate > 0 ? `${r.daysLate} días de mora` : r.dueAt ? `vence ${fmtDate(r.dueAt)}` : 'al día'}
+                    <p className={r.balance < 0 ? 'text-xs text-emerald-500' : r.daysLate > 0 ? 'text-xs text-amber-500' : 'text-xs text-muted-foreground'}>
+                      {r.balance < 0 ? 'Nota crédito (descuenta)' : r.daysLate > 0 ? `${r.daysLate} días de mora` : r.dueAt ? `vence ${fmtDate(r.dueAt)}` : 'al día'}
                     </p>
                   </div>
                   <span className="tabular-nums">{money(r.balance)}</span>
