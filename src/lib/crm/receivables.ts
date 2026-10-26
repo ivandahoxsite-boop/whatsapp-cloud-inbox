@@ -87,9 +87,9 @@ export function upsertReceivables(items: ReceivableUpsert[], options: Receivable
       if (contact.created) res.contactsCreated++;
 
       seen.add(externalId);
-      // A credit note (N3) arrives with a negative balance: it stays open and is subtracted from the customer's debt.
-      const balance = balanceRaw;
-      const status = balance !== 0 ? 'open' : 'paid';
+      // Credit notes (negative balances) are not applied here: the user crosses them against invoices by hand.
+      const balance = Math.max(0, balanceRaw);
+      const status = balance > 0 ? 'open' : 'paid';
       const row = [
         contact.id, String(it.doc ?? externalId).slice(0, 60), issuedAt, dueAt, Number.isFinite(amount) ? amount : balance, balance,
         String(it.seller ?? '').trim().slice(0, 80), source, status, JSON.stringify(it.data && typeof it.data === 'object' ? it.data : {})
@@ -217,11 +217,8 @@ export function receivablesSummary(filter: { seller?: string; bucket?: AgingKey 
     };
     dbt.balance += r.balance;
     if (late > 0) dbt.overdue += r.balance;
-    // Credit notes reduce the amounts but never count as "the oldest invoice" to collect.
-    if (r.balance > 0) {
-      if (late > 0 && late >= dbt.oldestDays) Object.assign(dbt, { oldestDoc: r.doc, oldestBalance: r.balance });
-      dbt.oldestDays = Math.max(dbt.oldestDays, late);
-    }
+    if (late > 0 && late >= dbt.oldestDays) Object.assign(dbt, { oldestDoc: r.doc, oldestBalance: r.balance });
+    dbt.oldestDays = Math.max(dbt.oldestDays, late);
     dbt.invoices++;
     debtors.set(r.contact_id, dbt);
   }
@@ -263,7 +260,7 @@ export function debtsByPhone(now = new Date()): Record<string, DebtFlag> {
   const rows = getDb()
     .prepare(
       `SELECT r.contact_id, r.issued_at, r.due_at, r.balance, c.phone FROM receivables r JOIN contacts c ON c.id = r.contact_id
-       WHERE r.status = 'open'`
+       WHERE r.status = 'open' AND r.balance > 0`
     )
     .all() as unknown as { contact_id: number; issued_at: string | null; due_at: string | null; balance: number; phone: string }[];
   const out: Record<string, DebtFlag> = {};
@@ -273,10 +270,8 @@ export function debtsByPhone(now = new Date()): Record<string, DebtFlag> {
     const late = daysLate(r, now);
     f.balance += r.balance;
     if (late > 0) f.overdue += r.balance;
-    if (r.balance > 0) f.days = Math.max(f.days, late);
+    f.days = Math.max(f.days, late);
   }
-  // Credit notes can cover the whole debt: nothing to warn about then.
-  for (const [phone, f] of Object.entries(out)) if (f.balance <= 0) delete out[phone];
   return out;
 }
 
