@@ -279,3 +279,19 @@ export async function checkCollection(contactId: number): Promise<boolean | stri
   }
   return true;
 }
+
+/** Whether "Llamar" goes through Twilio (rings your phone first, then the customer) or the phone's own dialer. */
+export function useTwilio(): { configured: boolean; agent: string | null } {
+  const { data } = useQuery({
+    queryKey: ['crm-twilio'],
+    queryFn: () => api<{ configured: boolean; agent: string | null }>('/api/crm/twilio'),
+    staleTime: 5 * 60_000
+  });
+  return data ?? { configured: false, agent: null };
+}
+
+/** Starts a Twilio call; returns the text to show. Throws with Twilio's reason when it fails. */
+export async function twilioCall(contactId: number, name: string, agent: string | null): Promise<string> {
+  await api('/api/crm/twilio', 'POST', { contactId });
+  return `📲 Twilio te está llamando a tu celular${agent ? ` (${agent})` : ''}. Contesta y te conecta con ${name || 'el cliente'}.`;
+}

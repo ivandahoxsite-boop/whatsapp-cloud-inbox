@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import type { ReceivablesSummary } from '@/lib/crm/receivables';
 import { coDateTime, dayWord } from '@/lib/crm/tasks-info';
-import { WhatsAppLink, api, card, checkCollection, formatPhone, money } from './shared';
+import { WhatsAppLink, api, card, checkCollection, formatPhone, money, twilioCall, useTwilio } from './shared';
 import { collectionMessage } from '@/lib/crm/collection-messages';
 
 const select = 'h-9 rounded-full border border-border/60 bg-card/50 px-3 text-sm';
@@ -21,6 +21,7 @@ export function ReceivablesView({ onOpenCustomer }: { onOpenCustomer: (id: numbe
   const [seller, setSeller] = useState('');
   const [bucket, setBucket] = useState<string>('');
   const [note, setNote] = useState('');
+  const twilio = useTwilio();
   const [calling, setCalling] = useState<number | null>(null); // the customer whose call result is being typed
   const [scheduling, setScheduling] = useState<number | null>(null); // the customer whose call time is being picked
   const { data: sched } = useQuery({
@@ -62,6 +63,14 @@ export function ReceivablesView({ onOpenCustomer }: { onOpenCustomer: (id: numbe
       /* if the check fails, do not stop the call */
     }
     setCalling(contactId);
+    if (twilio.configured) {
+      try {
+        setNote(await twilioCall(contactId, name, twilio.agent));
+        return;
+      } catch (e) {
+        if (!confirm(`${(e as Error).message}\n\n¿Llamar desde tu celular?`)) return;
+      }
+    }
     window.location.href = `tel:+${phone}`;
   };
 

@@ -12,7 +12,7 @@ import type { CustomField } from '@/lib/crm/db';
 import { collectionMessage } from '@/lib/crm/collection-messages';
 import { TaskForm } from './task-form';
 import { CustomerTasks } from './task-list';
-import { WhatsAppLink, checkCollection, QUERY_KEY, RecurrencePill, SegmentPill, TagPill, ago, api, cityOptions, formatPhone, money, relativeDays, type CrmData } from './shared';
+import { WhatsAppLink, checkCollection, twilioCall, useTwilio, QUERY_KEY, RecurrencePill, SegmentPill, TagPill, ago, api, cityOptions, formatPhone, money, relativeDays, type CrmData } from './shared';
 
 type Sale = { id: number; soldAt: string; amount: number; product: string };
 type Activity = { id: number; kind: string; text: string; createdAt: string };
@@ -63,6 +63,8 @@ function SheetBody({ c, data, onClose }: { c: Customer; data: CrmData; onClose: 
   const [newPhone, setNewPhone] = useState('');
   const [addingTask, setAddingTask] = useState(false);
   const [showCobro, setShowCobro] = useState(false);
+  const [callNote, setCallNote] = useState('');
+  const twilio = useTwilio();
   // Overdue 30+ days: "Escribir por WhatsApp" opens with the payment reminder for its tier, after checking the
   // collection rules (hours, holidays, promises, one contact a day).
   const cobro = collectionMessage(c.name, detail?.receivables ?? []);
@@ -101,9 +103,9 @@ function SheetBody({ c, data, onClose }: { c: Customer; data: CrmData; onClose: 
     ...(detail?.activities ?? []).map((a) => ({
       key: `a${a.id}`,
       at: a.createdAt.replace(' ', 'T') + 'Z',
-      icon: a.kind === 'note' ? StickyNote : a.kind === 'call' ? Phone : a.kind.startsWith('whatsapp') ? MessageCircle : a.kind === 'tags' ? TagIcon : ArrowRightLeft,
+      icon: a.kind === 'note' ? StickyNote : a.kind === 'call' || a.kind === 'twilio' ? Phone : a.kind.startsWith('whatsapp') ? MessageCircle : a.kind === 'tags' ? TagIcon : ArrowRightLeft,
       color: a.kind === 'whatsapp_in' ? '#38bdf8' : a.kind === 'whatsapp_out' ? '#a78bfa' : a.kind === 'note' ? '#fbbf24' : a.kind === 'call' ? '#f472b6' : '#a1a1aa',
-      title: a.kind === 'whatsapp_in' ? 'Escribió' : a.kind === 'whatsapp_out' ? 'Le escribiste' : a.kind === 'note' ? 'Nota' : a.kind === 'call' ? 'Llamada de cobro' : 'Cambio',
+      title: a.kind === 'whatsapp_in' ? 'Escribió' : a.kind === 'whatsapp_out' ? 'Le escribiste' : a.kind === 'note' ? 'Nota' : a.kind === 'call' ? 'Llamada de cobro' : a.kind === 'twilio' ? 'Llamada por Twilio' : 'Cambio',
       text: a.text,
       withTime: true
     }))
@@ -171,11 +173,22 @@ function SheetBody({ c, data, onClose }: { c: Customer; data: CrmData; onClose: 
             >
               <MessageCircle className="h-4 w-4" /> Escribir por WhatsApp
             </WhatsAppLink>
+            {callNote && <p className="w-full text-xs text-sky-400">{callNote}</p>}
             <a
               href={`tel:+${c.phone}`}
+              onClick={async (e) => {
+                if (!twilio.configured) return; // the phone's own dialer
+                e.preventDefault();
+                setErr('');
+                try {
+                  setCallNote(await twilioCall(c.id, c.name, twilio.agent));
+                } catch (er) {
+                  if (confirm(`${(er as Error).message}\n\n¿Llamar desde tu celular?`)) window.location.href = `tel:+${c.phone}`;
+                }
+              }}
               className="inline-flex h-9 items-center gap-2 rounded-full bg-sky-500/15 px-4 text-sm font-medium text-sky-400 hover:bg-sky-500/25"
             >
-              <Phone className="h-4 w-4" /> Llamar
+              <Phone className="h-4 w-4" /> {twilio.configured ? 'Llamar (Twilio)' : 'Llamar'}
             </a>
           </div>
         ) : (
