@@ -52,9 +52,9 @@ export function collectionMessage(name: string, items: DebtItem[]): { tier: Coll
       `Tienes facturas vencidas ⚠️\n${facturas}\n💰 *Total vencido: ${total}*\n\n` +
       `Por favor confírmanos *hoy* la fecha de pago 📅 para seguir despachando sin inconvenientes 🚚`,
     3:
-      `Hola${who ? ` ${who}` : ''}. *Xsite Group* · cartera ⚠️\n\n` +
-      `Tu cuenta tiene saldo vencido:\n${facturas}\n💰 *Total vencido: ${total}*\n\n` +
-      `Necesitamos el pago o un acuerdo de pago en los próximos *3 días hábiles* ⏳ ¿Cuándo nos puedes pagar?`,
+      `Hola${who ? ` ${who}` : ''} 👋 Te escribimos de *Xsite Group* · cartera.\n\n` +
+      `${facturas}\n💰 *Total vencido: ${total}*\n\n` +
+      `Queremos seguir trabajando contigo 🤝 pero necesitamos que te pongas al día. Confírmanos hoy cuándo realizas el pago 🙏`,
     4:
       `${who ? `${who}, t` : 'T'}e contactamos de *Xsite Group* · cartera 🔴\n\n` +
       `Tu cuenta lleva *${days} días* en mora:\n${facturas}\n💰 *Total vencido: ${total}*\n\n` +
