@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { RECURRENCE_INFO } from '@/lib/crm/scoring';
 import type { Customer } from '@/lib/crm/customers';
 import type { CustomField } from '@/lib/crm/db';
+import { collectionMessage } from '@/lib/crm/collection-messages';
 import { TaskForm } from './task-form';
 import { CustomerTasks } from './task-list';
 import { WhatsAppLink, QUERY_KEY, RecurrencePill, SegmentPill, TagPill, ago, api, cityOptions, formatPhone, money, relativeDays, type CrmData } from './shared';
@@ -61,6 +62,22 @@ function SheetBody({ c, data, onClose }: { c: Customer; data: CrmData; onClose: 
   const [note, setNote] = useState('');
   const [newPhone, setNewPhone] = useState('');
   const [addingTask, setAddingTask] = useState(false);
+  const [showCobro, setShowCobro] = useState(false);
+  // Overdue 30+ days: "Escribir por WhatsApp" opens with the payment reminder for its tier, after checking the
+  // collection rules (hours, holidays, promises, one contact a day).
+  const cobro = collectionMessage(c.name, detail?.receivables ?? []);
+  const checkCobro = async (): Promise<boolean | string> => {
+    try {
+      const r = await api<{ checks: { allowed: boolean; reasons: string[] }[] }>(`/api/crm/collections/check?customerId=${c.id}`);
+      const ch = r.checks[0];
+      if (ch && !ch.allowed) {
+        return confirm(`No es buen momento para cobrarle:\n\n• ${ch.reasons.join('\n• ')}\n\n¿Abrir el chat SIN el mensaje de cobro?`) ? '' : false;
+      }
+    } catch {
+      /* if the check fails, do not block the message */
+    }
+    return true;
+  };
   const [sale, setSale] = useState<{ soldAt: string; amount: string; product: string; qty: string } | null>(null);
 
   const run = async (fn: () => Promise<unknown>) => {
@@ -142,6 +159,14 @@ function SheetBody({ c, data, onClose }: { c: Customer; data: CrmData; onClose: 
             </p>
           );
         })()}
+        {cobro && c.hasPhone && (
+          <div className="mt-2 rounded-lg border border-border/60 px-2 py-1.5 text-xs text-muted-foreground">
+            <button type="button" onClick={() => setShowCobro(!showCobro)} className="w-full text-left">
+              💬 «Escribir por WhatsApp» abre con el mensaje de cobro: <b>{cobro.tier.label}</b> · {showCobro ? 'ocultar' : 'ver'}
+            </button>
+            {showCobro && <p className="mt-1.5 whitespace-pre-wrap text-foreground">{cobro.text}</p>}
+          </div>
+        )}
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
           <RecurrencePill recurrence={c.recurrence} />
           <SegmentPill segment={c.segment} />
@@ -151,6 +176,8 @@ function SheetBody({ c, data, onClose }: { c: Customer; data: CrmData; onClose: 
           <div className="mt-3 flex flex-wrap gap-2">
             <WhatsAppLink
               phone={c.phone}
+              text={cobro?.text}
+              beforeOpen={cobro ? checkCobro : undefined}
               className="inline-flex h-9 items-center gap-2 rounded-full bg-emerald-500/15 px-4 text-sm font-medium text-emerald-500 hover:bg-emerald-500/25"
             >
               <MessageCircle className="h-4 w-4" /> Escribir por WhatsApp

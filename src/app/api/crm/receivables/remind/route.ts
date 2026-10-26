@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { customerReceivables } from '@/lib/crm/receivables';
 import { listCustomers } from '@/lib/crm/customers';
 import { proposeMessage } from '@/lib/crm/agent-store';
+import { collectionMessage } from '@/lib/crm/collection-messages';
 
 export const runtime = 'nodejs';
 
@@ -19,7 +20,9 @@ export async function POST(request: Request) {
     const late = open.filter((r) => r.daysLate > 0);
     const first = c.name.trim().split(/\s+/)[0];
     const docs = open.slice(0, 3).map((r) => r.doc).join(', ');
-    const body =
+    // 30+ days overdue: the same tiered text as "Escribir por WhatsApp" in the customer file.
+    const tiered = collectionMessage(c.name, open);
+    const body = tiered?.text ??
       `Hola${first ? ` ${first}` : ''}, te escribimos para recordarte que tienes un saldo pendiente de ${money(total)}` +
       `${docs ? ` (${docs}${open.length > 3 ? '…' : ''})` : ''}` +
       `${late.length ? `, con facturas vencidas hace hasta ${Math.max(...late.map((r) => r.daysLate))} días` : ''}. ` +

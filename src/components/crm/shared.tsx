@@ -223,19 +223,40 @@ function useDesktop(): boolean {
  * "Escribir por WhatsApp". On a computer it opens the chat straight in WhatsApp Web, always in the same browser tab
  * (named "whatsapp-web") instead of a new one each time; on a phone it opens the WhatsApp app (wa.me).
  */
-export function WhatsAppLink({ phone, text, className, children }: { phone: string; text?: string; className?: string; children: React.ReactNode }) {
+export function WhatsAppLink({
+  phone,
+  text,
+  className,
+  children,
+  beforeOpen
+}: {
+  phone: string;
+  text?: string;
+  className?: string;
+  children: React.ReactNode;
+  /** Runs on tap: false cancels, a string replaces the text ('' opens the chat without text). */
+  beforeOpen?: () => Promise<boolean | string>;
+}) {
   const desktop = useDesktop();
-  const q = text ? `text=${encodeURIComponent(text)}` : '';
-  if (desktop) {
-    // No rel="noopener": the browser must be able to find and reuse the tab it opened the first time.
-    return (
-      <a href={`https://web.whatsapp.com/send?phone=${phone}${q ? `&${q}` : ''}`} target="whatsapp-web" className={className}>
-        {children}
-      </a>
-    );
-  }
-  return (
-    <a href={`https://wa.me/${phone}${q ? `?${q}` : ''}`} target="_blank" rel="noreferrer" className={className}>
+  const url = (t?: string) => {
+    const q = t ? `text=${encodeURIComponent(t)}` : '';
+    return desktop ? `https://web.whatsapp.com/send?phone=${phone}${q ? `&${q}` : ''}` : `https://wa.me/${phone}${q ? `?${q}` : ''}`;
+  };
+  const onClick = beforeOpen
+    ? async (e: React.MouseEvent) => {
+        e.preventDefault();
+        const r = await beforeOpen();
+        if (r === false) return;
+        window.open(url(typeof r === 'string' ? r : text), desktop ? 'whatsapp-web' : '_blank', desktop ? undefined : 'noopener');
+      }
+    : undefined;
+  // On a computer no rel="noopener": the browser must be able to find and reuse the tab it opened the first time.
+  return desktop ? (
+    <a href={url(text)} target="whatsapp-web" className={className} onClick={onClick}>
+      {children}
+    </a>
+  ) : (
+    <a href={url(text)} target="_blank" rel="noreferrer" className={className} onClick={onClick}>
       {children}
     </a>
   );
