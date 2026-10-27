@@ -54,7 +54,10 @@ for intento in 1 2 3; do
     elif [ -z "$PUB" ]; then
       echo "❌ Google no respondió (¿sin internet en el servidor?)."
     else
-      echo "❌ Google respondió otra cosa: $(printf '%s' "$PUB" | tr -s '[:space:]' ' ' | sed 's/<[^>]*>//g' | head -c 200)"
+      # Google's error pages are mostly scripts: keep only the words a person would read.
+      TXT=$(printf '%s' "$PUB" | python3 -c 'import sys,re,html;t=sys.stdin.read();t=re.sub(r"(?is)<(script|style)[^>]*>.*?</\1>"," ",t);print(html.unescape(re.sub(r"\s+"," ",re.sub(r"<[^>]+>"," ",t))).strip()[:300])' 2>/dev/null || true)
+      echo "❌ Google respondió con una página en vez de la cartera: ${TXT:-(sin texto)}"
+      echo "   Abre la URL en una ventana de incógnito para verla tú mismo."
     fi
     continue
   fi
