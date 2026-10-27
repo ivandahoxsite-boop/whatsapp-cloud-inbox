@@ -38,19 +38,36 @@ PASO 4. Botón azul "Implementar" → "Nueva implementación" → engranaje → 
 PASO 5. Copia la "URL de la aplicación web" (termina en /exec) y pégala aquí abajo.
 
 MSG
-read -rp "URL de la aplicación web: " URL; URL=$(printf '%s' "$URL" | tr -d '[:space:]')
-[[ "$URL" =~ ^https://script\.google\.com/macros/s/[A-Za-z0-9_-]+/exec$ ]] || { echo "Esa no parece la URL (https://script.google.com/macros/s/.../exec). No se cambió nada."; exit 1; }
-
-echo "Probando la lectura de la hoja..."
-# The key goes to curl through stdin, so it never shows in the list of running processes.
-OUT=$(printf 'url = "%s?k=%s"\n' "$URL" "$KEY" | curl -sL --max-time 60 -K - || true)
-if ! printf '%s' "$OUT" | grep -q '"ok":true'; then
-  if printf '%s' "$OUT" | grep -q '"error":"clave"'; then echo "La clave no coincide: vuelve a pegar el código del PASO 2 y crea una NUEVA implementación."
-  elif printf '%s' "$OUT" | grep -q '"error"'; then echo "La hoja respondió: $(printf '%s' "$OUT" | head -c 200)"
-  else echo "Google no devolvió la cartera. Revisa que en 'Quién tiene acceso' diga 'Cualquier persona'."; fi
-  echo "No se cambió nada."; exit 1
-fi
-printf '%s' "$OUT" | grep -q '"Documento"' || { echo "La pestaña no trae la columna Documento. No se cambió nada."; exit 1; }
+ok=""
+for intento in 1 2 3; do
+  read -rp "URL de la aplicación web: " URL; URL=$(printf '%s' "$URL" | tr -d '[:space:]')
+  if ! [[ "$URL" =~ ^https://script\.google\.com/macros/s/[A-Za-z0-9_-]+/exec$ ]]; then
+    echo "Esa no parece la URL (https://script.google.com/macros/s/.../exec). Pégala otra vez."; continue
+  fi
+  echo "Probando la lectura de la hoja..."
+  # Without the key first: an Apps Script reachable by anyone answers {"error":"clave"} and shows no data.
+  PUB=$(curl -sL --max-time 60 "$URL" || true)
+  if ! printf '%s' "$PUB" | grep -q '"error"'; then
+    if printf '%s' "$PUB" | grep -qi 'accounts.google.com\|ServiceLogin\|signin'; then
+      echo "❌ Google pide iniciar sesión: la implementación NO está con acceso \"Cualquier persona\"."
+      echo "   Implementar → Gestionar implementaciones → lápiz → Quién tiene acceso: \"Cualquier persona\" (no \"con cuenta de Google\") → Implementar."
+    elif [ -z "$PUB" ]; then
+      echo "❌ Google no respondió (¿sin internet en el servidor?)."
+    else
+      echo "❌ Google respondió otra cosa: $(printf '%s' "$PUB" | tr -s '[:space:]' ' ' | sed 's/<[^>]*>//g' | head -c 200)"
+    fi
+    continue
+  fi
+  # The key goes to curl through stdin, so it never shows in the list of running processes.
+  OUT=$(printf 'url = "%s?k=%s"\n' "$URL" "$KEY" | curl -sL --max-time 60 -K - || true)
+  if printf '%s' "$OUT" | grep -Eq '"error": ?"clave"'; then
+    echo "❌ La hoja responde, pero con otra clave: pega el código de arriba (con ESTA clave), guarda y haz una NUEVA implementación."; continue
+  fi
+  if ! printf '%s' "$OUT" | grep -Eq '"ok": ?true'; then echo "❌ La hoja respondió: $(printf '%s' "$OUT" | head -c 200)"; continue; fi
+  printf '%s' "$OUT" | grep -q '"Documento"' || { echo "❌ La pestaña no trae la columna Documento."; continue; }
+  ok=1; break
+done
+[ -n "$ok" ] || { echo "No se cambió nada."; exit 1; }
 echo "   ✅ La hoja responde."
 
 set_var CARTERA_SHEET_URL "$URL"
