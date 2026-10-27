@@ -45,6 +45,7 @@ Each customer also has `nextExpectedAt` (date their next purchase is due), `over
   Tell the user to approve it in the CRM (Aprobaciones tab).
 
 ## Loading receivables (cartera)
+- **Since 2026-10-27 the CRM reads the cartera itself** from the Google Sheet tab "Cartera por vendedor" (Mon-Sat 10:45, 15:00, 17:45). **Do not load it any more** and disable your "CRM · Cartera" scheduled jobs: `POST /api/agent/import/receivables` with `source:"cartera"` now answers 409. Never tie an invoice to a customer by a similar name or a guessed phone; the user links each sheet customer (NIT) to its WhatsApp contact in the CRM. What follows is kept only for other sources.
 `POST /api/agent/import/receivables` body `{"receivables":[{"externalId":"FE-1234","nit":"900111222-3","name":"Audiolujos","amount":1500000,"balance":900000,"issuedAt":"2026-08-01","dueAt":"2026-09-30","seller":"IVAN HOYOS"}],"source":"cartera","dryRun":true}`
 - One row per **unpaid invoice**. `externalId` must be stable (invoice number): sending it again updates `balance`/dates; `balance` 0 marks it paid. `balance` defaults to `amount`.
 - The customer is found by `phone`, then by `nit` (any customer loaded with that NIT, with or without phone). Unknown customers are skipped unless the request has `"allowNoPhone": true`, which creates them (shown as "Sin teléfono"). Always send `nit` with sales/customers loads too so receivables can find them.

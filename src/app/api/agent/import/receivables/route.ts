@@ -1,3 +1,4 @@
+import { carteraSheetGuard } from '@/lib/crm/cartera-sheet';
 import { upsertReceivables, type ReceivableUpsert, type ReceivablesOptions } from '@/lib/crm/receivables';
 import { fail, guardAgent, json } from '@/lib/crm/agent-http';
 
@@ -18,8 +19,10 @@ export async function POST(request: Request) {
     const { receivables, ...options } = (await request.json()) as { receivables?: ReceivableUpsert[] } & ReceivablesOptions;
     if (!Array.isArray(receivables) || receivables.length === 0) return json({ error: 'Envía { receivables: [...] }' }, 400);
     if (receivables.length > MAX) return json({ error: `Máximo ${MAX} por envío` }, 400);
+    const blocked = carteraSheetGuard(options.source);
+    if (blocked) return json({ error: blocked }, 409);
     return json(
-      upsertReceivables(receivables, {
+      upsertReceivables(receivables.map((r) => ({ ...r, contactId: undefined })), {
         dryRun: options.dryRun === true,
         allowNoPhone: options.allowNoPhone === true,
         closeMissing: options.closeMissing === true,

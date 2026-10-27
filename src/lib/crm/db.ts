@@ -172,6 +172,14 @@ function migrate(d: DatabaseSync) {
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
     CREATE INDEX IF NOT EXISTS receivables_contact_idx ON receivables(contact_id, status);
+    -- Which WhatsApp contact each customer of the cartera sheet is (key: the sheet's "Cliente", NIT or code, letters and
+    -- digits only). Only the user links them ('linked'); 'suggested' is a guess waiting for a yes, 'rejected' a no.
+    CREATE TABLE IF NOT EXISTS cartera_links (
+      cliente TEXT PRIMARY KEY,
+      contact_id INTEGER NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
+      status TEXT NOT NULL CHECK (status IN ('linked','suggested','rejected')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
     -- Customers the user marked "to call" about a debt. OpenClaw dials only these, only when the rules allow it.
     CREATE TABLE IF NOT EXISTS call_requests (
       id INTEGER PRIMARY KEY AUTOINCREMENT,

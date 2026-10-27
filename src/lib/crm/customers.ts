@@ -210,19 +210,33 @@ export function setCustomerPhone(id: number, raw: string): { contactId: number; 
     | undefined;
   if (!me) throw new Error('Cliente no encontrado');
   if (me.phone === phone) return { contactId: id, merged: false };
+  // Giving a phone to a customer of the cartera sheet is saying who they are: later loads keep their invoices there.
+  const linkSheet = (to: number) => {
+    if (isRealPhone(me.phone)) return;
+    d.prepare(
+      `INSERT OR REPLACE INTO cartera_links (cliente, contact_id, status, updated_at)
+       SELECT DISTINCT json_extract(data, '$.cliente'), ?, 'linked', datetime('now') FROM receivables
+       WHERE contact_id = ? AND source = 'cartera' AND json_extract(data, '$.cliente') IS NOT NULL`
+    ).run(to, id);
+  };
   const other = d.prepare('SELECT id, name, city, stage_id, data FROM contacts WHERE phone = ?').get(phone) as
     | { id: number; name: string; city: string; stage_id: number | null; data: string }
     | undefined;
   if (!other) {
     d.prepare('UPDATE contacts SET phone = ? WHERE id = ?').run(phone, id);
+    linkSheet(id);
     return { contactId: id, merged: false };
   }
   d.exec('BEGIN');
   try {
+    linkSheet(other.id);
     d.prepare('UPDATE sales SET contact_id = ? WHERE contact_id = ?').run(other.id, id);
     d.prepare('UPDATE activities SET contact_id = ? WHERE contact_id = ?').run(other.id, id);
     d.prepare('UPDATE outbox SET contact_id = ? WHERE contact_id = ?').run(other.id, id);
     d.prepare('INSERT OR IGNORE INTO contact_tags (contact_id, tag_id) SELECT ?, tag_id FROM contact_tags WHERE contact_id = ?').run(other.id, id);
+    // Deleting this contact cascades: move its invoices, calls, to-dos and links first so nothing is lost.
+    for (const t of ['receivables', 'call_requests', 'tasks', 'cartera_links']) d.prepare(`UPDATE ${t} SET contact_id = ? WHERE contact_id = ?`).run(other.id, id);
+    d.prepare('UPDATE OR IGNORE campaign_items SET contact_id = ? WHERE contact_id = ?').run(other.id, id);
     // The chat contact keeps its own name (often what the customer calls themselves); gaps are filled from this one.
     d.prepare('UPDATE contacts SET name = ?, city = ?, stage_id = ?, data = ? WHERE id = ?').run(
       other.name || me.name,

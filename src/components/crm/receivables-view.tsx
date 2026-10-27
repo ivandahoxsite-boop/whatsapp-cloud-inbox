@@ -5,9 +5,9 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import type { ReceivablesSummary } from '@/lib/crm/receivables';
-import { coDateTime, dayWord } from '@/lib/crm/tasks-info';
 import { WhatsAppLink, api, card, checkCollection, formatPhone, money, twilioCall, useTwilio } from './shared';
 import { collectionMessage } from '@/lib/crm/collection-messages';
+import { CarteraLinks, CarteraSheetBox, useCarteraSheet } from './cartera-sheet-panel';
 
 const select = 'h-9 rounded-full border border-border/60 bg-card/50 px-3 text-sm';
 /** The tiered payment reminder for a debtor (oldest overdue invoice), or undefined under 30 days: then the chat opens empty. */
@@ -22,6 +22,7 @@ export function ReceivablesView({ onOpenCustomer }: { onOpenCustomer: (id: numbe
   const [bucket, setBucket] = useState<string>('');
   const [note, setNote] = useState('');
   const twilio = useTwilio();
+  const { data: sheet } = useCarteraSheet();
   const [calling, setCalling] = useState<number | null>(null); // the customer whose call result is being typed
   const [scheduling, setScheduling] = useState<number | null>(null); // the customer whose call time is being picked
   const { data: sched } = useQuery({
@@ -82,9 +83,12 @@ export function ReceivablesView({ onOpenCustomer }: { onOpenCustomer: (id: numbe
       <div className={cn(card, 'space-y-2 text-sm')}>
         <p className="font-medium">Aún no hay cartera cargada.</p>
         <p className="text-muted-foreground">
-          Pídele a OpenClaw que cargue el reporte de cartera por vendedor (facturas con saldo pendiente). Después verás aquí cuánto te deben, quién está
-          en mora y desde cuándo.
+          {sheet?.configured
+            ? 'Toca «Traer ahora de la hoja» para leer la pestaña «Cartera por vendedor».'
+            : 'Pídele a OpenClaw que cargue el reporte de cartera por vendedor (facturas con saldo pendiente).'}{' '}
+          Después verás aquí cuánto te deben, quién está en mora y desde cuándo.
         </p>
+        <CarteraSheetBox freshness={null} />
       </div>
     );
 
@@ -101,26 +105,7 @@ export function ReceivablesView({ onOpenCustomer }: { onOpenCustomer: (id: numbe
         ))}
       </select>
 
-      {data.freshness && (
-        <div
-          className={cn(
-            'rounded-xl border px-3 py-2 text-xs',
-            data.freshness.stale ? 'border-amber-500/40 bg-amber-500/10 text-amber-500' : 'border-border/60 text-muted-foreground'
-          )}
-        >
-          <p>
-            {data.freshness.stale ? '⚠️ ' : '🔄 '}Última vez que OpenClaw trajo la cartera: <b>{dayWord(data.freshness.loadedAt)}{coDateTime(data.freshness.loadedAt)}</b>
-          </p>
-          {data.freshness.stale ? (
-            <p className="mt-0.5">
-              Faltaron {data.freshness.missed} actualizaci{data.freshness.missed === 1 ? 'ón' : 'ones'}: los saldos pueden estar viejos. Revisa las cargas de
-              OpenClaw.
-            </p>
-          ) : (
-            <p className="mt-0.5">Próxima: {dayWord(data.freshness.nextAt)}{coDateTime(data.freshness.nextAt)} · se actualiza {data.freshness.schedule}</p>
-          )}
-        </div>
-      )}
+      <CarteraSheetBox freshness={data.freshness} />
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {[
@@ -186,6 +171,8 @@ export function ReceivablesView({ onOpenCustomer }: { onOpenCustomer: (id: numbe
           </ul>
         </section>
       )}
+
+      <CarteraLinks onOpenCustomer={onOpenCustomer} />
 
       <section className={card}>
         <h2 className="text-sm font-medium">{bucket ? `Quién debe · ${data.aging.find((a) => a.key === bucket)?.label ?? ''}` : 'Quién debe'}</h2>

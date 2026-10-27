@@ -19,6 +19,8 @@ export type ReceivableUpsert = {
   dueAt?: string;
   seller?: string;
   data?: Record<string, unknown>;
+  /** The customer, already decided by the caller (the sheet sync). Never taken from the agent API. */
+  contactId?: number;
 };
 
 export type ReceivablesOptions = {
@@ -82,7 +84,7 @@ export function upsertReceivables(items: ReceivableUpsert[], options: Receivable
       if (it.issuedAt && !issuedAt) return res.skipped.push({ index, reason: 'Fecha de emisión inválida' });
       if (it.dueAt && !dueAt) return res.skipped.push({ index, reason: 'Fecha de vencimiento inválida' });
 
-      const contact = resolveContact(it, !!options.allowNoPhone);
+      const contact = it.contactId ? { id: it.contactId, created: false } : resolveContact(it, !!options.allowNoPhone);
       if (!contact) return res.skipped.push({ index, reason: 'No encuentro al cliente: manda phone o nit de un cliente existente, o allowNoPhone para crearlo' });
       if (contact.created) res.contactsCreated++;
 
@@ -278,6 +280,9 @@ export function debtsByPhone(now = new Date()): Record<string, DebtFlag> {
 /** When OpenClaw loads the aging report from AnaliX: Monday to Saturday (not holidays), Colombian time. */
 export const LOAD_TIMES = ['10:45', '15:00', '17:45'];
 
+/** The CRM reads the cartera straight from the Google Sheet (lib/crm/cartera-sheet.ts) instead of OpenClaw loading it. */
+export const carteraSheetConfigured = () => !!(process.env.CARTERA_SHEET_URL?.trim() && process.env.CARTERA_SHEET_KEY?.trim());
+
 /** "lun-sáb 10:45 a. m., 3:00 p. m. y 5:45 p. m." */
 export const LOAD_SCHEDULE_LABEL = `lun-sáb ${LOAD_TIMES.map((t) => `${Number(t.slice(0, 2)) % 12 || 12}:${t.slice(3)} ${Number(t.slice(0, 2)) < 12 ? 'a. m.' : 'p. m.'}`)
   .join(', ')
@@ -297,7 +302,7 @@ export type ReceivablesFreshness = {
 };
 
 /** Instant of a "HH:MM" Colombian time on a "YYYY-MM-DD" day (Colombia is UTC-5 all year). */
-const slotMs = (day: string, time: string) => Date.parse(`${day}T${time}:00Z`) + 5 * 3_600_000;
+export const slotMs = (day: string, time: string) => Date.parse(`${day}T${time}:00Z`) + 5 * 3_600_000;
 
 /** How fresh the loaded aging report is compared with the load schedule. Null when nothing was ever loaded. */
 export function receivablesFreshness(now = Date.now()): ReceivablesFreshness | null {
@@ -330,5 +335,5 @@ export function receivablesFreshness(now = Date.now()): ReceivablesFreshness | n
 export function receivablesStaleWarning(now = Date.now()): string | null {
   const f = receivablesFreshness(now);
   if (!f?.stale) return null;
-  return `⚠️ La cartera no se actualiza desde el ${coDateTime(f.loadedAt)}: faltaron ${f.missed} actualizaci${f.missed === 1 ? 'ón' : 'ones'} programada${f.missed === 1 ? '' : 's'} (${LOAD_SCHEDULE_LABEL}). Los avisos de deuda pueden estar viejos: revisa las cargas de OpenClaw.`;
+  return `⚠️ La cartera no se actualiza desde el ${coDateTime(f.loadedAt)}: faltaron ${f.missed} actualizaci${f.missed === 1 ? 'ón' : 'ones'} programada${f.missed === 1 ? '' : 's'} (${LOAD_SCHEDULE_LABEL}). Los avisos de deuda pueden estar viejos: ${carteraSheetConfigured() ? 'revisa la lectura de la hoja en la pestaña Cartera' : 'revisa las cargas de OpenClaw'}.`;
 }
