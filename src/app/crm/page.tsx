@@ -77,12 +77,13 @@ export default function CrmPage() {
       className="relative h-[100dvh] overflow-y-auto overflow-x-clip overscroll-y-contain bg-background text-foreground"
     >
       <div aria-hidden className="pointer-events-none fixed inset-0 opacity-60 dark:opacity-100">
-        <div className="absolute -left-40 -top-40 h-[28rem] w-[28rem] rounded-full bg-emerald-500/15 blur-[120px]" />
+        <div className="absolute -left-40 -top-40 h-[30rem] w-[30rem] rounded-full bg-emerald-500/20 blur-[120px] dark:bg-[#00e05a]/15" />
         <div className="absolute -right-40 top-20 h-[26rem] w-[26rem] rounded-full bg-fuchsia-500/15 blur-[120px]" />
         <div className="absolute bottom-0 left-1/3 h-[24rem] w-[24rem] rounded-full bg-sky-500/10 blur-[120px]" />
       </div>
 
-      <header className="sticky top-0 z-20 border-b border-border/60 bg-background/70 backdrop-blur-xl">
+      {/* Green Lantern header: deep green band, neon green line and active tab (the user's choice). */}
+      <header className="sticky top-0 z-20 border-b border-emerald-500/30 bg-gradient-to-b from-emerald-100/90 to-emerald-50/80 shadow-[0_6px_24px_-12px_rgba(0,224,90,0.45)] backdrop-blur-xl dark:border-[#00e05a]/40 dark:from-[#03301a]/95 dark:to-[#06200f]/90">
         <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 pt-3">
           <Link href="/" className="text-muted-foreground hover:text-foreground" aria-label="Volver a la bandeja">
             <ArrowLeft className="h-5 w-5" />
@@ -104,8 +105,10 @@ export default function CrmPage() {
               key={t}
               onClick={() => setTab(t)}
               className={cn(
-                'h-8 shrink-0 rounded-full px-3 text-sm transition-colors',
-                tab === t ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+                'h-8 shrink-0 rounded-full px-3 text-sm transition-all',
+                tab === t
+                  ? 'bg-[#00c853] font-semibold text-white shadow-[0_0_16px_rgba(0,200,83,0.55)] dark:bg-[#00e05a] dark:text-[#022c14] dark:shadow-[0_0_20px_rgba(0,224,90,0.65)]'
+                  : 'text-emerald-900/75 hover:bg-emerald-500/15 hover:text-emerald-950 dark:text-emerald-100/80 dark:hover:bg-[#00e05a]/15 dark:hover:text-white'
               )}
             >
               {TAB_LABEL[t]}

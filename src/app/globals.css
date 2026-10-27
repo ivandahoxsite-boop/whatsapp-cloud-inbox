@@ -107,19 +107,19 @@
 
 :root[data-theme="default"][data-mode="dark"],
 :root[data-theme="kapso"] {
-  --background: hsl(222 24% 7%);
+  --background: hsl(158 30% 7%);
   --foreground: hsl(0 0% 95%);
-  --card: hsl(222 20% 11.5%);
+  --card: hsl(158 22% 11%);
   --card-foreground: hsl(0 0% 95%);
-  --popover: hsl(222 20% 11.5%);
+  --popover: hsl(158 22% 11%);
   --popover-foreground: hsl(0 0% 95%);
   --primary: hsl(142.1 70.6% 45.3%);
   --primary-foreground: hsl(144.9 80.4% 10%);
-  --secondary: hsl(222 16% 17%);
+  --secondary: hsl(158 16% 16%);
   --secondary-foreground: hsl(0 0% 98%);
-  --muted: hsl(222 16% 16%);
-  --muted-foreground: hsl(220 12% 70%);
-  --accent: hsl(222 16% 18%);
+  --muted: hsl(158 16% 15%);
+  --muted-foreground: hsl(150 10% 72%);
+  --accent: hsl(158 18% 17%);
   --accent-foreground: hsl(0 0% 98%);
   --destructive: hsl(0 62.8% 30.6%);
   --destructive-foreground: hsl(0 85.7% 97.3%);
@@ -127,16 +127,16 @@
   --warning-foreground: hsl(30 80% 12%);
   --success: hsl(142 69% 29%);
   --success-foreground: hsl(0 0% 98%);
-  --border: hsl(222 14% 21%);
-  --input: hsl(222 14% 23%);
+  --border: hsl(156 16% 21%);
+  --input: hsl(156 16% 23%);
   --ring: hsl(142.4 71.8% 29.2%);
-  --sidebar: hsl(222 20% 11.5%);
+  --sidebar: hsl(158 22% 11%);
   --sidebar-foreground: hsl(0 0% 95%);
   --sidebar-primary: hsl(142.1 70.6% 45.3%);
   --sidebar-primary-foreground: hsl(144.9 80.4% 10%);
   --sidebar-accent: hsl(240 3.7% 15.9%);
   --sidebar-accent-foreground: hsl(0 0% 98%);
-  --sidebar-border: hsl(222 14% 21%);
+  --sidebar-border: hsl(156 16% 21%);
   --sidebar-ring: hsl(142.4 71.8% 29.2%);
   --primary-hover: hsl(142.1 70.6% 39%);
   --chat-surface: hsl(24 9.8% 10%);

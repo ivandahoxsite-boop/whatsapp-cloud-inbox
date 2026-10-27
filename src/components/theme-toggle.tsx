@@ -64,7 +64,7 @@ function resolveMode(mode: Mode): ResolvedMode {
 }
 
 function getBackgroundColor(mode: ResolvedMode) {
-  return mode === 'dark' ? 'hsl(222 24% 7%)' : 'hsl(0 0% 100%)';
+  return mode === 'dark' ? 'hsl(158 30% 7%)' : 'hsl(0 0% 100%)';
 }
 
 function applyMode(mode: Mode) {

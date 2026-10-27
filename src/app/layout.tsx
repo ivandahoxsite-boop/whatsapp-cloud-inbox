@@ -24,7 +24,7 @@ try {
   document.documentElement.dataset.theme = 'default';
   document.documentElement.dataset.mode = resolvedMode;
   document.documentElement.style.colorScheme = resolvedMode;
-  document.documentElement.style.backgroundColor = resolvedMode === 'dark' ? 'hsl(222 24% 7%)' : 'hsl(0 0% 100%)';
+  document.documentElement.style.backgroundColor = resolvedMode === 'dark' ? 'hsl(158 30% 7%)' : 'hsl(0 0% 100%)';
 
   if (resolvedMode === 'dark') {
     document.documentElement.classList.add('dark');
