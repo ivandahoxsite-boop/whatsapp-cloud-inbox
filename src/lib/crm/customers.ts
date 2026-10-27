@@ -24,6 +24,9 @@ export type Customer = {
   lastInboundText: string;
   /** Their last message is newer than your last reply and is more than a "thanks"/"ok"/sticker. */
   awaitingReply: boolean;
+  /** Purchases (lines with a positive amount) and net total of the current year only (Colombian calendar). */
+  yearSales: number;
+  yearSpent: number;
 } & CustomerMetrics &
   RecurrenceMetrics;
 
@@ -40,6 +43,8 @@ type Row = {
   sales_count: number;
   total_spent: number;
   last_sale_at: string | null;
+  year_sales: number;
+  year_spent: number;
 };
 
 let customersCache: { key: string; value: Customer[] } | null = null;
@@ -55,16 +60,19 @@ export function listCustomers(): Customer[] {
 }
 
 function computeCustomers(): Customer[] {
+  const yearStart = `${new Date(Date.now() - 5 * 3_600_000).getUTCFullYear()}-01-01`;
   const rows = getDb()
     .prepare(
       // Only lines with a positive amount are purchases. Returns (negative) and free items (zero) still count in the
       // money total (net) but are not a "purchase": they must not move the last purchase date or the buying rhythm.
       `SELECT c.*, COUNT(CASE WHEN s.amount > 0 THEN 1 END) AS sales_count, COALESCE(SUM(s.amount), 0) AS total_spent,
-              MAX(CASE WHEN s.amount > 0 THEN s.sold_at END) AS last_sale_at
+              MAX(CASE WHEN s.amount > 0 THEN s.sold_at END) AS last_sale_at,
+              COUNT(CASE WHEN s.amount > 0 AND s.sold_at >= ? THEN 1 END) AS year_sales,
+              COALESCE(SUM(CASE WHEN s.sold_at >= ? THEN s.amount END), 0) AS year_spent
        FROM contacts c LEFT JOIN sales s ON s.contact_id = c.id
        GROUP BY c.id ORDER BY c.id`
     )
-    .all() as unknown as Row[];
+    .all(yearStart, yearStart) as unknown as Row[];
 
   const metrics = computeMetrics(
     rows.map((r) => ({ salesCount: r.sales_count, totalSpent: r.total_spent, lastSaleAt: r.last_sale_at }))
@@ -115,6 +123,8 @@ function computeCustomers(): Customer[] {
     stageId: r.stage_id,
     data: JSON.parse(r.data) as Record<string, unknown>,
     createdAt: r.created_at,
+    yearSales: r.year_sales,
+    yearSpent: r.year_spent,
     ...chatState(chat.get(r.id)),
     ...metrics[i],
     ...computeRecurrence(salesByContact.get(r.id) ?? [], now)
@@ -210,14 +220,18 @@ export function setCustomerPhone(id: number, raw: string): { contactId: number; 
     | undefined;
   if (!me) throw new Error('Cliente no encontrado');
   if (me.phone === phone) return { contactId: id, merged: false };
-  // Giving a phone to a customer of the cartera sheet is saying who they are: later loads keep their invoices there.
+  // Giving a phone to a customer of the cartera sheet or AnaliX is saying who they are: later loads keep their invoices
+  // and sales there.
   const linkSheet = (to: number) => {
     if (isRealPhone(me.phone)) return;
+    // Both its cartera invoices (by NIT) and its AnaliX sales (by billing name) stay on the chat from now on.
     d.prepare(
       `INSERT OR REPLACE INTO cartera_links (cliente, contact_id, status, updated_at)
-       SELECT DISTINCT json_extract(data, '$.cliente'), ?, 'linked', datetime('now') FROM receivables
-       WHERE contact_id = ? AND source = 'cartera' AND json_extract(data, '$.cliente') IS NOT NULL`
-    ).run(to, id);
+       SELECT DISTINCT k, ?, 'linked', datetime('now') FROM (
+         SELECT json_extract(data, '$.cliente') AS k FROM receivables WHERE contact_id = ? AND source = 'cartera'
+         UNION SELECT json_extract(data, '$.clientKey') FROM sales WHERE contact_id = ? AND external_id LIKE 'ANX-%'
+       ) WHERE k IS NOT NULL`
+    ).run(to, id, id);
   };
   const other = d.prepare('SELECT id, name, city, stage_id, data FROM contacts WHERE phone = ?').get(phone) as
     | { id: number; name: string; city: string; stage_id: number | null; data: string }

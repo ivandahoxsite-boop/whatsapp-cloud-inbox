@@ -9,7 +9,11 @@ import { Input } from '@/components/ui/input';
 import { isEmptyFilter, matchesFilter, type CustomerFilter } from '@/lib/crm/filters';
 import type { Customer } from '@/lib/crm/customers';
 import { FilterBar } from './filter-bar';
-import { Pill, QUERY_KEY, RecurrencePill, SegmentPill, TagPill, ago, api, card, cityOptions, displayName, downloadCustomersCsv, formatPhone, money, relativeDays, type CrmData } from './shared';
+import { todayCo } from '@/lib/crm/tasks-info';
+import { Pill, QUERY_KEY, RecurrencePill, SegmentPill, TagPill, ago, api, card, cityOptions, cop, displayName, downloadCustomersCsv, formatPhone, relativeDays, type CrmData } from './shared';
+
+/** Purchases and totals on this screen are of the current year (the user asked for it). */
+const YEAR = todayCo().slice(0, 4);
 
 type SortKey = 'score' | 'waiting' | 'chat' | 'totalSpent' | 'recent' | 'overdue' | 'name';
 
@@ -21,7 +25,7 @@ const SORTS: Record<SortKey, { label: string; fn: (a: Customer, b: Customer) => 
   },
   chat: { label: 'Último mensaje de WhatsApp', fn: (a, b) => lastChat(b).localeCompare(lastChat(a)) },
   overdue: { label: 'Más atrasados en recomprar', fn: (a, b) => (b.overdueDays ?? -1e9) - (a.overdueDays ?? -1e9) },
-  totalSpent: { label: 'Más gastaron', fn: (a, b) => b.totalSpent - a.totalSpent },
+  totalSpent: { label: `Más compraron en ${YEAR}`, fn: (a, b) => b.yearSpent - a.yearSpent || b.totalSpent - a.totalSpent },
   recent: { label: 'Compra más reciente', fn: (a, b) => (a.daysSinceLastSale ?? 1e9) - (b.daysSinceLastSale ?? 1e9) },
   name: { label: 'Nombre A-Z', fn: (a, b) => a.name.localeCompare(b.name, 'es') }
 };
@@ -60,7 +64,7 @@ export function CustomersView({
     () => data.customers.filter((c) => matchesFilter(c, filter)).sort(SORTS[sort].fn),
     [data.customers, filter, sort]
   );
-  const total = rows.reduce((a, c) => a + c.totalSpent, 0);
+  const total = rows.reduce((a, c) => a + c.yearSpent, 0);
 
   const toggle = (id: number) =>
     setSelected((s) => {
@@ -93,7 +97,9 @@ export function CustomersView({
         <span className="font-medium">
           {rows.length} {rows.length === 1 ? 'cliente' : 'clientes'}
         </span>
-        <span className="text-muted-foreground">· {money(total)} en compras</span>
+        <span className="text-muted-foreground">
+          · {cop(total)} en compras de {YEAR}
+        </span>
         <div className="ml-auto flex flex-wrap items-center gap-2">
           <select value={sort} onChange={(e) => setSort(e.target.value as SortKey)} className="h-8 rounded-full border border-border/60 bg-card/50 px-2 text-xs">
             {(Object.keys(SORTS) as SortKey[]).map((k) => (
@@ -157,7 +163,7 @@ export function CustomersView({
                   </div>
                   <p className="truncate text-xs text-muted-foreground">
                     {c.city ? `${c.city} · ` : ''}
-                    {c.salesCount} compras · {money(c.totalSpent)} · {relativeDays(c.daysSinceLastSale)}
+                    {c.yearSales} compras en {YEAR} · {cop(c.yearSpent)} · {relativeDays(c.daysSinceLastSale)}
                   </p>
                   {c.awaitingReply && c.lastInboundText && (
                     <p className="mt-1 line-clamp-2 text-xs text-foreground/80">“{c.lastInboundText.replace(/^🎤\s*/, '🎤 ')}”</p>
@@ -185,8 +191,8 @@ export function CustomersView({
               <th className="p-3">Tipo</th>
               <th className="p-3">Valor</th>
               <th className="p-3">Etiquetas</th>
-              <th className="p-3 text-right">Compras</th>
-              <th className="p-3 text-right">Total</th>
+              <th className="p-3 text-right">Compras {YEAR}</th>
+              <th className="p-3 text-right">Total {YEAR}</th>
               <th className="p-3">Última compra</th>
               <th className="p-3">Próxima</th>
               <th className="p-3">Etapa</th>
@@ -233,8 +239,8 @@ export function CustomersView({
                     {c.tags.map((id) => tagById.get(id)).filter(Boolean).map((t) => <TagPill key={t!.id} tag={t!} />)}
                   </div>
                 </td>
-                <td className="p-3 text-right tabular-nums">{c.salesCount}</td>
-                <td className="p-3 text-right tabular-nums">{money(c.totalSpent)}</td>
+                <td className="p-3 text-right tabular-nums">{c.yearSales}</td>
+                <td className="whitespace-nowrap p-3 text-right tabular-nums">{cop(c.yearSpent)}</td>
                 <td className="p-3 text-xs text-muted-foreground">{relativeDays(c.daysSinceLastSale)}</td>
                 <td className="p-3 text-xs">
                   {c.overdueDays == null ? (

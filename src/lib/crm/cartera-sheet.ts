@@ -439,17 +439,25 @@ export function unlinkCarteraClient(key: string) {
   dropEmptyPlaceholders();
 }
 
-/** WhatsApp contacts whose name or phone matches, to pick the right one for a sheet customer. */
-export function searchContacts(q: string): Contact[] {
+/**
+ * WhatsApp contacts whose name has every word typed (in any order), or whose phone has the digits typed. The ones
+ * that wrote most recently come first: they are the likeliest to be the customer.
+ */
+export function searchContacts(q: string): (Contact & { city: string; lastChat: string | null })[] {
   const s = q.trim();
   if (s.length < 2) return [];
   const digits = s.replace(/\D/g, '');
+  const words = s.split(/\s+/).filter((w) => w.length >= 2 && !/^\d+$/.test(w)).slice(0, 4);
+  const byName = words.length ? words.map(() => 'c.name LIKE ?').join(' AND ') : '0';
+  const byPhone = digits.length >= 4 ? 'OR c.phone LIKE ?' : '';
   return getDb()
     .prepare(
-      `SELECT id, name, phone FROM contacts WHERE phone GLOB '[0-9]*' AND (name LIKE ? ${digits.length >= 4 ? 'OR phone LIKE ?' : ''})
-       ORDER BY name LIMIT 8`
+      `SELECT c.id, c.name, c.phone, COALESCE(c.city, '') AS city,
+              (SELECT MAX(a.created_at) FROM activities a WHERE a.contact_id = c.id AND a.kind IN ('whatsapp_in', 'whatsapp_out')) AS lastChat
+       FROM contacts c WHERE c.phone GLOB '[0-9]*' AND ((${byName}) ${byPhone})
+       ORDER BY lastChat IS NULL, lastChat DESC, c.name LIMIT 10`
     )
-    .all(...[`%${s}%`, ...(digits.length >= 4 ? [`%${digits}%`] : [])]) as Contact[];
+    .all(...words.map((w) => `%${w}%`), ...(digits.length >= 4 ? [`%${digits}%`] : [])) as (Contact & { city: string; lastChat: string | null })[];
 }
 
 /** While the sheet is connected, OpenClaw must not load the cartera too (it would tie invoices by its own guesses). */

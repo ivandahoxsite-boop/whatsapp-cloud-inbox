@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { MessageCircle, Phone, ShoppingBag, StickyNote, Trash2, ArrowRightLeft, Tag as TagIcon, X } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
@@ -12,7 +12,11 @@ import type { CustomField } from '@/lib/crm/db';
 import { collectionMessage } from '@/lib/crm/collection-messages';
 import { TaskForm } from './task-form';
 import { CustomerTasks } from './task-list';
+import { todayCo } from '@/lib/crm/tasks-info';
 import { WhatsAppLink, checkCollection, twilioCall, useTwilio, QUERY_KEY, RecurrencePill, SegmentPill, TagPill, ago, api, cityOptions, formatPhone, money, relativeDays, type CrmData } from './shared';
+
+/** Purchases of the current year, as in the customer list. */
+const YEAR = todayCo().slice(0, 4);
 
 type Sale = { id: number; soldAt: string; amount: number; product: string };
 type Activity = { id: number; kind: string; text: string; createdAt: string };
@@ -60,7 +64,6 @@ function SheetBody({ c, data, onClose }: { c: Customer; data: CrmData; onClose: 
   const [city, setCity] = useState(c.city);
   const [newTag, setNewTag] = useState('');
   const [note, setNote] = useState('');
-  const [newPhone, setNewPhone] = useState('');
   const [addingTask, setAddingTask] = useState(false);
   const [showCobro, setShowCobro] = useState(false);
   const [callNote, setCallNote] = useState('');
@@ -192,22 +195,16 @@ function SheetBody({ c, data, onClose }: { c: Customer; data: CrmData; onClose: 
             </a>
           </div>
         ) : (
-          <form
-            className="mt-3 flex gap-2"
-            onSubmit={(e) => {
-              e.preventDefault();
-              if (!newPhone.trim()) return;
-              // If this number already has a WhatsApp chat, both are merged and this sheet closes.
+          <PhonePicker
+            customer={c}
+            onPick={(phone) =>
+              // If this number already has a WhatsApp chat, both become one customer and this sheet closes.
               run(async () => {
-                const r = await api<{ merged: boolean }>('/api/crm/customers', 'PATCH', { id: c.id, phone: newPhone.trim() });
-                setNewPhone('');
+                const r = await api<{ merged: boolean }>('/api/crm/customers', 'PATCH', { id: c.id, phone });
                 if (r.merged) onClose();
-              });
-            }}
-          >
-            <Input value={newPhone} onChange={(e) => setNewPhone(e.target.value)} placeholder="Agregar teléfono" inputMode="tel" className="h-9" />
-            <Button type="submit" size="sm">Guardar</Button>
-          </form>
+              })
+            }
+          />
         )}
       </div>
 
@@ -221,8 +218,9 @@ function SheetBody({ c, data, onClose }: { c: Customer; data: CrmData; onClose: 
         <p className="rounded-xl bg-muted/40 p-3 text-xs text-muted-foreground">{RECURRENCE_INFO[c.recurrence].hint}</p>
 
         <dl className="grid grid-cols-2 gap-3 text-sm">
-          <Stat label="Compras" value={String(c.salesCount)} />
-          <Stat label="Total" value={money(c.totalSpent)} />
+          <Stat label={`Compras ${YEAR}`} value={String(c.yearSales)} />
+          <Stat label={`Total ${YEAR}`} value={`$\u00a0${money(c.yearSpent)}`} />
+          <Stat label="Total desde 2024" value={`$\u00a0${money(c.totalSpent)}`} />
           <Stat label="Ticket promedio" value={c.salesCount ? money(c.avgTicket) : '—'} />
           <Stat label="Última compra" value={relativeDays(c.daysSinceLastSale)} />
           <Stat label="Compra cada" value={c.avgIntervalDays != null ? `~${c.avgIntervalDays} días` : '—'} />
@@ -481,5 +479,71 @@ function CustomFieldInput({ field, value, onSave }: { field: CustomField; value:
         />
       )}
     </label>
+  );
+}
+
+type ChatContact = { id: number; name: string; phone: string; city: string; lastChat: string | null };
+
+/** The first words of a billing name, to start the search with ("REALITY SOUND S.A.S." -> "reality sound"). */
+const startQuery = (name: string) =>
+  name
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+    .split(/\s+/)
+    .filter((w) => w.length >= 3 && !['sas', 'ltda', 'sa'].includes(w))
+    .slice(0, 2)
+    .join(' ');
+
+/**
+ * For a customer without phone: searches your WhatsApp chats by name or number, and YOU pick which one it is. Picking
+ * joins both into one customer (sales, invoices and history move to the chat). Nothing is joined on its own.
+ */
+function PhonePicker({ customer, onPick }: { customer: Customer; onPick: (phone: string) => void }) {
+  const [q, setQ] = useState(() => startQuery(customer.name));
+  const [debounced, setDebounced] = useState(q);
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(q), 250);
+    return () => clearTimeout(t);
+  }, [q]);
+  const { data, isFetching } = useQuery({
+    queryKey: ['crm-chat-search', debounced],
+    queryFn: () => api<{ contacts: ChatContact[] }>(`/api/crm/customers/search?q=${encodeURIComponent(debounced)}`),
+    enabled: debounced.trim().length >= 2
+  });
+  const found = data?.contacts ?? [];
+  const digits = q.replace(/\D/g, '');
+  const pick = (x: { name: string; phone: string }) => {
+    if (confirm(`¿${customer.name || 'Este cliente'} es ${x.name || 'este contacto'} (${formatPhone(x.phone)})?\n\nSus compras, facturas e historial quedarán en ese chat de WhatsApp.`)) onPick(x.phone);
+  };
+  return (
+    <div className="mt-3 space-y-2 rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-2">
+      <p className="text-xs font-medium">📱 Buscar su WhatsApp</p>
+      <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Nombre como lo tienes en WhatsApp, o el celular" className="h-9" />
+      {debounced.trim().length >= 2 && !isFetching && !found.length && (
+        <p className="text-xs text-muted-foreground">No encuentro chats con «{debounced}». Prueba con otra palabra o escribe el celular.</p>
+      )}
+      <ul className="space-y-1">
+        {found.map((x) => (
+          <li key={x.id} className="flex items-center gap-2 rounded-lg bg-background/60 px-2 py-1.5 text-xs">
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-sm font-medium">{x.name || 'Sin nombre'}</span>
+              <span className="text-muted-foreground">
+                {formatPhone(x.phone)}
+                {x.city ? ` · ${x.city}` : ''}
+                {x.lastChat ? ` · último chat ${ago(x.lastChat.includes('T') ? x.lastChat : `${x.lastChat.replace(' ', 'T')}Z`)}` : ''}
+              </span>
+            </span>
+            <Button size="sm" variant="outline" onClick={() => pick(x)}>
+              Es este
+            </Button>
+          </li>
+        ))}
+      </ul>
+      {digits.length >= 10 && !found.some((x) => x.phone.endsWith(digits.slice(-10))) && (
+        <Button size="sm" variant="outline" onClick={() => pick({ name: '', phone: digits })}>
+          Usar el celular {digits}
+        </Button>
+      )}
+    </div>
   );
 }
