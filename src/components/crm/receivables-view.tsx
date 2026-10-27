@@ -84,7 +84,7 @@ export function ReceivablesView({ onOpenCustomer }: { onOpenCustomer: (id: numbe
         <p className="font-medium">Aún no hay cartera cargada.</p>
         <p className="text-muted-foreground">
           {sheet?.configured
-            ? 'Toca «Traer ahora de la hoja» para leer la pestaña «Cartera por vendedor».'
+            ? 'Toca «🔄 Actualizar ahora» para leer la pestaña «Cartera por vendedor».'
             : 'Pídele a OpenClaw que cargue el reporte de cartera por vendedor (facturas con saldo pendiente).'}{' '}
           Después verás aquí cuánto te deben, quién está en mora y desde cuándo.
         </p>

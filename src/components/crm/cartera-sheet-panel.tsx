@@ -45,20 +45,44 @@ export function CarteraSheetBox({ freshness }: { freshness: ReceivablesFreshness
       setBusy(false);
     }
   };
+  const refresh = () => {
+    qc.invalidateQueries({ queryKey: ['crm-receivables'] });
+    qc.invalidateQueries({ queryKey: ['crm-cartera-sheet'] });
+    qc.invalidateQueries({ queryKey: ['crm-cartera-links'] });
+  };
+  const done = (p: CarteraPlan) =>
+    `✅ Cartera actualizada: ${p.invoices} facturas por ${money(p.total)}` +
+    `${p.created ? ` · ${p.created} nuevas` : ''}${p.closed ? ` · ${p.closed} pagadas` : ''}${p.moves.length ? ` · ${p.moves.length} cambiaron de cliente` : ''}.`;
+  // One tap: reads the sheet and loads it with the same safety checks as the scheduled loads. If a check stops it,
+  // the preview opens so you can look and confirm.
+  const update = async () => {
+    setBusy(true);
+    setMsg('');
+    setPlan(null);
+    try {
+      const r = await api<{ plan: CarteraPlan }>('/api/crm/receivables/sheet', 'POST', { action: 'update' });
+      setMsg(done(r.plan));
+    } catch (e) {
+      const body = (e as { body?: { plan?: CarteraPlan } }).body;
+      setMsg((e as Error).message);
+      if (body?.plan) setPlan(body.plan);
+    } finally {
+      setBusy(false);
+      refresh();
+    }
+  };
   const load = async () => {
     setBusy(true);
     setMsg('');
     try {
-      await api('/api/crm/receivables/sheet', 'POST', { action: 'load' });
+      const r = await api<{ plan: CarteraPlan }>('/api/crm/receivables/sheet', 'POST', { action: 'load' });
       setPlan(null);
-      setMsg('✅ Cartera cargada desde la hoja.');
+      setMsg(done(r.plan));
     } catch (e) {
       setMsg((e as Error).message);
     } finally {
       setBusy(false);
-      qc.invalidateQueries({ queryKey: ['crm-receivables'] });
-      qc.invalidateQueries({ queryKey: ['crm-cartera-sheet'] });
-      qc.invalidateQueries({ queryKey: ['crm-cartera-links'] });
+      refresh();
     }
   };
 
@@ -72,15 +96,22 @@ export function CarteraSheetBox({ freshness }: { freshness: ReceivablesFreshness
       )}
     >
       {freshness && (
-        <p>
-          {stale ? '⚠️ ' : '🔄 '}
-          {configured ? 'Última carga de la hoja de cartera' : 'Última vez que OpenClaw trajo la cartera'}:{' '}
-          <b>
-            {dayWord(freshness.loadedAt)}
-            {coDateTime(freshness.loadedAt)}
-          </b>
-          {configured && last?.ok && last.corte ? ` · corte de la hoja ${shortDay(last.corte)}` : ''}
-        </p>
+        <div className="flex items-start gap-2">
+          <p className="min-w-0 flex-1">
+            {stale ? '⚠️ ' : '🔄 '}
+            {configured ? 'Última carga de la hoja de cartera' : 'Última vez que OpenClaw trajo la cartera'}:{' '}
+            <b>
+              {dayWord(freshness.loadedAt)}
+              {coDateTime(freshness.loadedAt)}
+            </b>
+            {configured && last?.ok && last.corte ? ` · corte de la hoja ${shortDay(last.corte)}` : ''}
+          </p>
+          {configured && (
+            <Button size="sm" onClick={update} disabled={busy} className="shrink-0">
+              {busy ? 'Actualizando…' : '🔄 Actualizar'}
+            </Button>
+          )}
+        </div>
       )}
       {configured && last && !last.ok && (
         <p>
@@ -99,12 +130,15 @@ export function CarteraSheetBox({ freshness }: { freshness: ReceivablesFreshness
             {coDateTime(freshness.nextAt)} · se actualiza {freshness.schedule}
           </p>
         ))}
-      {configured && (
-        <div className="pt-1">
-          <Button size="sm" variant="outline" onClick={preview} disabled={busy}>
-            {busy && !plan ? 'Leyendo la hoja…' : '🔄 Traer ahora de la hoja'}
-          </Button>
-        </div>
+      {configured && !freshness && (
+        <Button size="sm" onClick={update} disabled={busy}>
+          {busy ? 'Actualizando…' : '🔄 Actualizar ahora'}
+        </Button>
+      )}
+      {configured && !plan && (
+        <button className="underline" onClick={preview} disabled={busy}>
+          Ver qué cambia antes de cargar
+        </button>
       )}
       {msg && <p className="text-foreground">{msg}</p>}
       {plan && <PlanPreview plan={plan} busy={busy} onLoad={load} onCancel={() => setPlan(null)} />}

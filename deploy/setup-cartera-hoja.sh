@@ -91,7 +91,7 @@ for _ in $(seq 1 30); do
 done
 cat <<'MSG'
 ✅ Listo. Ahora:
-   1. Abre el CRM → pestaña Cartera → "🔄 Traer ahora de la hoja".
+   1. Abre el CRM → pestaña Cartera → "🔄 Actualizar".
    2. Revisa la vista previa (qué facturas cambian de cliente) y toca "Confirmar y cargar".
    3. En "Clientes de la hoja sin WhatsApp" di quién es cada uno (una sola vez).
    Desde ahora el CRM la lee solo, lun-sáb 10:45, 3:00 y 5:45 p. m.
