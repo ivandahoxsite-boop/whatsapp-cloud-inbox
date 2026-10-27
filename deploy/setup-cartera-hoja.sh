@@ -19,7 +19,11 @@ set_var() { # set_var NAME VALUE: replaces the line, keeps the file's owner and 
 
 # Same key as before if it was already set up (the Apps Script keeps working), else a new one.
 KEY=$(grep -E '^CARTERA_SHEET_KEY=' "$ENV_FILE" | tail -1 | cut -d= -f2- || true)
-[[ "$KEY" =~ ^[0-9a-f]{48}$ ]] || KEY=$(openssl rand -hex 24)
+if ! [[ "$KEY" =~ ^[0-9a-f]{48}$ ]]; then
+  KEY=$(openssl rand -hex 24)
+  # Kept right away: if this run fails, the next one shows the same key and the code already pasted still works.
+  set_var CARTERA_SHEET_KEY "$KEY"
+fi
 
 echo
 read -rp "Pega el link de la hoja de Google (el de la barra del navegador): " LINK
@@ -71,7 +75,7 @@ for intento in 1 2 3; do
   # The key goes to curl through stdin, so it never shows in the list of running processes.
   OUT=$(printf 'url = "%s?k=%s"\n' "$URL" "$KEY" | curl -sL --max-time 60 -K - || true)
   if printf '%s' "$OUT" | grep -Eq '"error": ?"clave"'; then
-    echo "❌ La hoja responde, pero con otra clave: pega el código de arriba (con ESTA clave), guarda y haz una NUEVA implementación."; continue
+    echo "❌ La hoja responde, pero con otra clave: en el proyecto CRM cartera reemplaza TODO el código por el de arriba, guarda y haz Implementar → NUEVA implementación; pega aquí la URL NUEVA."; continue
   fi
   if ! printf '%s' "$OUT" | grep -Eq '"ok": ?true'; then echo "❌ La hoja respondió: $(printf '%s' "$OUT" | head -c 200)"; continue; fi
   printf '%s' "$OUT" | grep -q '"Documento"' || { echo "❌ La pestaña no trae la columna Documento."; continue; }
@@ -81,7 +85,6 @@ done
 echo "   ✅ La hoja responde."
 
 set_var CARTERA_SHEET_URL "$URL"
-set_var CARTERA_SHEET_KEY "$KEY"
 systemctl restart crm
 for _ in $(seq 1 30); do
   [ "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:$PORT/api/crm/version 2>/dev/null)" != 000 ] && break; sleep 1
