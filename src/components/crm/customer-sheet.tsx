@@ -495,8 +495,9 @@ const startQuery = (name: string) =>
     .join(' ');
 
 /**
- * For a customer without phone: searches your WhatsApp chats by name or number, and YOU pick which one it is. Picking
- * joins both into one customer (sales, invoices and history move to the chat). Nothing is joined on its own.
+ * For a customer without phone: searches your WhatsApp chats by name or number, and YOU pick which one it is. Tapping
+ * "Es este" joins both into one customer right away (sales, invoices and history move to the chat). Nothing is joined
+ * without that tap.
  */
 function PhonePicker({ customer, onPick }: { customer: Customer; onPick: (phone: string) => void }) {
   const [q, setQ] = useState(() => startQuery(customer.name));
@@ -512,9 +513,8 @@ function PhonePicker({ customer, onPick }: { customer: Customer; onPick: (phone:
   });
   const found = data?.contacts ?? [];
   const digits = q.replace(/\D/g, '');
-  const pick = (x: { name: string; phone: string }) => {
-    if (confirm(`¿${customer.name || 'Este cliente'} es ${x.name || 'este contacto'} (${formatPhone(x.phone)})?\n\nSus compras, facturas e historial quedarán en ese chat de WhatsApp.`)) onPick(x.phone);
-  };
+  // Tapping "Es este" is the confirmation: it joins right away (the user asked not to be asked again).
+  const pick = (x: { name: string; phone: string }) => onPick(x.phone);
   return (
     <div className="mt-3 space-y-2 rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-2">
       <p className="text-xs font-medium">📱 Buscar su WhatsApp</p>
