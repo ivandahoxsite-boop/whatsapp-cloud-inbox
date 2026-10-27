@@ -1,3 +1,4 @@
+import { analixGuard } from '@/lib/crm/analix';
 import { upsertSales, type SaleUpsert, type SalesOptions } from '@/lib/crm/customers';
 import { fail, guardAgent, json } from '@/lib/crm/agent-http';
 
@@ -19,6 +20,8 @@ export async function POST(request: Request) {
     const { sales, ...options } = (await request.json()) as { sales?: SaleUpsert[] } & SalesOptions;
     if (!Array.isArray(sales) || sales.length === 0) return json({ error: 'Envía { sales: [...] }' }, 400);
     if (sales.length > MAX) return json({ error: `Máximo ${MAX} por envío; divide en lotes` }, 400);
+    const blocked = analixGuard(sales);
+    if (blocked) return json({ error: blocked }, 409);
     const onConflict = options.onConflict === 'skip' ? 'skip' : 'allow';
     const sharedPhones = Array.isArray(options.sharedPhones) ? options.sharedPhones : [];
     return json(

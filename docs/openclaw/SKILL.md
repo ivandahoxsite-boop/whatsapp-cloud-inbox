@@ -44,6 +44,9 @@ Each customer also has `nextExpectedAt` (date their next purchase is due), `over
 - "Escríbele a Elena" → `GET /api/agent/customers?q=elena`, draft a message, show it to the user, then `POST /api/agent/messages`.
   Tell the user to approve it in the CRM (Aprobaciones tab).
 
+## AnaliX sales
+- **Since 2026-10-27 the CRM brings the AnaliX sales itself** (Mon-Sat 23:00). **Do not load them any more** and disable your sales-loading jobs: `POST /api/agent/import/sales` with `ANX…` externalIds now answers 409. You may still read sales with `GET /api/agent/reports/sales`.
+
 ## Loading receivables (cartera)
 - **Since 2026-10-27 the CRM reads the cartera itself** from the Google Sheet tab "Cartera por vendedor" (Mon-Sat 10:45, 15:00, 17:45). **Do not load it any more** and disable your "CRM · Cartera" scheduled jobs: `POST /api/agent/import/receivables` with `source:"cartera"` now answers 409. Never tie an invoice to a customer by a similar name or a guessed phone; the user links each sheet customer (NIT) to its WhatsApp contact in the CRM. What follows is kept only for other sources.
 `POST /api/agent/import/receivables` body `{"receivables":[{"externalId":"FE-1234","nit":"900111222-3","name":"Audiolujos","amount":1500000,"balance":900000,"issuedAt":"2026-08-01","dueAt":"2026-09-30","seller":"IVAN HOYOS"}],"source":"cartera","dryRun":true}`

@@ -113,13 +113,23 @@ export async function fetchCarteraSheet(): Promise<unknown[][]> {
 }
 
 type Contact = { id: number; name: string; phone: string };
-const contactById = (id: number) => getDb().prepare('SELECT id, name, phone FROM contacts WHERE id = ?').get(id) as Contact | undefined;
+export const contactById = (id: number) => getDb().prepare('SELECT id, name, phone FROM contacts WHERE id = ?').get(id) as Contact | undefined;
 const contactByPhone = (phone: string) => getDb().prepare('SELECT id, name, phone FROM contacts WHERE phone = ?').get(phone) as Contact | undefined;
 const linkOf = (key: string) =>
   getDb().prepare('SELECT contact_id, status FROM cartera_links WHERE cliente = ?').get(key) as { contact_id: number; status: string } | undefined;
 
+/**
+ * Key of a billing customer in `cartera_links`: the sheet's NIT/code (letters and digits), or "NOM:<NAME>" for a
+ * customer known only by name (AnaliX sales bring no NIT).
+ */
+export const linkKey = (key: string) => (key.startsWith('NOM:') ? key.trim() : clienteKey(key));
+
+/** The phone-less customer that holds a billing customer's invoices and sales until the user links it. */
+export const placeholderFor = (key: string, name: string) =>
+  (key.startsWith('NOM:') ? placeholderKey(undefined, name || key.slice(4)) : placeholderKey(key, name)) ?? `nit:${key}`;
+
 /** Where this sheet customer's invoices go: the WhatsApp contact the user linked, else its customer without phone. */
-function target(inv: Pick<SheetInvoice, 'key' | 'cliente' | 'name'>): { contact: Contact | null; placeholder: string; linked: boolean } {
+export function target(inv: Pick<SheetInvoice, 'key' | 'cliente' | 'name'>): { contact: Contact | null; placeholder: string; linked: boolean } {
   const placeholder = placeholderKey(inv.cliente, inv.name) ?? `nit:${inv.key}`;
   const link = linkOf(inv.key);
   const linked = link?.status === 'linked' ? contactById(link.contact_id) : undefined;
@@ -224,7 +234,7 @@ export function carteraLast(): CarteraLast | null {
 }
 
 /** A customer without phone for this sheet customer (reuses the one OpenClaw may have created). */
-function ensurePlaceholder(placeholder: string, inv: SheetInvoice): number {
+export function ensurePlaceholder(placeholder: string, inv: Pick<SheetInvoice, 'cliente' | 'name'>): number {
   const found = contactByPhone(placeholder);
   if (found) return found.id;
   const d = getDb();
@@ -322,7 +332,7 @@ export async function previewCarteraSheet(): Promise<CarteraPlan> {
 }
 
 /** Customers without phone left with nothing on them (their invoices moved to the real contact) are removed. */
-function dropEmptyPlaceholders() {
+export function dropEmptyPlaceholders() {
   getDb()
     .prepare(
       `DELETE FROM contacts WHERE (phone LIKE 'nit:%' OR phone LIKE 'nom:%')
@@ -373,16 +383,20 @@ export function carteraClients(): CarteraClient[] {
   });
 }
 
+/** The billing name of a customer key: from the sheet's invoices, else from the AnaliX sales. */
 function sheetName(key: string): string {
-  const r = getDb()
+  const d = getDb();
+  const r = d
     .prepare("SELECT json_extract(data, '$.nombre') AS n FROM receivables WHERE source = ? AND json_extract(data, '$.cliente') = ? ORDER BY id DESC LIMIT 1")
     .get(SOURCE, key) as { n: string | null } | undefined;
-  return r?.n ?? '';
+  if (r?.n) return r.n;
+  const s = d.prepare("SELECT json_extract(data, '$.client') AS n FROM sales WHERE json_extract(data, '$.clientKey') = ? LIMIT 1").get(key) as { n: string | null } | undefined;
+  return s?.n ?? '';
 }
 
 /** The user says which WhatsApp contact a sheet customer is: by contact id or by phone (creating the contact if needed). */
 export function linkCarteraClient(key: string, to: { contactId?: number; phone?: string }): Contact {
-  const k = clienteKey(key);
+  const k = linkKey(key);
   if (!k) throw new Error('Falta el cliente de la hoja');
   let contact: Contact | undefined;
   if (to.contactId) contact = contactById(Number(to.contactId));
@@ -398,6 +412,7 @@ export function linkCarteraClient(key: string, to: { contactId?: number; phone?:
   try {
     d.prepare("INSERT OR REPLACE INTO cartera_links (cliente, contact_id, status, updated_at) VALUES (?, ?, 'linked', datetime('now'))").run(k, contact.id);
     d.prepare("UPDATE receivables SET contact_id = ?, updated_at = datetime('now') WHERE source = ? AND json_extract(data, '$.cliente') = ?").run(contact.id, SOURCE, k);
+    d.prepare("UPDATE sales SET contact_id = ? WHERE json_extract(data, '$.clientKey') = ?").run(contact.id, k);
     d.exec('COMMIT');
   } catch (e) {
     d.exec('ROLLBACK');
@@ -409,21 +424,19 @@ export function linkCarteraClient(key: string, to: { contactId?: number; phone?:
 
 /** "No es ese": the suggestion goes away and is not offered again. */
 export function rejectCarteraSuggestion(key: string) {
-  getDb().prepare("UPDATE cartera_links SET status = 'rejected', updated_at = datetime('now') WHERE cliente = ? AND status = 'suggested'").run(clienteKey(key));
+  getDb().prepare("UPDATE cartera_links SET status = 'rejected', updated_at = datetime('now') WHERE cliente = ? AND status = 'suggested'").run(linkKey(key));
 }
 
 /** Undoes a link: the invoices go back to a customer without phone until the user links the right one. */
 export function unlinkCarteraClient(key: string) {
-  const k = clienteKey(key);
+  const k = linkKey(key);
   const d = getDb();
-  const any = d
-    .prepare("SELECT json_extract(data, '$.nombre') AS name FROM receivables WHERE source = ? AND json_extract(data, '$.cliente') = ? LIMIT 1")
-    .get(SOURCE, k) as { name: string | null } | undefined;
   d.prepare("UPDATE cartera_links SET status = 'rejected', updated_at = datetime('now') WHERE cliente = ?").run(k);
-  if (!any) return;
-  const inv = { cliente: k, key: k, name: any.name ?? '' } as SheetInvoice;
-  const id = ensurePlaceholder(placeholderKey(k, inv.name) ?? `nit:${k}`, inv);
+  const name = sheetName(k);
+  const id = ensurePlaceholder(placeholderFor(k, name), { cliente: k.startsWith('NOM:') ? '' : k, name });
   d.prepare("UPDATE receivables SET contact_id = ?, updated_at = datetime('now') WHERE source = ? AND json_extract(data, '$.cliente') = ?").run(id, SOURCE, k);
+  d.prepare("UPDATE sales SET contact_id = ? WHERE json_extract(data, '$.clientKey') = ?").run(id, k);
+  dropEmptyPlaceholders();
 }
 
 /** WhatsApp contacts whose name or phone matches, to pick the right one for a sheet customer. */

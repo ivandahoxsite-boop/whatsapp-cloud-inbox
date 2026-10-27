@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
 import type { SalesReport } from '@/lib/crm/reports';
+import { AnalixBox, SalesLinks } from './sales-analix-panel';
 import { api, card, money } from './shared';
 
 const MONTHS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
@@ -91,6 +92,8 @@ export function SalesReportView({ onOpenCustomer }: { onOpenCustomer: (id: numbe
         </select>
       </div>
 
+      <AnalixBox />
+
       {isLoading && <p className="text-sm text-muted-foreground">Calculando…</p>}
       {error && <p className="text-sm text-destructive">{(error as Error).message}</p>}
 
@@ -109,6 +112,8 @@ export function SalesReportView({ onOpenCustomer }: { onOpenCustomer: (id: numbe
               </div>
             ))}
           </div>
+
+          <SalesLinks onOpenCustomer={onOpenCustomer} />
 
           <Section title="Ventas por mes" hint={monthly.length > 24 ? 'Elige un año para ver el detalle mensual.' : undefined}>
             <Bars

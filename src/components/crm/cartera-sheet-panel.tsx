@@ -246,6 +246,8 @@ function useLinkAction() {
     try {
       await api('/api/crm/receivables/links', 'POST', body);
       qc.invalidateQueries({ queryKey: ['crm-cartera-links'] });
+      qc.invalidateQueries({ queryKey: ['crm-sales-clients'] });
+      qc.invalidateQueries({ queryKey: ['crm-sales-report'] });
       qc.invalidateQueries({ queryKey: ['crm-receivables'] });
       qc.invalidateQueries({ queryKey: ['crm'] });
     } catch (e) {
@@ -255,7 +257,8 @@ function useLinkAction() {
   return { run, err };
 }
 
-function LinkRow({ client: c, onOpenCustomer }: { client: CarteraClient; onOpenCustomer: (id: number) => void }) {
+/** One billing customer to link to its WhatsApp contact. `sales`: the amount is what they bought (last 12 months). */
+export function LinkRow({ client: c, onOpenCustomer, sales }: { client: CarteraClient; onOpenCustomer: (id: number) => void; sales?: boolean }) {
   const { run, err } = useLinkAction();
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState('');
@@ -271,7 +274,8 @@ function LinkRow({ client: c, onOpenCustomer }: { client: CarteraClient; onOpenC
         <button onClick={() => onOpenCustomer(c.contactId)} className="min-w-0 flex-1 text-left">
           <p className="truncate text-sm font-medium">{c.name}</p>
           <p className="text-muted-foreground">
-            NIT/código {c.key} · {c.invoices} factura{c.invoices === 1 ? '' : 's'}
+            {c.key.startsWith('NOM:') ? 'Sin NIT en AnaliX' : `NIT/código ${c.key}`} · {c.invoices}{' '}
+            {sales ? `línea${c.invoices === 1 ? '' : 's'} de venta · últimos 12 meses` : `factura${c.invoices === 1 ? '' : 's'}`}
           </p>
         </button>
         <span className="shrink-0 font-medium tabular-nums">{money(c.balance)}</span>
