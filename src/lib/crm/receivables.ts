@@ -159,7 +159,7 @@ type OpenRow = { id: number; contact_id: number; doc: string; issued_at: string 
  * are counted from the day it was issued (fecha de expedición), not from the due date. 0 while it is not due yet.
  * Example: issued 2026-09-07, due 2026-10-07, on 2026-10-26 -> 49 days.
  */
-function daysLate(r: { issued_at: string | null; due_at: string | null }, today: Date): number {
+export function daysLate(r: { issued_at: string | null; due_at: string | null }, today: Date): number {
   const terms = TERMS_DAYS() * DAY;
   const issued = r.issued_at ? Date.parse(r.issued_at) : r.due_at ? Date.parse(r.due_at) - terms : NaN;
   const due = r.due_at ? Date.parse(r.due_at) : issued + terms;

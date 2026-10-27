@@ -9,6 +9,7 @@ import { FileText, TriangleAlert, Users, Wallet } from 'lucide-react';
 import { Stat, WhatsAppLink, api, card, checkCollection, cop, formatPhone, money, twilioCall, useTwilio } from './shared';
 import { collectionMessage } from '@/lib/crm/collection-messages';
 import { CarteraLinks, CarteraSheetBox, useCarteraSheet } from './cartera-sheet-panel';
+import { CarteraExtractView } from './cartera-extract';
 
 const select = 'h-9 rounded-full border border-border/60 bg-card/50 px-3 text-sm';
 /** The tiered payment reminder for a debtor (oldest overdue invoice), or undefined under 30 days: then the chat opens empty. */
@@ -22,6 +23,22 @@ export function ReceivablesView({ onOpenCustomer }: { onOpenCustomer: (id: numbe
   const [seller, setSeller] = useState('');
   const [bucket, setBucket] = useState<string>('');
   const [note, setNote] = useState('');
+  // How the user wants to see the cartera: the summary, or laid out like the billing system's Excel report.
+  const [view, setView] = useState<'resumen' | 'extracto'>(() => {
+    try {
+      return localStorage.getItem('crm-cartera-view') === 'extracto' ? 'extracto' : 'resumen';
+    } catch {
+      return 'resumen';
+    }
+  });
+  const pickView = (v: 'resumen' | 'extracto') => {
+    setView(v);
+    try {
+      localStorage.setItem('crm-cartera-view', v);
+    } catch {
+      /* the choice just is not remembered */
+    }
+  };
   const twilio = useTwilio();
   const { data: sheet } = useCarteraSheet();
   const [calling, setCalling] = useState<number | null>(null); // the customer whose call result is being typed
@@ -97,16 +114,41 @@ export function ReceivablesView({ onOpenCustomer }: { onOpenCustomer: (id: numbe
   const maxSeller = Math.max(1, ...data.bySeller.map((s) => s.balance));
   return (
     <div className="space-y-4">
-      <select value={seller} onChange={(e) => setSeller(e.target.value)} className={select} aria-label="Vendedor">
-        <option value="">Todos los vendedores</option>
-        {data.sellers.map((s) => (
-          <option key={s} value={s}>
-            {s}
-          </option>
-        ))}
-      </select>
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-sm text-muted-foreground">¿Cómo quieres ver la cartera?</span>
+        <div className="flex rounded-full border border-border/60 bg-card/60 p-0.5 text-xs" role="group" aria-label="Vista de la cartera">
+          {(
+            [
+              ['resumen', 'Resumen'],
+              ['extracto', 'Extracto (como el Excel)']
+            ] as const
+          ).map(([v, label]) => (
+            <button
+              key={v}
+              onClick={() => pickView(v)}
+              aria-pressed={view === v}
+              className={cn('h-8 rounded-full px-3', view === v ? 'bg-primary font-semibold text-primary-foreground' : 'text-muted-foreground hover:text-foreground')}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <select value={seller} onChange={(e) => setSeller(e.target.value)} className={select} aria-label="Vendedor">
+          <option value="">Todos los vendedores</option>
+          {data.sellers.map((s) => (
+            <option key={s} value={s}>
+              {s}
+            </option>
+          ))}
+        </select>
+      </div>
 
       <CarteraSheetBox freshness={data.freshness} />
+
+      {view === 'extracto' ? (
+        <CarteraExtractView seller={seller} onOpenCustomer={onOpenCustomer} />
+      ) : (
+      <>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat tone="blue" icon={Wallet} label="Por cobrar" value={cop(data.totals.balance)} />
@@ -358,6 +400,8 @@ export function ReceivablesView({ onOpenCustomer }: { onOpenCustomer: (id: numbe
           ))}
         </ul>
       </section>
+      </>
+      )}
     </div>
   );
 }

@@ -13,6 +13,7 @@ import { dayProblem, todayCo } from './tasks-info';
 export const SOURCE = 'cartera';
 const SETTING_LAST = 'cartera_sheet_last';
 const SETTING_SLOT = 'cartera_sheet_slot';
+export const CREDITS_SETTING = 'cartera_credit_notes';
 const MAX_CLOSED_SHARE = 0.15;
 
 export type SheetInvoice = {
@@ -28,7 +29,10 @@ export type SheetInvoice = {
   seller: string;
 };
 
-export type ParsedSheet = { invoices: SheetInvoice[]; creditNotes: number; corte: string | null; problems: string[] };
+/** A credit note of the sheet: never applied to the debt in the CRM, only shown in the "Extracto" view. */
+export type CreditNote = { cliente: string; key: string; name: string; doc: string; issuedAt: string | null; dueAt: string | null; amount: number; seller: string };
+
+export type ParsedSheet = { invoices: SheetInvoice[]; creditNotes: number; credits: CreditNote[]; corte: string | null; problems: string[] };
 
 /** "900123456-7" -> "9001234567", "c133" -> "C133": letters and digits only. */
 export const clienteKey = (raw: string) =>
@@ -64,6 +68,7 @@ export function parseCarteraSheet(rows: unknown[][]): ParsedSheet {
   const problems: string[] = [];
   const docs = new Set<string>();
   let creditNotes = 0;
+  const credits: CreditNote[] = [];
   rows.slice(h + 1).forEach((r, i) => {
     const line = h + i + 2;
     const doc = cell(r?.[iDoc]);
@@ -71,8 +76,21 @@ export function parseCarteraSheet(rows: unknown[][]): ParsedSheet {
     const tipo = cell(r[iTipo]).toUpperCase();
     const balance = num(r[iSaldo]);
     // Credit notes are crossed by hand by the user: they never reach the CRM.
-    if (tipo.startsWith('N') || balance < 0) return void creditNotes++;
     const cliente = cell(r[iCli]);
+    if (tipo.startsWith('N') || balance < 0) {
+      creditNotes++;
+      credits.push({
+        cliente,
+        key: clienteKey(cliente),
+        name: cell(r[iName]).slice(0, 80),
+        doc: doc.slice(0, 60),
+        issuedAt: parseDate(cell(r[iExp])),
+        dueAt: parseDate(cell(r[iVen])),
+        amount: Number.isFinite(balance) ? balance : num(r[iDeuda]),
+        seller: (iSeller >= 0 ? cell(r[iSeller]) : '') || sellerAll
+      });
+      return;
+    }
     const key = clienteKey(cliente);
     const issuedAt = parseDate(cell(r[iExp]));
     const dueAt = parseDate(cell(r[iVen]));
@@ -95,7 +113,7 @@ export function parseCarteraSheet(rows: unknown[][]): ParsedSheet {
       seller: (iSeller >= 0 ? cell(r[iSeller]) : '') || sellerAll
     });
   });
-  return { invoices, creditNotes, corte, problems };
+  return { invoices, creditNotes, credits, corte, problems };
 }
 
 /** Downloads the tab through the Apps Script web app. The key keeps anyone else with the link out. */
@@ -302,11 +320,13 @@ export async function syncCarteraSheet(opts: { trigger: 'auto' | 'manual'; force
           issuedAt: inv.issuedAt,
           dueAt: inv.dueAt,
           seller: inv.seller,
-          data: { cliente: inv.key, nombre: inv.name, tipo: inv.tipo }
+          data: { cliente: inv.key, clienteRaw: inv.cliente, nombre: inv.name, tipo: inv.tipo }
         })),
         { closeMissing: true, source: SOURCE }
       );
       dropEmptyPlaceholders();
+      // The sheet's credit notes, replaced on every load: the "Extracto" view shows them like the Excel report.
+      getDb().prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)').run(CREDITS_SETTING, JSON.stringify(sheet.credits));
       saveLast({
         at, ok: true, trigger: opts.trigger, corte: plan.corte, invoices: plan.invoices, total: plan.total,
         created: res.created, updated: res.updated, closed: res.closed, moved: plan.moves.length
