@@ -1,25 +1,28 @@
 'use client';
 
 import { useEffect, useId, useRef, useState } from 'react';
-import { Check, Laptop, Moon, Sun } from 'lucide-react';
+import { Check, Laptop, Moon, Sun, SunMoon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 
-type Mode = 'light' | 'dark' | 'system';
+type Mode = 'auto' | 'light' | 'dark' | 'system';
 type ResolvedMode = 'light' | 'dark';
 
 const MODE_STORAGE_KEY = 'mode';
 const THEME_STORAGE_KEY = 'theme';
 const LEGACY_THEME_STORAGE_KEY = 'whatsapp-cloud-inbox-theme';
+/** Set only when the person picks a mode; until then the screen follows the time of day ("auto"). */
+const CHOSEN_STORAGE_KEY = 'mode-chosen';
 
 const MODES = [
-  { id: 'light', name: 'Light', icon: Sun },
-  { id: 'dark', name: 'Dark', icon: Moon },
-  { id: 'system', name: 'System', icon: Laptop },
+  { id: 'auto', name: 'Automático (claro de día)', icon: SunMoon },
+  { id: 'light', name: 'Claro', icon: Sun },
+  { id: 'dark', name: 'Oscuro', icon: Moon },
+  { id: 'system', name: 'Como el celular', icon: Laptop },
 ] as const;
 
 function isMode(value: string | null): value is Mode {
-  return value === 'light' || value === 'dark' || value === 'system';
+  return value === 'auto' || value === 'light' || value === 'dark' || value === 'system';
 }
 
 function getSystemMode(): ResolvedMode {
@@ -28,7 +31,14 @@ function getSystemMode(): ResolvedMode {
   return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
 }
 
+/** Light from 6 a. m. to 6 p. m. Colombian time (UTC-5 all year), dark the rest. */
+function getTimeMode(): ResolvedMode {
+  const hour = (new Date().getUTCHours() + 19) % 24;
+  return hour >= 6 && hour < 18 ? 'light' : 'dark';
+}
+
 function getStoredMode(): Mode {
+  if (window.localStorage.getItem(CHOSEN_STORAGE_KEY) !== '1') return 'auto';
   const storedMode = window.localStorage.getItem(MODE_STORAGE_KEY);
   if (isMode(storedMode)) return storedMode;
 
@@ -49,11 +59,12 @@ function resolveMode(mode: Mode): ResolvedMode {
   const forcedMode = getForcedMode();
   if (forcedMode) return forcedMode;
 
+  if (mode === 'auto') return getTimeMode();
   return mode === 'system' ? getSystemMode() : mode;
 }
 
 function getBackgroundColor(mode: ResolvedMode) {
-  return mode === 'dark' ? 'hsl(20 14.3% 4.1%)' : 'hsl(0 0% 100%)';
+  return mode === 'dark' ? 'hsl(222 24% 7%)' : 'hsl(0 0% 100%)';
 }
 
 function applyMode(mode: Mode) {
@@ -133,7 +144,15 @@ export function ThemeToggle({ className }: { className?: string }) {
     };
   }, [isOpen]);
 
+  // In "auto" the screen changes by itself at 6 a. m. and 6 p. m.
+  useEffect(() => {
+    if (mode !== 'auto') return;
+    const timer = window.setInterval(() => syncMode('auto'), 5 * 60_000);
+    return () => window.clearInterval(timer);
+  }, [mode]);
+
   const selectMode = (nextMode: Mode) => {
+    window.localStorage.setItem(CHOSEN_STORAGE_KEY, '1');
     syncMode(nextMode);
     setIsOpen(false);
   };
@@ -178,10 +197,10 @@ export function ThemeToggle({ className }: { className?: string }) {
           id={menuId}
           role="menu"
           aria-label="Appearance"
-          className="absolute right-0 top-[calc(100%+0.5rem)] z-50 w-56 rounded-lg border border-border bg-popover p-3 text-popover-foreground shadow-lg"
+          className="absolute right-0 top-[calc(100%+0.5rem)] z-50 w-64 rounded-lg border border-border bg-popover p-3 text-popover-foreground shadow-lg"
         >
           <div className="space-y-3">
-            <h4 className="px-1 text-sm font-medium text-foreground">Appearance</h4>
+            <h4 className="px-1 text-sm font-medium text-foreground">Apariencia</h4>
             <div className="grid grid-cols-1 gap-2">
               {MODES.map((item) => {
                 const Icon = item.icon;

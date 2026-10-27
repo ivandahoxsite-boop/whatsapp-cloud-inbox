@@ -5,7 +5,8 @@ import { useQuery } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
 import type { SalesReport } from '@/lib/crm/reports';
 import { AnalixBox, SalesLinks } from './sales-analix-panel';
-import { api, card, money } from './shared';
+import { Package, Receipt, TrendingUp, Users } from 'lucide-react';
+import { Stat, api, card, cop, money } from './shared';
 
 const MONTHS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 const monthLabel = (ym: string) => `${MONTHS[Number(ym.slice(5)) - 1]} ${ym.slice(2, 4)}`;
@@ -100,17 +101,10 @@ export function SalesReportView({ onOpenCustomer }: { onOpenCustomer: (id: numbe
       {data && (
         <>
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            {[
-              ['Ventas', money(data.totals.amount)],
-              ['Unidades', money(data.totals.qty)],
-              ['Líneas de venta', money(data.totals.sales)],
-              ['Clientes que compraron', money(data.totals.customers)]
-            ].map(([label, value]) => (
-              <div key={label} className={card}>
-                <p className="text-xs text-muted-foreground">{label}</p>
-                <p className="mt-1 text-xl font-semibold tabular-nums">{value}</p>
-              </div>
-            ))}
+            <Stat tone="green" icon={TrendingUp} label="Ventas" value={cop(data.totals.amount)} />
+            <Stat tone="blue" icon={Package} label="Unidades" value={money(data.totals.qty)} />
+            <Stat tone="slate" icon={Receipt} label="Líneas de venta" value={money(data.totals.sales)} />
+            <Stat tone="violet" icon={Users} label="Clientes que compraron" value={money(data.totals.customers)} />
           </div>
 
           <SalesLinks onOpenCustomer={onOpenCustomer} />

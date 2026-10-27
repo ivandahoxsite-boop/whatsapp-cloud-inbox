@@ -4,16 +4,18 @@ import "./globals.css";
 
 const themeInitScript = `
 try {
-  const allowedModes = { light: true, dark: true, system: true };
-  const storedMode = window.localStorage.getItem('mode');
+  const allowedModes = { auto: true, light: true, dark: true, system: true };
+  // Until the person picks a mode, the screen is light by day and dark by night (Colombian time).
+  const storedMode = window.localStorage.getItem('mode-chosen') === '1' ? window.localStorage.getItem('mode') : 'auto';
   const legacyTheme = window.localStorage.getItem('whatsapp-cloud-inbox-theme');
   const forcedModeAttr = document.documentElement.getAttribute('data-force-mode');
   const forcedMode = forcedModeAttr === 'light' || forcedModeAttr === 'dark' ? forcedModeAttr : null;
   const legacyMode = legacyTheme === 'kapso' ? 'dark' : legacyTheme === 'normal' ? 'light' : null;
   const mode = forcedMode || (allowedModes[storedMode] ? storedMode : legacyMode || 'dark');
+  const hour = (new Date().getUTCHours() + 19) % 24;
   const resolvedMode = !forcedMode && mode === 'system'
     ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
-    : mode;
+    : !forcedMode && mode === 'auto' ? (hour >= 6 && hour < 18 ? 'light' : 'dark') : mode;
 
   window.localStorage.setItem('theme', 'default');
   window.localStorage.setItem('mode', mode);
@@ -22,7 +24,7 @@ try {
   document.documentElement.dataset.theme = 'default';
   document.documentElement.dataset.mode = resolvedMode;
   document.documentElement.style.colorScheme = resolvedMode;
-  document.documentElement.style.backgroundColor = resolvedMode === 'dark' ? 'hsl(20 14.3% 4.1%)' : 'hsl(0 0% 100%)';
+  document.documentElement.style.backgroundColor = resolvedMode === 'dark' ? 'hsl(222 24% 7%)' : 'hsl(0 0% 100%)';
 
   if (resolvedMode === 'dark') {
     document.documentElement.classList.add('dark');

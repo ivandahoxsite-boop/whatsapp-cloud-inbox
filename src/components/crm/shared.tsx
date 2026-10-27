@@ -78,7 +78,79 @@ export function useLiveSync(everyMs = 5000): { newBuild: boolean } {
 }
 
 export const money = (n: number) => n.toLocaleString('es', { maximumFractionDigits: 0, useGrouping: 'always' });
-export const card = 'rounded-2xl border border-border/60 bg-card/60 p-4 backdrop-blur-xl';
+export const card = 'rounded-2xl border border-border/80 bg-card/90 p-4 shadow-sm shadow-black/5 backdrop-blur-xl dark:shadow-black/30';
+/** Money with its sign: "$ 14.213.000". */
+export const cop = (n: number) => `$\u00a0${money(n)}`;
+
+export type Tone = 'green' | 'amber' | 'red' | 'blue' | 'violet' | 'slate';
+const TONES: Record<Tone, { chip: string; tint: string; value: string; ring: string }> = {
+  green: { chip: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400', tint: 'from-emerald-500/10', value: 'text-emerald-600 dark:text-emerald-400', ring: 'border-emerald-500/50' },
+  amber: { chip: 'bg-amber-500/15 text-amber-600 dark:text-amber-400', tint: 'from-amber-500/10', value: 'text-amber-600 dark:text-amber-400', ring: 'border-amber-500/50' },
+  red: { chip: 'bg-rose-500/15 text-rose-600 dark:text-rose-400', tint: 'from-rose-500/10', value: 'text-rose-600 dark:text-rose-400', ring: 'border-rose-500/50' },
+  blue: { chip: 'bg-sky-500/15 text-sky-600 dark:text-sky-400', tint: 'from-sky-500/10', value: 'text-sky-600 dark:text-sky-400', ring: 'border-sky-500/50' },
+  violet: { chip: 'bg-violet-500/15 text-violet-600 dark:text-violet-400', tint: 'from-violet-500/10', value: 'text-violet-600 dark:text-violet-400', ring: 'border-violet-500/50' },
+  slate: { chip: 'bg-slate-500/15 text-slate-600 dark:text-slate-300', tint: 'from-slate-500/10', value: '', ring: 'border-slate-500/50' }
+};
+
+/**
+ * A number that matters, with its color and icon so it reads at a glance. `colorValue` paints the number itself
+ * (for what needs attention: overdue, unanswered). `active` marks it as the filter in use. `compact`: for three
+ * narrow cards in a row on the phone, the icon goes above the label.
+ */
+export function Stat({
+  label,
+  value,
+  sub,
+  tone = 'slate',
+  icon: Icon,
+  colorValue,
+  active,
+  onClick,
+  className,
+  compact,
+  children
+}: {
+  label: string;
+  value: React.ReactNode;
+  sub?: React.ReactNode;
+  tone?: Tone;
+  icon?: React.ComponentType<{ className?: string }>;
+  colorValue?: boolean;
+  active?: boolean;
+  onClick?: () => void;
+  className?: string;
+  compact?: boolean;
+  children?: React.ReactNode;
+}) {
+  const t = TONES[tone];
+  const Tag = onClick ? 'button' : 'div';
+  return (
+    <Tag
+      onClick={onClick}
+      aria-pressed={onClick ? !!active : undefined}
+      className={cn(
+        card,
+        'relative overflow-hidden bg-gradient-to-br to-transparent p-3 text-left sm:p-4',
+        t.tint,
+        onClick && 'transition-colors hover:border-primary/50',
+        active && t.ring,
+        className
+      )}
+    >
+      <div className={cn('flex gap-2', compact ? 'flex-col items-start sm:flex-row sm:items-center' : 'items-center')}>
+        {Icon && (
+          <span className={cn('flex size-7 shrink-0 items-center justify-center rounded-lg', t.chip)}>
+            <Icon className="size-4" />
+          </span>
+        )}
+        <p className="min-w-0 text-xs font-medium text-muted-foreground sm:text-sm">{label}</p>
+      </div>
+      <p className={cn('mt-2 flex items-center gap-1 whitespace-nowrap text-xl font-semibold tabular-nums tracking-tight sm:text-2xl lg:text-[1.7rem]', colorValue && t.value)}>{value}</p>
+      {sub && <p className="mt-1 text-[11px] leading-snug text-muted-foreground sm:text-xs">{sub}</p>}
+      {children}
+    </Tag>
+  );
+}
 
 export const SEGMENT_COLOR: Record<Segment, string> = {
   campeon: '#34d399',

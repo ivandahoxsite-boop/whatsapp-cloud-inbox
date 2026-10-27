@@ -5,7 +5,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import type { ReceivablesSummary } from '@/lib/crm/receivables';
-import { WhatsAppLink, api, card, checkCollection, formatPhone, money, twilioCall, useTwilio } from './shared';
+import { FileText, TriangleAlert, Users, Wallet } from 'lucide-react';
+import { Stat, WhatsAppLink, api, card, checkCollection, cop, formatPhone, money, twilioCall, useTwilio } from './shared';
 import { collectionMessage } from '@/lib/crm/collection-messages';
 import { CarteraLinks, CarteraSheetBox, useCarteraSheet } from './cartera-sheet-panel';
 
@@ -108,17 +109,10 @@ export function ReceivablesView({ onOpenCustomer }: { onOpenCustomer: (id: numbe
       <CarteraSheetBox freshness={data.freshness} />
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        {[
-          ['Por cobrar', money(data.totals.balance), ''],
-          ['Vencida', money(data.totals.overdue), data.totals.overdue > 0 ? 'text-amber-500' : ''],
-          ['Facturas abiertas', money(data.totals.invoices), ''],
-          ['Clientes que deben', money(data.totals.debtors), '']
-        ].map(([label, value, color]) => (
-          <div key={label} className={card}>
-            <p className="text-xs text-muted-foreground">{label}</p>
-            <p className={cn('mt-1 text-xl font-semibold tabular-nums', color)}>{value}</p>
-          </div>
-        ))}
+        <Stat tone="blue" icon={Wallet} label="Por cobrar" value={cop(data.totals.balance)} />
+        <Stat tone="amber" icon={TriangleAlert} label="Vencida" value={cop(data.totals.overdue)} colorValue={data.totals.overdue > 0} />
+        <Stat tone="slate" icon={FileText} label="Facturas abiertas" value={money(data.totals.invoices)} />
+        <Stat tone="violet" icon={Users} label="Clientes que deben" value={money(data.totals.debtors)} />
       </div>
 
       <section className={card}>

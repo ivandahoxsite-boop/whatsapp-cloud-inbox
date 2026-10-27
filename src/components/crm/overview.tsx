@@ -2,14 +2,14 @@
 
 import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { ArrowDownRight, ArrowUpRight, MapPin, MessageCircle, Sparkles } from 'lucide-react';
+import { AlarmClock, ArrowDownRight, ArrowUpRight, MapPin, MessageCircle, Receipt, Repeat, Sparkles, TrendingUp, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { RECURRENCE_INFO, SEGMENT_INFO, type Recurrence, type Segment } from '@/lib/crm/scoring';
 import { buildActions } from '@/lib/crm/actions';
 import { cityKey, type CustomerFilter } from '@/lib/crm/filters';
 import type { Summary } from '@/app/api/crm/summary/route';
 import { TodayCard } from './today-card';
-import { WhatsAppLink, RECURRENCE_COLOR, SEGMENT_COLOR, TagPill, ago, api, card, cityOptions, displayName, money, type CrmData } from './shared';
+import { Stat, WhatsAppLink, RECURRENCE_COLOR, SEGMENT_COLOR, TagPill, ago, api, card, cityOptions, cop, displayName, money, type CrmData, type Tone } from './shared';
 
 const MONTHS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 const monthLabel = (ym: string) => `${MONTHS[Number(ym.slice(5)) - 1]} ${ym.slice(2, 4)}`;
@@ -121,21 +121,27 @@ export function Overview({
       </div>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
-        <Kpi label="Clientes" value={String(s.buyers)} sub={`${s.prospects} prospectos sin compra`} onClick={() => go({})} />
+        <Kpi tone="blue" icon={Users} label="Clientes" value={String(s.buyers)} sub={`${s.prospects} prospectos sin compra`} onClick={() => go({})} />
         <Kpi
+          tone="violet"
+          icon={Repeat}
           label="Tasa de recompra"
           value={`${pct(s.repeaters, s.buyers)}%`}
           sub={`${s.repeaters} compraron 2+ veces`}
           onClick={() => go({ recurrence: ['recurrente', 'por_recomprar', 'recurrente_perdido'] })}
         />
         <Kpi
+          tone="green"
+          icon={TrendingUp}
           label="Ventas 30 días"
-          value={money(summary?.last30 ?? 0)}
+          value={cop(summary?.last30 ?? 0)}
           sub={delta == null ? 'todas las ciudades' : `${delta >= 0 ? '+' : ''}${delta.toFixed(0)}% vs 30 días antes`}
           trend={delta}
         />
-        <Kpi label="Ticket promedio" value={money(s.avgTicket)} sub={`${money(s.revenue)} en total`} />
+        <Kpi tone="slate" icon={Receipt} label="Ticket promedio" value={cop(s.avgTicket)} sub={`${cop(s.revenue)} en total`} />
         <Kpi
+          tone="amber"
+          icon={AlarmClock}
           label="Les toca recomprar"
           value={String(s.due)}
           sub={s.due ? `≈ ${money(s.dueValue)} si vuelven hoy` : 'nadie atrasado'}
@@ -341,6 +347,8 @@ function Kpi({
   sub,
   trend,
   glow,
+  tone,
+  icon,
   onClick,
   className
 }: {
@@ -349,28 +357,28 @@ function Kpi({
   sub: string;
   trend?: number | null;
   glow?: boolean;
+  tone: Tone;
+  icon: React.ComponentType<{ className?: string }>;
   onClick?: () => void;
   className?: string;
 }) {
-  const Tag = onClick ? 'button' : 'div';
   return (
-    <Tag
+    <Stat
+      label={label}
+      value={
+        <>
+          {value}
+          {trend != null && (trend >= 0 ? <ArrowUpRight className="h-5 w-5 text-emerald-500" /> : <ArrowDownRight className="h-5 w-5 text-orange-500" />)}
+        </>
+      }
+      sub={sub}
+      tone={tone}
+      icon={icon}
+      colorValue={glow}
+      active={glow}
       onClick={onClick}
-      className={cn(
-        card,
-        'p-3 text-left sm:p-4',
-        onClick && 'transition-colors hover:border-primary/50',
-        glow && 'border-amber-400/50 shadow-[0_0_40px_-14px_rgba(251,191,36,0.6)]',
-        className
-      )}
-    >
-      <p className="text-xs text-muted-foreground sm:text-sm">{label}</p>
-      <p className="mt-1 flex items-center gap-1 text-2xl font-semibold tabular-nums tracking-tight sm:text-3xl">
-        {value}
-        {trend != null && (trend >= 0 ? <ArrowUpRight className="h-5 w-5 text-emerald-400" /> : <ArrowDownRight className="h-5 w-5 text-orange-400" />)}
-      </p>
-      <p className="mt-1 text-[11px] leading-snug text-muted-foreground sm:text-xs">{sub}</p>
-    </Tag>
+      className={cn(glow && 'shadow-[0_0_40px_-14px_rgba(251,191,36,0.6)]', className)}
+    />
   );
 }
 

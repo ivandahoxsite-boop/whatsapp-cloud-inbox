@@ -4,12 +4,18 @@ import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
 import { PENDING_INFO, type PendingChat, type PendingReason } from '@/lib/crm/pending-info';
-import { WhatsAppLink, api, card, formatPhone, relativeDays, useCrmData } from './shared';
+import { Hourglass, MessageCircleQuestion, MessageSquareDashed } from 'lucide-react';
+import { Stat, WhatsAppLink, api, card, formatPhone, relativeDays, useCrmData, type Tone } from './shared';
 import { DatePick, TaskForm } from './task-form';
 import { TaskRow, tasksQuery } from './task-list';
 import { dayProblem, nextMonday, todayCo } from '@/lib/crm/tasks-info';
 
-const REASON_COLOR: Record<PendingReason, string> = { sin_respuesta: 'text-rose-400', en_el_aire: 'text-amber-500', cotizacion: 'text-sky-400' };
+const REASON_COLOR: Record<PendingReason, string> = { sin_respuesta: 'text-rose-500', en_el_aire: 'text-amber-500', cotizacion: 'text-sky-500' };
+const REASON_STYLE: Record<PendingReason, { tone: Tone; icon: React.ComponentType<{ className?: string }> }> = {
+  sin_respuesta: { tone: 'red', icon: Hourglass },
+  en_el_aire: { tone: 'amber', icon: MessageSquareDashed },
+  cotizacion: { tone: 'blue', icon: MessageCircleQuestion }
+};
 
 export function PendingView({ onOpenCustomer }: { onOpenCustomer: (id: number) => void }) {
   const qc = useQueryClient();
@@ -99,15 +105,18 @@ export function PendingView({ onOpenCustomer }: { onOpenCustomer: (id: number) =
 
       <div className="grid grid-cols-3 gap-3">
         {(Object.keys(PENDING_INFO) as PendingReason[]).map((r) => (
-          <button
+          <Stat
             key={r}
+            label={PENDING_INFO[r].label}
+            value={count(r)}
+            tone={REASON_STYLE[r].tone}
+            icon={REASON_STYLE[r].icon}
+            colorValue
+            compact
+            active={reason === r}
             onClick={() => setReason(reason === r ? '' : r)}
-            aria-pressed={reason === r}
-            className={cn(card, 'text-left transition-colors', reason === r && 'border-emerald-400/60 bg-emerald-400/10', reason && reason !== r && 'opacity-50')}
-          >
-            <p className="text-xs text-muted-foreground">{PENDING_INFO[r].label}</p>
-            <p className={cn('mt-1 text-xl font-semibold tabular-nums', REASON_COLOR[r])}>{count(r)}</p>
-          </button>
+            className={cn(reason && reason !== r && 'opacity-50')}
+          />
         ))}
       </div>
 
