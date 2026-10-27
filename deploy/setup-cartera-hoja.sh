@@ -21,21 +21,28 @@ set_var() { # set_var NAME VALUE: replaces the line, keeps the file's owner and 
 KEY=$(grep -E '^CARTERA_SHEET_KEY=' "$ENV_FILE" | tail -1 | cut -d= -f2- || true)
 [[ "$KEY" =~ ^[0-9a-f]{48}$ ]] || KEY=$(openssl rand -hex 24)
 
-cat <<MSG
+echo
+read -rp "Pega el link de la hoja de Google (el de la barra del navegador): " LINK
+HOJA=$(printf '%s' "$LINK" | sed -n 's#.*/spreadsheets/d/\([A-Za-z0-9_-]\{20,\}\).*#\1#p')
+[ -n "$HOJA" ] || { echo "Ese no parece el link de una hoja (https://docs.google.com/spreadsheets/d/...). No se cambió nada."; exit 1; }
 
-PASO 1. Abre la hoja "WP bot Iván" en el PC → menú Extensiones → Apps Script.
-PASO 2. Borra lo que haya en el editor y pega TODO lo que está entre las dos rayas:
+cat <<'MSG'
+
+⚠️ NO lo pegues dentro del Apps Script de la hoja (ahí está el código de tu bot). Va en un proyecto APARTE:
+PASO 1. En el PC abre https://script.google.com → "Nuevo proyecto". Arriba ponle nombre: CRM cartera.
+PASO 2. Borra lo que trae ese proyecto NUEVO (solo "function myFunction() {}") y pega TODO lo de entre las rayas:
 ────────────────────────────────────────────────────────────
 MSG
-sed "s/__CLAVE__/$KEY/" "$DIR/cartera-apps-script.gs"
+sed "s/__CLAVE__/$KEY/; s/__HOJA__/$HOJA/" "$DIR/cartera-apps-script.gs"
 cat <<'MSG'
 ────────────────────────────────────────────────────────────
 PASO 3. Guarda (ícono del disquete).
 PASO 4. Botón azul "Implementar" → "Nueva implementación" → engranaje → "Aplicación web".
         Ejecutar como: "Yo"   ·   Quién tiene acceso: "Cualquier persona"  → "Implementar".
         Google pedirá permiso: "Autorizar acceso" → tu cuenta → "Configuración avanzada" →
-        "Ir a ... (no seguro)" → "Permitir". (Es tu propio script; solo puede leer esta hoja.)
+        "Ir a CRM cartera (no seguro)" → "Permitir". (Es tu propio script; solo lee la hoja.)
 PASO 5. Copia la "URL de la aplicación web" (termina en /exec) y pégala aquí abajo.
+        Si falla, ábrela en una ventana de incógnito para ver qué dice Google.
 
 MSG
 ok=""
