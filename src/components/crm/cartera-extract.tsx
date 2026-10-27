@@ -25,9 +25,9 @@ const BUCKETS: [keyof ExtractBuckets, string][] = [
 const norm = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 
 /**
- * The cartera like the billing system's "Reporte Extracto de Cartera": invoices grouped by customer with a total row,
- * days (DiasVc) and aging ranges counted from the due date, and the sheet's credit notes subtracted, all as the user's
- * Excel shows them. "Solo totales" works like the Excel's outline level 2.
+ * The cartera like the billing system's "Reporte Extracto de Cartera": invoices grouped by customer with a total row and
+ * the sheet's credit notes subtracted. Days (DiasVc) and aging ranges count from the issue date (the age of the debt).
+ * "Solo totales" works like the Excel's outline level 2.
  */
 export function CarteraExtractView({ seller, onOpenCustomer }: { seller: string; onOpenCustomer: (id: number) => void }) {
   const { data, isLoading, error } = useQuery({
@@ -118,8 +118,8 @@ export function CarteraExtractView({ seller, onOpenCustomer }: { seller: string;
         </div>
       </div>
       <p className="px-3 text-[11px] text-muted-foreground">
-        Como el reporte del sistema: DiasVc y los rangos cuentan desde el vencimiento, y las notas crédito (en rojo) se restan. En el resto del CRM la
-        mora se cuenta desde la expedición y las notas crédito no se descuentan.
+        DiasVc = días que lleva la deuda, contados desde la fecha de expedición; el saldo va en el rango de esos días aunque la factura no
+        haya vencido. Las notas crédito (en rojo) se restan solo en esta vista.
       </p>
 
       <div className="overflow-x-auto pb-2">
@@ -192,7 +192,7 @@ function InvoiceRow({ g, r, td }: { g: ExtractGroup; r: ExtractRow; td: string }
       </td>
       <td className={td}>{day(r.issuedAt)}</td>
       <td className={td}>{day(r.dueAt)}</td>
-      <td className={cn(td, 'text-right', r.diasVc !== null && r.diasVc > 0 && !r.credit && 'text-amber-600 dark:text-amber-400')}>{r.diasVc ?? ''}</td>
+      <td className={cn(td, 'text-right', r.diasVc !== null && r.diasVc > 30 && !r.credit && 'text-amber-600 dark:text-amber-400')}>{r.diasVc ?? ''}</td>
       <td className={cn(td, 'text-right')}>{num(r.deuda)}</td>
       <td className={cn(td, 'text-right')}>{num(r.pagado)}</td>
       {BUCKETS.map(([k]) => (

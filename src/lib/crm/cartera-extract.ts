@@ -6,9 +6,9 @@ import { todayCo } from './tasks-info';
 
 /**
  * The cartera laid out like the billing system's "Reporte Extracto de Cartera" (the user's Excel): one row per invoice
- * grouped by customer, with a total per customer. On the user's request (27-oct-2026) this view counts days and aging
- * ranges like the Excel, from the DUE date (DiasVc), and shows the sheet's credit notes subtracted. Everywhere else the
- * CRM keeps counting arrears from the issue date and never applies credit notes.
+ * grouped by customer, with a total per customer, and the sheet's credit notes subtracted (only in this view).
+ * Days ("DiasVc") are the age of the debt: counted from the ISSUE date, and the balance goes to the aging range of that
+ * age even before the due date ("cobrar desde ya", the user's correction of 27-oct-2026), so "Por_Venc" stays at 0.
  */
 
 export type ExtractBuckets = { v91: number; v61_90: number; v31_60: number; v0_30: number; porVenc: number };
@@ -16,7 +16,7 @@ export type ExtractRow = {
   doc: string;
   issuedAt: string | null;
   dueAt: string | null;
-  /** Days since the due date (negative: days left), like the Excel's DiasVc. */
+  /** Age of the debt: days since the issue date. */
   diasVc: number | null;
   deuda: number;
   pagado: number;
@@ -43,8 +43,9 @@ export type CarteraExtract = { date: string; groups: ExtractGroup[]; grand: Extr
 const DAY = 86_400_000;
 const zero = (): ExtractBuckets => ({ v91: 0, v61_90: 0, v31_60: 0, v0_30: 0, porVenc: 0 });
 
+/** Aging range by the age of the debt; only an invoice without dates stays in "Por_Venc". */
 function bucketOf(dias: number | null): keyof ExtractBuckets {
-  if (dias === null || dias <= 0) return 'porVenc';
+  if (dias === null) return 'porVenc';
   if (dias <= 30) return 'v0_30';
   if (dias <= 60) return 'v31_60';
   if (dias <= 90) return 'v61_90';
@@ -62,7 +63,12 @@ export function carteraExtract(filter: { seller?: string } = {}, now = new Date(
   const d = getDb();
   const today = todayCo(now.getTime());
   const todayMs = Date.parse(`${today}T00:00:00Z`);
-  const dias = (due: string | null) => (due ? Math.round((todayMs - Date.parse(`${due.slice(0, 10)}T00:00:00Z`)) / DAY) : null);
+  const terms = Number(process.env.CRM_DEFAULT_TERMS_DAYS || 30);
+  /** Days since the invoice was issued (if the issue date is missing, the due date minus the usual terms). */
+  const dias = (issued: string | null, due: string | null) => {
+    const from = issued ? Date.parse(`${issued.slice(0, 10)}T00:00:00Z`) : due ? Date.parse(`${due.slice(0, 10)}T00:00:00Z`) - terms * DAY : NaN;
+    return Number.isFinite(from) ? Math.max(0, Math.round((todayMs - from) / DAY)) : null;
+  };
 
   const rows = d
     .prepare(
@@ -98,7 +104,7 @@ export function carteraExtract(filter: { seller?: string } = {}, now = new Date(
       phone: r.phone,
       hasPhone: isRealPhone(r.phone)
     }));
-    const dv = dias(r.due_at);
+    const dv = dias(r.issued_at, r.due_at);
     const buckets = zero();
     buckets[bucketOf(dv)] = r.balance;
     const row: ExtractRow = {
@@ -128,7 +134,7 @@ export function carteraExtract(filter: { seller?: string } = {}, now = new Date(
         .get(n.key) as { id: number; phone: string } | undefined;
       return { key: n.key, cliente: n.cliente, name: n.name, contactId: holder?.id ?? null, phone: holder?.phone ?? '', hasPhone: !!holder && isRealPhone(holder.phone) };
     });
-    const dv = dias(n.dueAt);
+    const dv = dias(n.issuedAt, n.dueAt);
     const buckets = zero();
     buckets[bucketOf(dv)] = n.amount;
     const row: ExtractRow = { doc: n.doc, issuedAt: n.issuedAt, dueAt: n.dueAt, diasVc: dv, deuda: n.amount, pagado: 0, saldo: n.amount, buckets, credit: true };
