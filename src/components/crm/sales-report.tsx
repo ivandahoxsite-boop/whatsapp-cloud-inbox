@@ -7,6 +7,14 @@ import type { SalesReport } from '@/lib/crm/reports';
 import { AnalixBox, SalesLinks } from './sales-analix-panel';
 import { Package, Receipt, TrendingUp, Users } from 'lucide-react';
 import { Stat, api, card, cop, money } from './shared';
+import { todayCo } from '@/lib/crm/tasks-info';
+
+const MONTH_NAMES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+/** The months of the current year that have started, for the month picker (the user asked for this year's months). */
+const thisYearMonths = () => {
+  const t = todayCo();
+  return { year: t.slice(0, 4), upTo: Number(t.slice(5, 7)) };
+};
 
 const MONTHS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 const monthLabel = (ym: string) => `${MONTHS[Number(ym.slice(5)) - 1]} ${ym.slice(2, 4)}`;
@@ -51,18 +59,25 @@ const Section = ({ title, hint, children }: { title: string; hint?: string; chil
 
 export function SalesReportView({ onOpenCustomer }: { onOpenCustomer: (id: number) => void }) {
   const [year, setYear] = useState<string>('');
+  // A month of the current year ("01".."12"); it wins over the year picker.
+  const [month, setMonth] = useState('');
   const [seller, setSeller] = useState('');
   const [zone, setZone] = useState('');
+  const cur = thisYearMonths();
 
   const qs = new URLSearchParams();
-  if (year) {
+  if (month) {
+    const last = new Date(Date.UTC(Number(cur.year), Number(month), 0)).getUTCDate();
+    qs.set('from', `${cur.year}-${month}-01`);
+    qs.set('to', `${cur.year}-${month}-${last}`);
+  } else if (year) {
     qs.set('from', `${year}-01-01`);
     qs.set('to', `${year}-12-31`);
   }
   if (seller) qs.set('seller', seller);
   if (zone) qs.set('zone', zone);
   const { data, isLoading, error } = useQuery({
-    queryKey: ['crm-sales-report', year, seller, zone],
+    queryKey: ['crm-sales-report', year, month, seller, zone],
     queryFn: () => api<SalesReport>(`/api/crm/reports/sales?${qs}`),
     placeholderData: (prev) => prev
   });
@@ -73,7 +88,20 @@ export function SalesReportView({ onOpenCustomer }: { onOpenCustomer: (id: numbe
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
-        <select value={year} onChange={(e) => setYear(e.target.value)} className={select} aria-label="Año">
+        <select
+          value={month}
+          onChange={(e) => setMonth(e.target.value)}
+          className={cn(select, month && 'border-emerald-500/60 bg-emerald-500/10 font-semibold')}
+          aria-label={`Mes de ${cur.year}`}
+        >
+          <option value="">Mes de {cur.year}: todos</option>
+          {MONTH_NAMES.slice(0, cur.upTo).map((m, i) => (
+            <option key={m} value={String(i + 1).padStart(2, '0')}>
+              {m} {cur.year}
+            </option>
+          ))}
+        </select>
+        <select value={month ? '' : year} onChange={(e) => setYear(e.target.value)} disabled={!!month} className={cn(select, month && 'opacity-50')} aria-label="Año">
           <option value="">Todos los años</option>
           {years.map((y) => (
             <option key={y} value={y}>{y}</option>
@@ -101,7 +129,13 @@ export function SalesReportView({ onOpenCustomer }: { onOpenCustomer: (id: numbe
       {data && (
         <>
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <Stat tone="green" icon={TrendingUp} label="Ventas" value={cop(data.totals.amount)} />
+            <Stat
+              tone="green"
+              icon={TrendingUp}
+              label={month ? `Ventas de ${MONTH_NAMES[Number(month) - 1]} ${cur.year}` : year ? `Ventas de ${year}` : 'Ventas'}
+              value={cop(data.totals.amount)}
+              active={!!month}
+            />
             <Stat tone="blue" icon={Package} label="Unidades" value={money(data.totals.qty)} />
             <Stat tone="slate" icon={Receipt} label="Líneas de venta" value={money(data.totals.sales)} />
             <Stat tone="violet" icon={Users} label="Clientes que compraron" value={money(data.totals.customers)} />
