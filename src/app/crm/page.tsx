@@ -39,10 +39,11 @@ const TAB_LABEL: Record<CrmTab, string> = {
 
 export default function CrmPage() {
   const [tab, setTab] = useState<CrmTab>('resumen');
-  // A notification opens /crm#por-vencer: straight to Cartera, where that list is.
+  // A notification opens /crm#por-vencer (straight to Cartera, where that list is) or /crm#pendientes (to-dos).
   useEffect(() => {
     const go = () => {
       if (window.location.hash === '#por-vencer') setTab('cartera');
+      if (window.location.hash === '#pendientes') setTab('pendientes');
     };
     go();
     window.addEventListener('hashchange', go);

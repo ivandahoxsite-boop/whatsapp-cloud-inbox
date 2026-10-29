@@ -2,7 +2,7 @@ import webpush from 'web-push';
 import { getDb } from './db';
 import { isRealPhone } from './customers';
 import { daysLate, slotMs } from './receivables';
-import { addDays, dayProblem, todayCo } from './tasks-info';
+import { addDays, dayProblem, dueLabel, todayCo } from './tasks-info';
 
 /**
  * Notifications on the user's phone (Chrome on Android) and computer, through Web Push: the browser keeps a
@@ -200,9 +200,73 @@ export function dueNotice(today = todayCo()): PushMessage | null {
   };
 }
 
+/**
+ * To-do reminders (user's request, 29-oct-2026): every open to-do due today or overdue is notified every 30 minutes
+ * until it is marked "Hecho". Today's start at their time (07:00 without a time); overdue ones from 07:00. They stop at
+ * 16:00 ("hasta tipo 4pm"); one with a later time is notified once at its time. Overdue ones go on the next working
+ * days (not Sundays or holidays). One notification per to-do; the same tag replaces the previous one.
+ */
+export const TASK_NOTICE_START = '07:00';
+export const TASK_NOTICE_END = '16:00';
+export const TASK_NOTICE_EVERY = 30 * 60_000;
+const TASK_SETTING = 'task_notice_last';
+
+type TaskDue = { id: number; text: string; due_date: string; due_time: string | null; name: string | null };
+
+/** The to-dos to notify now (and the time each was last notified), given when each one was last notified. */
+export function taskNoticesDue(now: number, last: Record<string, number>): TaskDue[] {
+  const today = todayCo(now);
+  if (dayProblem(today)) return [];
+  const rows = getDb()
+    .prepare(
+      `SELECT t.id, t.text, t.due_date, t.due_time, c.name FROM tasks t LEFT JOIN contacts c ON c.id = t.contact_id
+       WHERE t.status = 'open' AND t.due_date IS NOT NULL AND t.due_date <= ? ORDER BY t.due_date, t.due_time, t.id`
+    )
+    .all(today) as TaskDue[];
+  return rows.filter((t) => {
+    const start = slotMs(today, t.due_date === today && t.due_time ? t.due_time : TASK_NOTICE_START);
+    // A to-do set after 16:00 still gets its notice (10 minutes of margin, in case the CRM was restarting).
+    const end = Math.max(slotMs(today, TASK_NOTICE_END), start + 10 * 60_000);
+    // A minute of margin: the clock ticks once a minute.
+    if (now < start || now >= end + 60_000) return false;
+    return !last[t.id] || now - last[t.id] >= TASK_NOTICE_EVERY - 30_000;
+  });
+}
+
+export function taskNotice(t: TaskDue, today: string): PushMessage {
+  const when = dueLabel(t.due_date, today, t.due_time);
+  return {
+    title: `⏰ Pendiente: ${t.text}`,
+    body: `${t.name ? `${t.name} · ` : ''}${when}. Toca para abrir Pendientes; márcalo «Hecho» para que deje de avisar.`,
+    url: '/crm#pendientes',
+    tag: `tarea-${t.id}`
+  };
+}
+
+async function tickTasks(now = Date.now()) {
+  if (!pushCount()) return;
+  const d = getDb();
+  const row = d.prepare('SELECT value FROM settings WHERE key = ?').get(TASK_SETTING) as { value: string } | undefined;
+  let last: Record<string, number> = {};
+  try {
+    last = JSON.parse(row?.value ?? '{}');
+  } catch {
+    /* start again */
+  }
+  const due = taskNoticesDue(now, last);
+  if (!due.length) return;
+  // Keep only to-dos still open, so the list does not grow forever.
+  const open = new Set((d.prepare("SELECT id FROM tasks WHERE status = 'open'").all() as { id: number }[]).map((r) => String(r.id)));
+  const next: Record<string, number> = Object.fromEntries(Object.entries(last).filter(([id]) => open.has(id)));
+  for (const t of due) next[t.id] = now;
+  d.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)').run(TASK_SETTING, JSON.stringify(next));
+  const today = todayCo(now);
+  for (const t of due) console.log(`[PUSH] pendiente ${t.id}:`, await sendPush(taskNotice(t, today)));
+}
+
 let started = false;
 
-/** Sends the morning warning once a day, Monday to Saturday at 8:00 (Colombian time), not on holidays. */
+/** Sends the morning warning once a day, Monday to Saturday at 8:00 (Colombian time), not on holidays; and the to-do reminders. */
 export function startDueNotices() {
   if (started) return;
   started = true;
@@ -219,6 +283,9 @@ export function startDueNotices() {
     const msg = dueNotice(day);
     if (msg) console.log(`[PUSH] aviso de vencimientos ${day}:`, await sendPush(msg));
   };
-  const timer = setInterval(() => void tick().catch((e) => console.error('[PUSH]', e instanceof Error ? e.message : 'error')), 60_000);
+  const timer = setInterval(() => {
+    void tick().catch((e) => console.error('[PUSH]', e instanceof Error ? e.message : 'error'));
+    void tickTasks().catch((e) => console.error('[PUSH] pendientes', e instanceof Error ? e.message : 'error'));
+  }, 60_000);
   timer.unref?.();
 }
