@@ -283,17 +283,34 @@ export function downloadCustomersCsv(customers: Customer[], data: CrmData, filen
 }
 
 /** True on a computer (mouse/trackpad, not Android/iPhone): there WhatsApp opens in WhatsApp Web instead of the app. */
-function useDesktop(): boolean {
-  const [desktop, setDesktop] = useState(false);
+type Device = 'desktop' | 'android' | 'phone';
+
+function useDevice(): Device {
+  const [device, setDevice] = useState<Device>('phone');
   useEffect(() => {
-    setDesktop(!/Android|iPhone|iPad|iPod/i.test(navigator.userAgent) && window.matchMedia('(pointer: fine)').matches);
+    const ua = navigator.userAgent;
+    setDevice(/Android/i.test(ua) ? 'android' : !/iPhone|iPad|iPod/i.test(ua) && window.matchMedia('(pointer: fine)').matches ? 'desktop' : 'phone');
   }, []);
-  return desktop;
+  return device;
+}
+
+/** The WhatsApp Business app on Android (its package name). */
+const WA_BUSINESS = 'com.whatsapp.w4b';
+
+/**
+ * On Android: an intent that opens the chat straight in the WhatsApp Business app, without going through a browser
+ * tab (the user asked for it). If the app is missing, Chrome falls back to wa.me.
+ */
+export function whatsappBusinessIntent(phone: string, text?: string): string {
+  const q = `phone=${phone}${text ? `&text=${encodeURIComponent(text)}` : ''}`;
+  const fallback = encodeURIComponent(`https://wa.me/${phone}${text ? `?text=${encodeURIComponent(text)}` : ''}`);
+  return `intent://send/?${q}#Intent;scheme=whatsapp;package=${WA_BUSINESS};S.browser_fallback_url=${fallback};end`;
 }
 
 /**
  * "Escribir por WhatsApp". On a computer it opens the chat straight in WhatsApp Web, always in the same browser tab
- * (named "whatsapp-web") instead of a new one each time; on a phone it opens the WhatsApp app (wa.me).
+ * (named "whatsapp-web") instead of a new one each time; on Android it opens the WhatsApp Business app directly; on
+ * other phones, the WhatsApp app through wa.me.
  */
 export function WhatsAppLink({
   phone,
@@ -309,8 +326,10 @@ export function WhatsAppLink({
   /** Runs on tap: false cancels, a string replaces the text ('' opens the chat without text). */
   beforeOpen?: () => Promise<boolean | string>;
 }) {
-  const desktop = useDesktop();
+  const device = useDevice();
+  const desktop = device === 'desktop';
   const url = (t?: string) => {
+    if (device === 'android') return whatsappBusinessIntent(phone, t);
     const q = t ? `text=${encodeURIComponent(t)}` : '';
     return desktop ? `https://web.whatsapp.com/send?phone=${phone}${q ? `&${q}` : ''}` : `https://wa.me/${phone}${q ? `?${q}` : ''}`;
   };
@@ -319,10 +338,19 @@ export function WhatsAppLink({
         e.preventDefault();
         const r = await beforeOpen();
         if (r === false) return;
-        window.open(url(typeof r === 'string' ? r : text), desktop ? 'whatsapp-web' : '_blank', desktop ? undefined : 'noopener');
+        const target = url(typeof r === 'string' ? r : text);
+        // Android: the intent hands the chat to the app; the CRM page stays where it was.
+        if (device === 'android') window.location.href = target;
+        else window.open(target, desktop ? 'whatsapp-web' : '_blank', desktop ? undefined : 'noopener');
       }
     : undefined;
   // On a computer no rel="noopener": the browser must be able to find and reuse the tab it opened the first time.
+  if (device === 'android')
+    return (
+      <a href={url(text)} className={className} onClick={onClick}>
+        {children}
+      </a>
+    );
   return desktop ? (
     <a href={url(text)} target="whatsapp-web" className={className} onClick={onClick}>
       {children}
