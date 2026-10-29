@@ -118,39 +118,98 @@ function PushToggle() {
   );
 }
 
+type Light = 'rojo' | 'naranja' | 'verde';
+const LIGHTS: { key: Light; dot: string; label: (days: number) => string; ring: string; bg: string }[] = [
+  { key: 'rojo', dot: '🔴', label: () => 'Con facturas vencidas', ring: 'border-rose-500/50', bg: 'bg-rose-500/10' },
+  { key: 'naranja', dot: '🟠', label: () => 'Vence hoy', ring: 'border-amber-500/50', bg: 'bg-amber-500/10' },
+  { key: 'verde', dot: '🟢', label: (days) => (days <= 1 ? 'Vence mañana' : 'Vence en los próximos días'), ring: 'border-emerald-500/50', bg: 'bg-emerald-500/10' }
+];
+const SENT_KEY = 'crm-cobro-avisados';
+
+/** Customers already sent a reminder today from this screen (only this browser remembers it; it resets every day). */
+function useSentToday(today: string) {
+  const [sent, setSent] = useState<Set<number>>(new Set());
+  useEffect(() => {
+    try {
+      const v = JSON.parse(localStorage.getItem(SENT_KEY) ?? '{}') as { day?: string; ids?: number[] };
+      setSent(new Set(v.day === today ? v.ids ?? [] : []));
+    } catch {
+      /* nothing remembered */
+    }
+  }, [today]);
+  const mark = (id: number) =>
+    setSent((prev) => {
+      const next = new Set(prev).add(id);
+      try {
+        localStorage.setItem(SENT_KEY, JSON.stringify({ day: today, ids: [...next] }));
+      } catch {
+        /* only this session remembers it */
+      }
+      return next;
+    });
+  return { sent, mark };
+}
+
+/** A ring that fills with the money already reminded out of everything that falls due. */
+function Ring({ done, total }: { done: number; total: number }) {
+  const share = total > 0 ? Math.min(1, done / total) : 0;
+  const r = 26;
+  const c = 2 * Math.PI * r;
+  return (
+    <div className="flex items-center gap-3">
+      <svg width="64" height="64" viewBox="0 0 64 64" aria-hidden="true" className="shrink-0 -rotate-90">
+        <circle cx="32" cy="32" r={r} fill="none" stroke="currentColor" strokeWidth="7" className="text-muted" />
+        <circle
+          cx="32"
+          cy="32"
+          r={r}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="7"
+          strokeLinecap="round"
+          strokeDasharray={c}
+          strokeDashoffset={c * (1 - share)}
+          className="text-emerald-500 transition-[stroke-dashoffset] duration-700"
+        />
+      </svg>
+      <div className="min-w-0">
+        <p className="text-lg font-semibold tabular-nums">{Math.round(share * 100)}% avisado</p>
+        <p className="text-xs text-muted-foreground">
+          $ {money(done)} de $ {money(total)}
+        </p>
+      </div>
+    </div>
+  );
+}
+
 /**
- * Invoices that fall due next. You tick the customers and the CRM walks you through them one by one: WhatsApp opens
- * with the reminder written, you send it, then "Siguiente". Nothing is sent on its own.
+ * What falls due next, as a traffic light: red = customers who also have older overdue invoices, orange = due today,
+ * green = due later. Each customer is a bubble; tapping it shows the invoices and the reminder, and "Cobrar" opens
+ * WhatsApp with it written (nothing is sent on its own). Customers reminded today get a ✅ and the ring fills up.
  */
 export function DueSoon({ onOpenCustomer }: { onOpenCustomer: (id: number) => void }) {
   const [days, setDays] = useState(1);
   const { data } = useQuery({ queryKey: ['crm-due', days], queryFn: () => api<Due>(`/api/crm/receivables/due?days=${days}`) });
-  const [picked, setPicked] = useState<Set<number> | null>(null);
-  const [queue, setQueue] = useState<DueCustomer[] | null>(null);
-  const [pos, setPos] = useState(0);
+  const [open, setOpen] = useState<number | null>(null);
   // Customers whose older overdue invoices the user took out of the message (by default they go in).
   const [noOld, setNoOld] = useState<Set<number>>(new Set());
-  const textFor = (c: DueCustomer) => preDueMessage(c.name, c.invoices, noOld.has(c.contactId) ? [] : c.overdue);
+  const today = new Date(Date.now() - 5 * 3_600_000).toISOString().slice(0, 10);
+  const { sent, mark } = useSentToday(today);
   const ref = useRef<HTMLElement>(null);
 
   useEffect(() => {
     if (window.location.hash === '#por-vencer') ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, []);
-  useEffect(() => setPicked(null), [days]);
 
   const list = data?.customers ?? [];
-  const chosen = picked ?? new Set(list.filter((c) => c.hasPhone).map((c) => c.contactId));
-  const flip = (id: number) => {
-    const next = new Set(chosen);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
-    setPicked(next);
-  };
-  const total = list.reduce((a, c) => a + c.total, 0);
-  const current = queue?.[pos];
+  const amount = (c: DueCustomer) => c.total + (noOld.has(c.contactId) ? 0 : c.overdueTotal);
+  const light = (c: DueCustomer): Light => (c.overdue.length ? 'rojo' : c.invoices.some((i) => i.dueAt <= today) ? 'naranja' : 'verde');
+  const total = list.reduce((a, c) => a + amount(c), 0);
+  const done = list.filter((c) => sent.has(c.contactId)).reduce((a, c) => a + amount(c), 0);
+  const textFor = (c: DueCustomer) => preDueMessage(c.name, c.invoices, noOld.has(c.contactId) ? [] : c.overdue);
 
   return (
-    <section ref={ref} id="por-vencer" className={cn(card, 'scroll-mt-28 space-y-3')}>
+    <section ref={ref} id="por-vencer" className={cn(card, 'scroll-mt-28 space-y-4')}>
       <div className="flex flex-wrap items-center gap-2">
         <CalendarClock className="size-5 text-sky-600 dark:text-sky-400" />
         <h2 className="text-sm font-medium">Por vencer</h2>
@@ -162,7 +221,10 @@ export function DueSoon({ onOpenCustomer }: { onOpenCustomer: (id: number) => vo
           ].map(([n, label]) => (
             <button
               key={n}
-              onClick={() => setDays(n as number)}
+              onClick={() => {
+                setDays(n as number);
+                setOpen(null);
+              }}
               aria-pressed={days === n}
               className={cn('h-7 rounded-full px-3', days === n ? 'bg-primary font-semibold text-primary-foreground' : 'text-muted-foreground hover:text-foreground')}
             >
@@ -173,111 +235,110 @@ export function DueSoon({ onOpenCustomer }: { onOpenCustomer: (id: number) => vo
       </div>
       <PushToggle />
 
-      {data && (
-        <p className="text-xs text-muted-foreground">
-          {data.from === data.to ? `Vencen el ${shortDay(data.from)}` : `Vencen del ${shortDay(data.from)} al ${shortDay(data.to)}`}:{' '}
-          {list.length ? `${list.reduce((a, c) => a + c.invoices.length, 0)} facturas de ${list.length} clientes · $ ${money(total)}` : 'ninguna factura.'}
+      {data && !list.length && (
+        <p className="text-sm text-muted-foreground">
+          🎉 No vence nada {data.from === data.to ? `el ${shortDay(data.from)}` : `entre el ${shortDay(data.from)} y el ${shortDay(data.to)}`}.
         </p>
       )}
+      {list.length > 0 && <Ring done={done} total={total} />}
 
-      {queue && current ? (
-        <div className="space-y-2 rounded-xl border border-emerald-500/40 bg-emerald-500/5 p-3">
-          <p className="text-xs text-muted-foreground">
-            Cliente {pos + 1} de {queue.length}
-          </p>
-          <p className="font-medium">{current.name}</p>
-          <pre className="whitespace-pre-wrap rounded-lg bg-background/70 p-2 font-sans text-xs">{textFor(current)}</pre>
-          <div className="flex flex-wrap gap-2">
-            <WhatsAppLink
-              phone={current.phone}
-              text={textFor(current)}
-              beforeOpen={() => checkCollection(current.contactId)}
-              className="inline-flex h-8 items-center rounded-md border border-emerald-500/40 bg-emerald-500/10 px-3 text-xs font-medium text-emerald-600 hover:bg-emerald-500/20 dark:text-emerald-400"
-            >
-              💬 Abrir WhatsApp con el mensaje
-            </WhatsAppLink>
-            <Button size="sm" onClick={() => setPos(pos + 1)}>
-              {pos + 1 < queue.length ? 'Siguiente ›' : 'Terminar'}
-            </Button>
-            <Button size="sm" variant="ghost" onClick={() => setQueue(null)}>
-              Cancelar
-            </Button>
-          </div>
-        </div>
-      ) : queue ? (
-        <div className="flex items-center gap-2 rounded-xl border border-emerald-500/40 bg-emerald-500/5 p-3 text-sm">
-          <span className="flex-1">✅ Recorriste los {queue.length} clientes.</span>
-          <Button size="sm" variant="outline" onClick={() => setQueue(null)}>
-            Cerrar
-          </Button>
-        </div>
-      ) : (
-        list.length > 0 && (
-          <>
-            <ul className="space-y-1.5">
-              {list.map((c) => (
-                <li key={c.contactId} className="flex items-start gap-2 rounded-lg border border-border/60 bg-background/40 p-2 text-sm">
-                  <input
-                    type="checkbox"
-                    id={`vence-${c.contactId}`}
-                    checked={chosen.has(c.contactId)}
-                    disabled={!c.hasPhone}
-                    onChange={() => flip(c.contactId)}
-                    className="mt-1 size-4 accent-emerald-600"
-                  />
-                  <div className="min-w-0 flex-1">
-                    <button onClick={() => onOpenCustomer(c.contactId)} className="block max-w-full truncate text-left font-medium hover:underline">
-                      {c.name || formatPhone(c.phone)}
-                    </button>
-                    <p className="text-xs text-muted-foreground">
-                      {c.invoices.map((i) => `${i.doc} · vence ${shortDay(i.dueAt)} · $ ${money(i.balance)}`).join('  |  ')}
-                      {!c.hasPhone && ' · Sin WhatsApp'}
-                    </p>
-                    {c.overdue.length > 0 && (
-                      <div className="mt-1 rounded-md bg-rose-500/10 px-2 py-1 text-xs text-rose-600 dark:text-rose-400">
-                        <p>
-                          ⚠️ Además debe {c.overdue.length} factura{c.overdue.length === 1 ? '' : 's'} vencida{c.overdue.length === 1 ? '' : 's'} · ${' '}
-                          {money(c.overdueTotal)} (la más vieja: {c.overdue[0].doc}, {c.overdue[0].daysLate} días)
-                        </p>
-                        {c.hasPhone && (
-                          <label className="mt-0.5 flex items-center gap-1.5 text-foreground">
-                            <input
-                              type="checkbox"
-                              id={`viejas-${c.contactId}`}
-                              checked={!noOld.has(c.contactId)}
-                              onChange={() => {
-                                const next = new Set(noOld);
-                                if (next.has(c.contactId)) next.delete(c.contactId);
-                                else next.add(c.contactId);
-                                setNoOld(next);
-                              }}
-                              className="size-3.5 accent-rose-600"
-                            />
-                            Incluir las vencidas en el mensaje
-                          </label>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                  <span className="shrink-0 text-right font-medium tabular-nums">
-                    $ {money(c.total)}
-                    {c.overdueTotal > 0 && <span className="block text-xs text-rose-600 dark:text-rose-400">+ $ {money(c.overdueTotal)}</span>}
-                  </span>
-                </li>
+      {LIGHTS.map((L) => {
+        const group = list.filter((c) => light(c) === L.key);
+        if (!group.length) return null;
+        const opened = group.find((c) => c.contactId === open);
+        return (
+          <div key={L.key} className="space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              {L.dot} {L.label(days)} ({group.length})
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {group.map((c) => (
+                <button
+                  key={c.contactId}
+                  onClick={() => setOpen(open === c.contactId ? null : c.contactId)}
+                  aria-expanded={open === c.contactId}
+                  className={cn(
+                    'flex max-w-full items-center gap-2 rounded-full border px-3 py-1.5 text-left text-sm transition-transform active:scale-95',
+                    L.ring,
+                    L.bg,
+                    open === c.contactId && 'ring-2 ring-primary',
+                    sent.has(c.contactId) && 'opacity-60'
+                  )}
+                >
+                  <span className="max-w-[11rem] truncate font-medium">{c.name || formatPhone(c.phone)}</span>
+                  <span className="shrink-0 tabular-nums text-muted-foreground">$ {money(amount(c))}</span>
+                  <span className="shrink-0">{sent.has(c.contactId) ? '✅' : c.hasPhone ? '💬' : '📵'}</span>
+                </button>
               ))}
-            </ul>
-            <Button
-              disabled={!chosen.size}
-              onClick={() => {
-                setQueue(list.filter((c) => chosen.has(c.contactId)));
-                setPos(0);
-              }}
-            >
-              Enviar recordatorio a {chosen.size} cliente{chosen.size === 1 ? '' : 's'}
-            </Button>
-          </>
-        )
-      )}
+            </div>
+            {opened && (
+              <div className={cn('space-y-2 rounded-xl border p-3 text-sm', L.ring)}>
+                <div className="flex items-start gap-2">
+                  <button onClick={() => onOpenCustomer(opened.contactId)} className="min-w-0 flex-1 truncate text-left font-semibold hover:underline">
+                    {opened.name || formatPhone(opened.phone)}
+                  </button>
+                  <span className="shrink-0 font-semibold tabular-nums">$ {money(amount(opened))}</span>
+                </div>
+                <ul className="space-y-0.5 text-xs">
+                  {opened.invoices.map((i) => (
+                    <li key={i.id} className="flex gap-2">
+                      <span className="flex-1">
+                        🧾 {i.doc} · vence {i.dueAt <= today ? 'hoy' : shortDay(i.dueAt)}
+                      </span>
+                      <span className="tabular-nums">$ {money(i.balance)}</span>
+                    </li>
+                  ))}
+                  {opened.overdue.map((o) => (
+                    <li key={o.doc} className="flex gap-2 text-rose-600 dark:text-rose-400">
+                      <span className="flex-1">
+                        ⚠️ {o.doc} · {o.daysLate} días
+                      </span>
+                      <span className="tabular-nums">$ {money(o.balance)}</span>
+                    </li>
+                  ))}
+                </ul>
+                {opened.overdue.length > 0 && (
+                  <label className="flex items-center gap-1.5 text-xs">
+                    <input
+                      type="checkbox"
+                      id={`viejas-${opened.contactId}`}
+                      checked={!noOld.has(opened.contactId)}
+                      onChange={() => {
+                        const next = new Set(noOld);
+                        if (next.has(opened.contactId)) next.delete(opened.contactId);
+                        else next.add(opened.contactId);
+                        setNoOld(next);
+                      }}
+                      className="size-3.5 accent-rose-600"
+                    />
+                    Incluir las vencidas en el mensaje
+                  </label>
+                )}
+                {opened.hasPhone ? (
+                  <>
+                    <pre className="whitespace-pre-wrap rounded-lg bg-background/70 p-2 font-sans text-xs">{textFor(opened)}</pre>
+                    <WhatsAppLink
+                      phone={opened.phone}
+                      text={textFor(opened)}
+                      beforeOpen={async () => {
+                        const r = await checkCollection(opened.contactId);
+                        // ✅ only when the reminder goes; opening the chat without it (outside collection hours) does not count.
+                        if (r === true) mark(opened.contactId);
+                        return r;
+                      }}
+                      className="inline-flex h-9 items-center rounded-full bg-emerald-600 px-4 text-sm font-semibold text-white shadow-[0_0_16px_rgba(0,200,83,0.45)] hover:bg-emerald-500"
+                    >
+                      💬 Cobrar por WhatsApp
+                    </WhatsAppLink>
+                  </>
+                ) : (
+                  <p className="text-xs text-muted-foreground">📵 Sin WhatsApp: búscalo desde su ficha para poder cobrarle.</p>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
     </section>
   );
 }
