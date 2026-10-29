@@ -66,12 +66,14 @@ export function collectionMessage(name: string, items: DebtItem[]): { tier: Coll
 /**
  * Before or on the due date ("Por vencer" in Cartera, after the morning warning): each invoice on its own line with its
  * value, the ones about to fall due and (optionally) the older overdue ones apart, the total, and the payment date
- * question. Layout "Lista con total" approved by the user on 29-oct-2026.
+ * question. Layout "Lista con total" approved by the user on 29-oct-2026. Invoices due today or already past go under
+ * "Se acaba de vencer" and the closing asks for the day the payment is scheduled (user's wording, 29-oct-2026).
  */
 export function preDueMessage(
   name: string,
   items: { doc: string; balance: number; dueAt: string }[],
-  overdue: { doc: string; balance: number; daysLate: number }[] = []
+  overdue: { doc: string; balance: number; daysLate: number }[] = [],
+  today = new Date(Date.now() - 5 * 3_600_000).toISOString().slice(0, 10)
 ): string {
   const who = greetName(name);
   const WEEK = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
@@ -80,22 +82,22 @@ export function preDueMessage(
     const [y, m, d] = iso.split('-').map(Number);
     return `${WEEK[new Date(Date.UTC(y, m - 1, d)).getUTCDay()]} ${d} ${MONTH[m - 1]}`;
   };
-  const soon = [...items].sort((a, b) => a.dueAt.localeCompare(b.dueAt));
+  const sorted = [...items].sort((a, b) => a.dueAt.localeCompare(b.dueAt));
+  const justDue = sorted.filter((i) => i.dueAt <= today);
+  const soon = sorted.filter((i) => i.dueAt > today);
   const old = [...overdue].sort((a, b) => b.daysLate - a.daysLate);
   // Up to 6 overdue invoices one per line; the rest summed in one line so the message stays readable.
   const MAX_OLD = 6;
   const rest = old.slice(MAX_OLD);
-  const total = [...soon, ...old].reduce((a, i) => a + i.balance, 0);
-  const lines = [
-    `Hola${who ? ` ${who}` : ''} 👋 Te escribimos de *Xsite Group* · cartera 💼`,
-    '',
-    '📅 *Por vencer:*',
-    ...soon.map((i) => `🧾 Fact. *${i.doc}* · vence ${day(i.dueAt)} · *${money(i.balance)}*`)
-  ];
+  const total = [...sorted, ...old].reduce((a, i) => a + i.balance, 0);
+  const lines = [`Hola${who ? ` ${who}` : ''} 👋 Te escribimos de *Xsite Group* · cartera 💼`];
+  if (justDue.length)
+    lines.push('', '⏰ *Se acaba de vencer:*', ...justDue.map((i) => `🧾 Fact. *${i.doc}* · venció ${i.dueAt === today ? 'hoy' : day(i.dueAt)} · *${money(i.balance)}*`));
+  if (soon.length) lines.push('', '📅 *Por vencer:*', ...soon.map((i) => `🧾 Fact. *${i.doc}* · vence ${day(i.dueAt)} · *${money(i.balance)}*`));
   if (old.length) {
     lines.push('', '⚠️ *Vencidas:*', ...old.slice(0, MAX_OLD).map((o) => `🧾 Fact. *${o.doc}* · ${o.daysLate} días · *${money(o.balance)}*`));
     if (rest.length) lines.push(`🧾 y ${rest.length} factura${rest.length === 1 ? '' : 's'} más · *${money(rest.reduce((a, o) => a + o.balance, 0))}*`);
   }
-  lines.push('', `💰 *Total: ${money(total)}*`, '', '¿Nos confirmas la fecha de pago? 📅 ¡Gracias! ✅');
+  lines.push('', `💰 *Total: ${money(total)}*`, '', '🙏 Por favor, necesitamos el *día de programación del pago* 📅 ¡Gracias! ✅');
   return lines.join('\n');
 }
