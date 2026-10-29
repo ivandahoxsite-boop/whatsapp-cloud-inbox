@@ -128,6 +128,9 @@ export function DueSoon({ onOpenCustomer }: { onOpenCustomer: (id: number) => vo
   const [picked, setPicked] = useState<Set<number> | null>(null);
   const [queue, setQueue] = useState<DueCustomer[] | null>(null);
   const [pos, setPos] = useState(0);
+  // Customers whose older overdue invoices the user took out of the message (by default they go in).
+  const [noOld, setNoOld] = useState<Set<number>>(new Set());
+  const textFor = (c: DueCustomer) => preDueMessage(c.name, c.invoices, noOld.has(c.contactId) ? [] : c.overdue);
   const ref = useRef<HTMLElement>(null);
 
   useEffect(() => {
@@ -153,7 +156,7 @@ export function DueSoon({ onOpenCustomer }: { onOpenCustomer: (id: number) => vo
         <h2 className="text-sm font-medium">Por vencer</h2>
         <div className="ml-auto flex rounded-full border border-border/60 p-0.5 text-xs" role="group" aria-label="Rango">
           {[
-            [1, 'Mañana'],
+            [1, 'Hoy y mañana'],
             [3, '3 días'],
             [7, '7 días']
           ].map(([n, label]) => (
@@ -183,11 +186,11 @@ export function DueSoon({ onOpenCustomer }: { onOpenCustomer: (id: number) => vo
             Cliente {pos + 1} de {queue.length}
           </p>
           <p className="font-medium">{current.name}</p>
-          <pre className="whitespace-pre-wrap rounded-lg bg-background/70 p-2 font-sans text-xs">{preDueMessage(current.name, current.invoices)}</pre>
+          <pre className="whitespace-pre-wrap rounded-lg bg-background/70 p-2 font-sans text-xs">{textFor(current)}</pre>
           <div className="flex flex-wrap gap-2">
             <WhatsAppLink
               phone={current.phone}
-              text={preDueMessage(current.name, current.invoices)}
+              text={textFor(current)}
               beforeOpen={() => checkCollection(current.contactId)}
               className="inline-flex h-8 items-center rounded-md border border-emerald-500/40 bg-emerald-500/10 px-3 text-xs font-medium text-emerald-600 hover:bg-emerald-500/20 dark:text-emerald-400"
             >
@@ -230,8 +233,36 @@ export function DueSoon({ onOpenCustomer }: { onOpenCustomer: (id: number) => vo
                       {c.invoices.map((i) => `${i.doc} · vence ${shortDay(i.dueAt)} · $ ${money(i.balance)}`).join('  |  ')}
                       {!c.hasPhone && ' · Sin WhatsApp'}
                     </p>
+                    {c.overdue.length > 0 && (
+                      <div className="mt-1 rounded-md bg-rose-500/10 px-2 py-1 text-xs text-rose-600 dark:text-rose-400">
+                        <p>
+                          ⚠️ Además debe {c.overdue.length} factura{c.overdue.length === 1 ? '' : 's'} vencida{c.overdue.length === 1 ? '' : 's'} · ${' '}
+                          {money(c.overdueTotal)} (la más vieja: {c.overdue[0].doc}, {c.overdue[0].daysLate} días)
+                        </p>
+                        {c.hasPhone && (
+                          <label className="mt-0.5 flex items-center gap-1.5 text-foreground">
+                            <input
+                              type="checkbox"
+                              id={`viejas-${c.contactId}`}
+                              checked={!noOld.has(c.contactId)}
+                              onChange={() => {
+                                const next = new Set(noOld);
+                                if (next.has(c.contactId)) next.delete(c.contactId);
+                                else next.add(c.contactId);
+                                setNoOld(next);
+                              }}
+                              className="size-3.5 accent-rose-600"
+                            />
+                            Incluir las vencidas en el mensaje
+                          </label>
+                        )}
+                      </div>
+                    )}
                   </div>
-                  <span className="shrink-0 font-medium tabular-nums">$ {money(c.total)}</span>
+                  <span className="shrink-0 text-right font-medium tabular-nums">
+                    $ {money(c.total)}
+                    {c.overdueTotal > 0 && <span className="block text-xs text-rose-600 dark:text-rose-400">+ $ {money(c.overdueTotal)}</span>}
+                  </span>
                 </li>
               ))}
             </ul>

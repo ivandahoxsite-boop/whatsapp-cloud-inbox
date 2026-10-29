@@ -1,7 +1,7 @@
 import webpush from 'web-push';
 import { getDb } from './db';
 import { isRealPhone } from './customers';
-import { slotMs } from './receivables';
+import { daysLate, slotMs } from './receivables';
 import { addDays, dayProblem, todayCo } from './tasks-info';
 
 /**
@@ -71,18 +71,31 @@ export async function sendPush(msg: PushMessage): Promise<{ sent: number; failed
 }
 
 export type DueInvoice = { id: number; doc: string; dueAt: string; balance: number };
-export type DueCustomer = { contactId: number; name: string; phone: string; hasPhone: boolean; invoices: DueInvoice[]; total: number };
+/** An older invoice of the same customer that is already overdue (days counted from the issue date, as the CRM does). */
+export type OverdueInvoice = { doc: string; balance: number; daysLate: number };
+export type DueCustomer = {
+  contactId: number;
+  name: string;
+  phone: string;
+  hasPhone: boolean;
+  invoices: DueInvoice[];
+  total: number;
+  /** Older invoices of this customer already overdue (the user wants to see and charge them in the same message). */
+  overdue: OverdueInvoice[];
+  overdueTotal: number;
+};
 
-/** The days whose invoices the morning warning covers: tomorrow, plus Sunday/holidays up to the next working day. */
+/** The days whose invoices the morning warning covers: today, tomorrow, and Sunday/holidays up to the next working day. */
 export function noticeDays(today = todayCo()): string[] {
-  const days = [addDays(today, 1)];
+  const days = [today, addDays(today, 1)];
   while (dayProblem(days[days.length - 1])) days.push(addDays(days[days.length - 1], 1));
   return days;
 }
 
-/** Open invoices that fall due between `from` and `to` (inclusive), by customer. */
-export function dueBetween(from: string, to: string): DueCustomer[] {
-  const rows = getDb()
+/** Open invoices that fall due between `from` and `to` (inclusive), by customer, with each one's older overdue invoices. */
+export function dueBetween(from: string, to: string, now = new Date()): DueCustomer[] {
+  const d = getDb();
+  const rows = d
     .prepare(
       `SELECT r.id, r.doc, substr(r.due_at, 1, 10) AS due, r.balance, r.contact_id, c.name, c.phone
        FROM receivables r JOIN contacts c ON c.id = r.contact_id
@@ -90,14 +103,28 @@ export function dueBetween(from: string, to: string): DueCustomer[] {
        ORDER BY due, c.name`
     )
     .all(from, to) as { id: number; doc: string; due: string; balance: number; contact_id: number; name: string; phone: string }[];
+  const older = d.prepare(
+    `SELECT doc, balance, issued_at, due_at FROM receivables
+     WHERE contact_id = ? AND status = 'open' AND balance > 0 AND substr(due_at, 1, 10) < ?`
+  );
   const by = new Map<number, DueCustomer>();
   for (const r of rows) {
-    const c = by.get(r.contact_id) ?? { contactId: r.contact_id, name: r.name, phone: r.phone, hasPhone: isRealPhone(r.phone), invoices: [], total: 0 };
+    let c = by.get(r.contact_id);
+    if (!c) {
+      const overdue = (older.all(r.contact_id, from) as { doc: string; balance: number; issued_at: string | null; due_at: string | null }[])
+        .map((o) => ({ doc: o.doc, balance: o.balance, daysLate: daysLate(o, now) }))
+        .filter((o) => o.daysLate > 0)
+        .sort((a, b) => b.daysLate - a.daysLate);
+      c = {
+        contactId: r.contact_id, name: r.name, phone: r.phone, hasPhone: isRealPhone(r.phone), invoices: [], total: 0,
+        overdue, overdueTotal: overdue.reduce((a, o) => a + o.balance, 0)
+      };
+      by.set(r.contact_id, c);
+    }
     c.invoices.push({ id: r.id, doc: r.doc, dueAt: r.due, balance: r.balance });
     c.total += r.balance;
-    by.set(r.contact_id, c);
   }
-  return [...by.values()].sort((a, b) => b.total - a.total);
+  return [...by.values()].sort((a, b) => b.total + b.overdueTotal - (a.total + a.overdueTotal));
 }
 
 const money = (n: number) => `$${Math.round(n).toLocaleString('es-CO')}`;
@@ -109,11 +136,16 @@ export function dueNotice(today = todayCo()): PushMessage | null {
   if (!list.length) return null;
   const invoices = list.reduce((a, c) => a + c.invoices.length, 0);
   const total = list.reduce((a, c) => a + c.total, 0);
-  const when = days.length > 1 ? 'Antes del próximo día hábil' : 'Mañana';
+  const withOld = list.filter((c) => c.overdue.length);
   const first = list[0];
   return {
-    title: `📅 ${when} vence${invoices === 1 ? '' : 'n'} ${invoices} factura${invoices === 1 ? '' : 's'} · ${money(total)}`,
-    body: `${first.name || 'Un cliente'} ${money(first.total)}${list.length > 1 ? ` y ${list.length - 1} cliente${list.length > 2 ? 's' : ''} más` : ''}. Toca para elegir a quién enviarle el recordatorio.`,
+    title: `📅 Vencen hoy y mañana: ${invoices} factura${invoices === 1 ? '' : 's'} · ${money(total)}`,
+    body:
+      `${first.name || 'Un cliente'} ${money(first.total)}${list.length > 1 ? ` y ${list.length - 1} cliente${list.length > 2 ? 's' : ''} más` : ''}.` +
+      (withOld.length
+        ? ` ⚠️ ${withOld.length === 1 ? `${withOld[0].name || 'Uno'} además tiene` : `${withOld.length} de ellos además tienen`} facturas vencidas (${money(withOld.reduce((a, c) => a + c.overdueTotal, 0))}).`
+        : '') +
+      ' Toca para elegir a quién enviarle el recordatorio.',
     url: '/crm#por-vencer',
     tag: `vencen-${days[0]}`
   };

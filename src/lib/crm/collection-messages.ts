@@ -64,21 +64,40 @@ export function collectionMessage(name: string, items: DebtItem[]): { tier: Coll
 }
 
 /**
- * Before the due date ("Por vencer" in Cartera, after the morning warning): a friendly heads-up that names the
- * invoices that fall due and asks for the payment date. DRAFT of 29-oct-2026: the user has not approved this text yet.
+ * Before or on the due date ("Por vencer" in Cartera, after the morning warning): a friendly heads-up that names the
+ * invoices that fall due, optionally the customer's older overdue ones too, and asks for the payment date.
+ * DRAFT of 29-oct-2026: the user has not approved this text yet.
  */
-export function preDueMessage(name: string, items: { doc: string; balance: number; dueAt: string }[]): string {
+export function preDueMessage(
+  name: string,
+  items: { doc: string; balance: number; dueAt: string }[],
+  overdue: { doc: string; balance: number; daysLate: number }[] = []
+): string {
   const who = greetName(name);
   const sorted = [...items].sort((a, b) => a.dueAt.localeCompare(b.dueAt));
-  const [y, m, d] = sorted[0].dueAt.split('-').map(Number);
-  const when = new Date(Date.UTC(y, m - 1, d)).toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' });
-  const what =
-    sorted.length === 1
-      ? `la factura *${sorted[0].doc}* por *${money(sorted[0].balance)}*`
-      : `las facturas ${sorted.map((i) => `*${i.doc}*`).join(', ')} por *${money(sorted.reduce((a, i) => a + i.balance, 0))}*`;
+  const dayName = (iso: string, long: boolean) => {
+    const [y, m, d] = iso.split('-').map(Number);
+    return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString('es-CO', long ? { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' } : { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
+  };
+  const oneDay = sorted.every((i) => i.dueAt === sorted[0].dueAt);
+  const total = money(sorted.reduce((a, i) => a + i.balance, 0));
+  // Same due date: "el jueves, 29 de octubre vencen…"; different dates: each invoice with its own date.
+  const dueLine = oneDay
+    ? `Te recordamos que el *${dayName(sorted[0].dueAt, true)}* vence${sorted.length === 1 ? '' : 'n'} ${
+        sorted.length === 1 ? `la factura *${sorted[0].doc}* por *${money(sorted[0].balance)}*` : `las facturas ${sorted.map((i) => `*${i.doc}*`).join(', ')} por *${total}*`
+      } 🧾`
+    : `Te recordamos que vencen las facturas ${sorted.map((i) => `*${i.doc}* (${dayName(i.dueAt, false)})`).join(', ')} por *${total}* 🧾`;
+  const old = [...overdue].sort((a, b) => b.daysLate - a.daysLate);
+  const shown = old.slice(0, 3).map((o) => `*${o.doc}* (${o.daysLate} días)`);
+  const oldText = !old.length
+    ? ''
+    : old.length === 1
+      ? `Además tienes vencida la factura *${old[0].doc}* por *${money(old[0].balance)}* (${old[0].daysLate} días) ⚠️\n\n`
+      : `Además tienes vencidas las facturas ${shown.join(', ')}${old.length > 3 ? ` y ${old.length - 3} más` : ''} por *${money(old.reduce((a, o) => a + o.balance, 0))}* ⚠️\n\n`;
   return (
     `Hola${who ? ` ${who}` : ''} 👋 Te escribimos de *Xsite Group* · cartera 💼\n\n` +
-    `Te recordamos que el *${when}* vence${sorted.length === 1 ? '' : 'n'} ${what} 🧾\n\n` +
+    `${dueLine}\n\n` +
+    oldText +
     `¿Nos confirmas la fecha de pago? 📅 ¡Gracias! ✅`
   );
 }
