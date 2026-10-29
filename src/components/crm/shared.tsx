@@ -294,25 +294,12 @@ function useDevice(): Device {
   return device;
 }
 
-/** The WhatsApp Business app on Android (its package name). */
-const WA_BUSINESS = 'com.whatsapp.w4b';
-
-/**
- * On Android: an intent that opens the chat straight in the WhatsApp Business app, without going through a browser
- * tab (the user asked for it). It hands the app WhatsApp's own https link (api.whatsapp.com/send, the same format as
- * wa.me): with the whatsapp:// scheme the app cut long messages on the user's phone. If the app is missing, Chrome
- * falls back to wa.me.
- */
-export function whatsappBusinessIntent(phone: string, text?: string): string {
-  const q = `phone=${phone}${text ? `&text=${encodeURIComponent(text)}` : ''}`;
-  const fallback = encodeURIComponent(`https://wa.me/${phone}${text ? `?text=${encodeURIComponent(text)}` : ''}`);
-  return `intent://api.whatsapp.com/send?${q}#Intent;scheme=https;package=${WA_BUSINESS};S.browser_fallback_url=${fallback};end`;
-}
-
 /**
  * "Escribir por WhatsApp". On a computer it opens the chat straight in WhatsApp Web, always in the same browser tab
- * (named "whatsapp-web") instead of a new one each time; on Android it opens the WhatsApp Business app directly; on
- * other phones, the WhatsApp app through wa.me.
+ * (named "whatsapp-web") instead of a new one each time; on a phone it goes to wa.me. On Android it goes there in the
+ * same tab (no new window) and Android hands the chat to the WhatsApp app with the whole message. Two attempts at
+ * opening WhatsApp Business straight through an intent failed on the user's phone (29-oct): with whatsapp:// the message
+ * arrived cut, with an https intent it arrived empty. wa.me is the only way the message arrived complete.
  */
 export function WhatsAppLink({
   phone,
@@ -331,7 +318,6 @@ export function WhatsAppLink({
   const device = useDevice();
   const desktop = device === 'desktop';
   const url = (t?: string) => {
-    if (device === 'android') return whatsappBusinessIntent(phone, t);
     const q = t ? `text=${encodeURIComponent(t)}` : '';
     return desktop ? `https://web.whatsapp.com/send?phone=${phone}${q ? `&${q}` : ''}` : `https://wa.me/${phone}${q ? `?${q}` : ''}`;
   };
