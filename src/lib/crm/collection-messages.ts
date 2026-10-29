@@ -66,7 +66,7 @@ export function collectionMessage(name: string, items: DebtItem[]): { tier: Coll
 /**
  * Before or on the due date ("Por vencer" in Cartera, after the morning warning): a friendly heads-up that names the
  * invoices that fall due, optionally the customer's older overdue ones too, and asks for the payment date.
- * DRAFT of 29-oct-2026: the user has not approved this text yet.
+ * Approved by the user on 29-oct-2026.
  */
 export function preDueMessage(
   name: string,
