@@ -321,7 +321,7 @@ export function DueSoon({ onOpenCustomer }: { onOpenCustomer: (id: number) => vo
                       phone={opened.phone}
                       text={textFor(opened)}
                       beforeOpen={async () => {
-                        const r = await checkCollection(opened.contactId);
+                        const r = await checkCollection(opened.contactId, { reminder: true });
                         // ✅ only when the reminder goes; opening the chat without it (outside collection hours) does not count.
                         if (r === true) mark(opened.contactId);
                         return r;

@@ -187,7 +187,21 @@ export type CallCheck = {
  * For customers the user picked by hand: can each one be called right now, and if not, why. `q` finds customers by name
  * (up to 5), `customerId` checks one.
  */
-export function checkCustomers(by: { customerId?: number; q?: string }, now = new Date(), options: { ignoreWindow?: boolean } = {}) {
+/**
+ * Test switch for the WhatsApp buttons only: until this instant the collection hours do not block them (the user asked
+ * to try the buttons at night and put the rule back right away). Calls and the agent never look at it.
+ */
+export const HOURS_OFF_SETTING = 'collection_hours_off_until';
+export function hoursOffUntil(now = new Date()): string | null {
+  const r = getDb().prepare('SELECT value FROM settings WHERE key = ?').get(HOURS_OFF_SETTING) as { value: string } | undefined;
+  return r && Date.parse(r.value) > now.getTime() ? r.value : null;
+}
+
+export function checkCustomers(
+  by: { customerId?: number; q?: string },
+  now = new Date(),
+  options: { ignoreWindow?: boolean; reminder?: boolean } = {}
+) {
   const window = callWindow(now);
   const d = getDb();
   const block = blocks(now);
@@ -209,7 +223,8 @@ export function checkCustomers(by: { customerId?: number; q?: string }, now = ne
     const reasons: string[] = [];
     if (!window.allowed && !options.ignoreWindow) reasons.push(window.reason);
     if (!/^\d{7,}$/.test(r.phone)) reasons.push('No tiene teléfono');
-    if (!debt || debt.overdue <= 0) reasons.push('No tiene deuda vencida');
+    // A reminder before the due date ("Por vencer") is fine without overdue debt.
+    if (!options.reminder && (!debt || debt.overdue <= 0)) reasons.push('No tiene deuda vencida');
     const why = block.get(r.id);
     if (why) reasons.push(BLOCK_TEXT[why]);
     const docs = debt ? (d.prepare("SELECT doc FROM receivables WHERE contact_id = ? AND status = 'open' ORDER BY COALESCE(due_at, issued_at) LIMIT 3").all(r.id) as unknown as { doc: string }[]).map((x) => x.doc) : [];
