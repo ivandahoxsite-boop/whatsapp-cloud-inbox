@@ -74,7 +74,7 @@ export function collectionMessage(name: string, items: DebtItem[]): { tier: Coll
  * value, the ones about to fall due and (optionally) the older overdue ones apart, the total, and the payment date
  * question. Layout "Lista con total" approved by the user on 29-oct-2026. Every invoice of the warning (due today or
  * tomorrow) goes under "Se acaba de vencer": the user counts them as due already ("si hoy es 28 y mañana 29, ya es
- * vencido"), and the closing asks for the day the payment is scheduled (user's wording, 29-oct-2026).
+ * vencido"), and the closing formally asks for the date the payment is scheduled (user's choice, 29-oct-2026).
  */
 export function preDueMessage(
   name: string,
@@ -102,6 +102,16 @@ export function preDueMessage(
     lines.push('', '⚠️ *Vencidas:*', ...old.slice(0, MAX_OLD).map((o) => `🧾 Fact. *${o.doc}* · ${o.daysLate} días · *${money(o.balance)}*`));
     if (rest.length) lines.push(`🧾 y ${rest.length} factura${rest.length === 1 ? '' : 's'} más · *${money(rest.reduce((a, o) => a + o.balance, 0))}*`);
   }
-  lines.push('', `💰 *Total: ${money(total)}*`, '', '🙏 Por favor, necesitamos el *día de programación del pago* 📅 ¡Gracias! ✅');
+  // Formal closing chosen by the user (option 1, 29-oct-2026).
+  lines.push(
+    '',
+    `💰 *Total: ${money(total)}*`,
+    '',
+    '📅 Le agradecemos confirmarnos la *fecha programada para el pago*.',
+    'Quedamos atentos.',
+    '',
+    'Cordialmente,',
+    '*Xsite Group* · Cartera'
+  );
   return lines.join('\n');
 }
