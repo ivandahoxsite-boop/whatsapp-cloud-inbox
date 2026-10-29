@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Bell, BellOff, CalendarClock } from 'lucide-react';
+import { Bell, BellOff, CalendarClock, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import type { DueCustomer } from '@/lib/crm/push';
@@ -118,12 +118,22 @@ function PushToggle() {
   );
 }
 
-type Light = 'rojo' | 'naranja' | 'verde';
+type Light = 'rojo' | 'naranja' | 'verde' | 'pasado';
 const LIGHTS: { key: Light; dot: string; label: (days: number) => string; ring: string; bg: string }[] = [
   { key: 'rojo', dot: '🔴', label: () => 'Con facturas vencidas', ring: 'border-rose-500/50', bg: 'bg-rose-500/10' },
   { key: 'naranja', dot: '🟠', label: () => 'Vence hoy', ring: 'border-amber-500/50', bg: 'bg-amber-500/10' },
-  { key: 'verde', dot: '🟢', label: (days) => (days <= 1 ? 'Vence mañana' : 'Vence en los próximos días'), ring: 'border-emerald-500/50', bg: 'bg-emerald-500/10' }
+  { key: 'verde', dot: '🟢', label: (days) => (days <= 1 ? 'Vence mañana' : 'Vence en los próximos días'), ring: 'border-emerald-500/50', bg: 'bg-emerald-500/10' },
+  { key: 'pasado', dot: '🔴', label: (days) => `Vencidas en los últimos ${-days} días`, ring: 'border-rose-500/50', bg: 'bg-rose-500/10' }
 ];
+// Range buttons: positive = what falls due next; negative = what fell due in the last days (user's request, 29-oct-2026).
+const RANGES: [number, string][] = [
+  [1, 'Hoy y mañana'],
+  [3, '3 días'],
+  [7, '7 días'],
+  [-15, 'Vencidas 15 días']
+];
+/** Lowercase without accents, so "garcia" finds "García". */
+const plain = (t: string) => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 const SENT_KEY = 'crm-cobro-avisados';
 
 /** Customers already sent a reminder today from this screen (only this browser remembers it; it resets every day). */
@@ -191,6 +201,7 @@ export function DueSoon({ onOpenCustomer }: { onOpenCustomer: (id: number) => vo
   const [days, setDays] = useState(1);
   const { data } = useQuery({ queryKey: ['crm-due', days], queryFn: () => api<Due>(`/api/crm/receivables/due?days=${days}`) });
   const [open, setOpen] = useState<number | null>(null);
+  const [query, setQuery] = useState('');
   // Customers whose older overdue invoices the user took out of the message (by default they go in).
   const [noOld, setNoOld] = useState<Set<number>>(new Set());
   const today = new Date(Date.now() - 5 * 3_600_000).toISOString().slice(0, 10);
@@ -201,9 +212,18 @@ export function DueSoon({ onOpenCustomer }: { onOpenCustomer: (id: number) => vo
     if (window.location.hash === '#por-vencer') ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, []);
 
-  const list = data?.customers ?? [];
+  const past = days < 0;
+  const all = data?.customers ?? [];
+  // The search filters the bubbles by name, phone or invoice number; every word must match.
+  const words = plain(query).split(/\s+/).filter(Boolean);
+  const list = words.length
+    ? all.filter((c) => {
+        const hay = plain([c.name, c.phone, ...c.invoices.map((i) => i.doc), ...c.overdue.map((o) => o.doc)].join(' '));
+        return words.every((w) => hay.includes(w));
+      })
+    : all;
   const amount = (c: DueCustomer) => c.total + (noOld.has(c.contactId) ? 0 : c.overdueTotal);
-  const light = (c: DueCustomer): Light => (c.overdue.length ? 'rojo' : c.invoices.some((i) => i.dueAt <= today) ? 'naranja' : 'verde');
+  const light = (c: DueCustomer): Light => (past ? 'pasado' : c.overdue.length ? 'rojo' : c.invoices.some((i) => i.dueAt <= today) ? 'naranja' : 'verde');
   const total = list.reduce((a, c) => a + amount(c), 0);
   const done = list.filter((c) => sent.has(c.contactId)).reduce((a, c) => a + amount(c), 0);
   const textFor = (c: DueCustomer) => preDueMessage(c.name, c.invoices, noOld.has(c.contactId) ? [] : c.overdue);
@@ -213,20 +233,19 @@ export function DueSoon({ onOpenCustomer }: { onOpenCustomer: (id: number) => vo
       <div className="flex flex-wrap items-center gap-2">
         <CalendarClock className="size-5 text-sky-600 dark:text-sky-400" />
         <h2 className="text-sm font-medium">Por vencer</h2>
-        <div className="ml-auto flex rounded-full border border-border/60 p-0.5 text-xs" role="group" aria-label="Rango">
-          {[
-            [1, 'Hoy y mañana'],
-            [3, '3 días'],
-            [7, '7 días']
-          ].map(([n, label]) => (
+        <div className="flex w-full rounded-full border border-border/60 p-0.5 text-xs sm:ml-auto sm:w-auto" role="group" aria-label="Rango">
+          {RANGES.map(([n, label]) => (
             <button
               key={n}
               onClick={() => {
-                setDays(n as number);
+                setDays(n);
                 setOpen(null);
               }}
               aria-pressed={days === n}
-              className={cn('h-7 rounded-full px-3', days === n ? 'bg-primary font-semibold text-primary-foreground' : 'text-muted-foreground hover:text-foreground')}
+              className={cn(
+                'h-7 flex-1 whitespace-nowrap rounded-full px-2 sm:flex-none sm:px-3',
+                days === n ? (n < 0 ? 'bg-rose-600 font-semibold text-white' : 'bg-primary font-semibold text-primary-foreground') : 'text-muted-foreground hover:text-foreground'
+              )}
             >
               {label}
             </button>
@@ -235,9 +254,27 @@ export function DueSoon({ onOpenCustomer }: { onOpenCustomer: (id: number) => vo
       </div>
       <PushToggle />
 
-      {data && !list.length && (
+      <label className="flex h-9 items-center gap-2 rounded-full border border-border/60 bg-background/60 px-3 text-sm">
+        <Search className="size-4 shrink-0 text-muted-foreground" />
+        <input
+          type="search"
+          value={query}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setOpen(null);
+          }}
+          placeholder="Buscar cliente, teléfono o factura"
+          aria-label="Buscar cliente"
+          className="min-w-0 flex-1 bg-transparent outline-none placeholder:text-muted-foreground"
+        />
+      </label>
+
+      {data && words.length > 0 && !list.length && all.length > 0 && (
+        <p className="text-sm text-muted-foreground">Ningún cliente de esta lista coincide con «{query.trim()}». Prueba otro rango arriba.</p>
+      )}
+      {data && !all.length && (
         <p className="text-sm text-muted-foreground">
-          🎉 No vence nada {data.from === data.to ? `el ${shortDay(data.from)}` : `entre el ${shortDay(data.from)} y el ${shortDay(data.to)}`}.
+          🎉 {past ? 'No se venció nada' : 'No vence nada'} {data.from === data.to ? `el ${shortDay(data.from)}` : `entre el ${shortDay(data.from)} y el ${shortDay(data.to)}`}.
         </p>
       )}
       {list.length > 0 && <Ring done={done} total={total} />}
@@ -283,7 +320,7 @@ export function DueSoon({ onOpenCustomer }: { onOpenCustomer: (id: number) => vo
                   {opened.invoices.map((i) => (
                     <li key={i.id} className="flex gap-2">
                       <span className="flex-1">
-                        🧾 {i.doc} · vence {i.dueAt <= today ? 'hoy' : shortDay(i.dueAt)}
+                        🧾 {i.doc} · {i.dueAt < today ? `venció ${shortDay(i.dueAt)}` : `vence ${i.dueAt === today ? 'hoy' : shortDay(i.dueAt)}`}
                       </span>
                       <span className="tabular-nums">$ {money(i.balance)}</span>
                     </li>
