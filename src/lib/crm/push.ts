@@ -127,6 +127,55 @@ export function dueBetween(from: string, to: string, now = new Date()): DueCusto
   return [...by.values()].sort((a, b) => b.total + b.overdueTotal - (a.total + a.overdueTotal));
 }
 
+/** Lowercase without accents, so "garcia" finds "García". */
+const plain = (t: string) => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+
+/**
+ * The "Buscar" box of "Por vencer": any customer whose name, phone or open invoice number matches every word, owing or
+ * not and whatever the range chosen (user's request, 29-oct-2026). Invoices not yet due go in `invoices`, the overdue
+ * ones in `overdue`; customers who owe go first.
+ */
+export function searchDue(q: string, today = todayCo(), now = new Date()): DueCustomer[] {
+  const words = plain(q).split(/\s+/).filter(Boolean);
+  if (!words.length || words.join('').length < 2) return [];
+  const d = getDb();
+  const open = d
+    .prepare(
+      `SELECT r.id, r.contact_id, r.doc, r.balance, r.issued_at, r.due_at FROM receivables r
+       WHERE r.status = 'open' AND r.balance > 0`
+    )
+    .all() as { id: number; contact_id: number; doc: string; balance: number; issued_at: string | null; due_at: string | null }[];
+  const byContact = new Map<number, typeof open>();
+  for (const r of open) byContact.set(r.contact_id, [...(byContact.get(r.contact_id) ?? []), r]);
+  const contacts = d.prepare('SELECT id, name, phone FROM contacts').all() as { id: number; name: string; phone: string }[];
+  const found: DueCustomer[] = [];
+  for (const c of contacts) {
+    const inv = byContact.get(c.id) ?? [];
+    const hay = plain([c.name, c.phone, ...inv.map((r) => r.doc)].join(' '));
+    if (!words.every((w) => hay.includes(w))) continue;
+    // Without debt, only real WhatsApp contacts (not the empty name holders the cartera sheet leaves behind).
+    if (!inv.length && !isRealPhone(c.phone)) continue;
+    const cust: DueCustomer = { contactId: c.id, name: c.name, phone: c.phone, hasPhone: isRealPhone(c.phone), invoices: [], total: 0, overdue: [], overdueTotal: 0 };
+    for (const r of inv) {
+      // Overdue as everywhere else in the CRM (past the due date, days counted from the issue date).
+      const late = daysLate(r, now);
+      if (!late) {
+        cust.invoices.push({ id: r.id, doc: r.doc, dueAt: (r.due_at ?? '').slice(0, 10) || today, balance: r.balance });
+        cust.total += r.balance;
+      } else {
+        cust.overdue.push({ doc: r.doc, balance: r.balance, daysLate: late });
+        cust.overdueTotal += r.balance;
+      }
+    }
+    cust.invoices.sort((a, b) => a.dueAt.localeCompare(b.dueAt));
+    cust.overdue.sort((a, b) => b.daysLate - a.daysLate);
+    found.push(cust);
+  }
+  return found
+    .sort((a, b) => b.total + b.overdueTotal - (a.total + a.overdueTotal) || a.name.localeCompare(b.name))
+    .slice(0, 20);
+}
+
 const money = (n: number) => `$${Math.round(n).toLocaleString('es-CO')}`;
 
 /** The morning warning, or null when nothing falls due. */

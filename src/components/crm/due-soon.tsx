@@ -118,12 +118,14 @@ function PushToggle() {
   );
 }
 
-type Light = 'rojo' | 'naranja' | 'verde' | 'pasado';
+type Light = 'rojo' | 'naranja' | 'verde' | 'pasado' | 'aldia';
 const LIGHTS: { key: Light; dot: string; label: (days: number) => string; ring: string; bg: string }[] = [
   { key: 'rojo', dot: '🔴', label: () => 'Con facturas vencidas', ring: 'border-rose-500/50', bg: 'bg-rose-500/10' },
   { key: 'naranja', dot: '🟠', label: () => 'Vence hoy', ring: 'border-amber-500/50', bg: 'bg-amber-500/10' },
   { key: 'verde', dot: '🟢', label: (days) => (days <= 1 ? 'Vence mañana' : 'Vence en los próximos días'), ring: 'border-emerald-500/50', bg: 'bg-emerald-500/10' },
-  { key: 'pasado', dot: '🔴', label: (days) => `Vencidas en los últimos ${-days} días`, ring: 'border-rose-500/50', bg: 'bg-rose-500/10' }
+  { key: 'pasado', dot: '🔴', label: (days) => `Vencidas en los últimos ${-days} días`, ring: 'border-rose-500/50', bg: 'bg-rose-500/10' },
+  // Only in the search: customers without open invoices (they can still be found and opened).
+  { key: 'aldia', dot: '⚪', label: () => 'Sin facturas pendientes', ring: 'border-border', bg: 'bg-muted/40' }
 ];
 // Range buttons: positive = what falls due next; negative = what fell due in the last days (user's request, 29-oct-2026).
 const RANGES: [number, string][] = [
@@ -199,9 +201,23 @@ function Ring({ done, total }: { done: number; total: number }) {
  */
 export function DueSoon({ onOpenCustomer }: { onOpenCustomer: (id: number) => void }) {
   const [days, setDays] = useState(1);
-  const { data } = useQuery({ queryKey: ['crm-due', days], queryFn: () => api<Due>(`/api/crm/receivables/due?days=${days}`) });
   const [open, setOpen] = useState<number | null>(null);
   const [query, setQuery] = useState('');
+  // The search looks through every customer (owing or not, whatever the range); the range stays chosen for when it is
+  // cleared (user's request, 29-oct-2026). It waits a moment after typing so it does not search on every letter.
+  const [search, setSearch] = useState('');
+  useEffect(() => {
+    const t = setTimeout(() => setSearch(plain(query).trim().length >= 2 ? query.trim() : ''), 300);
+    return () => clearTimeout(t);
+  }, [query]);
+  const ranged = useQuery({ queryKey: ['crm-due', days], queryFn: () => api<Due>(`/api/crm/receivables/due?days=${days}`) });
+  const found = useQuery({
+    queryKey: ['crm-due-search', search],
+    queryFn: () => api<Due>(`/api/crm/receivables/due?q=${encodeURIComponent(search)}`),
+    enabled: !!search
+  });
+  const searching = !!search;
+  const data = searching ? found.data : ranged.data;
   // Customers whose older overdue invoices the user took out of the message (by default they go in).
   const [noOld, setNoOld] = useState<Set<number>>(new Set());
   const today = new Date(Date.now() - 5 * 3_600_000).toISOString().slice(0, 10);
@@ -212,18 +228,10 @@ export function DueSoon({ onOpenCustomer }: { onOpenCustomer: (id: number) => vo
     if (window.location.hash === '#por-vencer') ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, []);
 
-  const past = days < 0;
-  const all = data?.customers ?? [];
-  // The search filters the bubbles by name, phone or invoice number; every word must match.
-  const words = plain(query).split(/\s+/).filter(Boolean);
-  const list = words.length
-    ? all.filter((c) => {
-        const hay = plain([c.name, c.phone, ...c.invoices.map((i) => i.doc), ...c.overdue.map((o) => o.doc)].join(' '));
-        return words.every((w) => hay.includes(w));
-      })
-    : all;
+  const past = days < 0 && !searching;
+  const list = data?.customers ?? [];
   const amount = (c: DueCustomer) => c.total + (noOld.has(c.contactId) ? 0 : c.overdueTotal);
-  const light = (c: DueCustomer): Light => (past ? 'pasado' : c.overdue.length ? 'rojo' : c.invoices.some((i) => i.dueAt <= today) ? 'naranja' : 'verde');
+  const light = (c: DueCustomer): Light => (past ? 'pasado' : !c.invoices.length && !c.overdue.length ? 'aldia' : c.overdue.length ? 'rojo' : c.invoices.some((i) => i.dueAt <= today) ? 'naranja' : 'verde');
   const total = list.reduce((a, c) => a + amount(c), 0);
   const done = list.filter((c) => sent.has(c.contactId)).reduce((a, c) => a + amount(c), 0);
   const textFor = (c: DueCustomer) => preDueMessage(c.name, c.invoices, noOld.has(c.contactId) ? [] : c.overdue);
@@ -269,15 +277,17 @@ export function DueSoon({ onOpenCustomer }: { onOpenCustomer: (id: number) => vo
         />
       </label>
 
-      {data && words.length > 0 && !list.length && all.length > 0 && (
-        <p className="text-sm text-muted-foreground">Ningún cliente de esta lista coincide con «{query.trim()}». Prueba otro rango arriba.</p>
+      {searching && data && (
+        <p className="text-xs text-muted-foreground">
+          {list.length ? `🔎 ${list.length === 20 ? 'Primeros 20 clientes' : `${list.length} cliente${list.length === 1 ? '' : 's'}`} con «${search}» (de toda la cartera). Borra la búsqueda para volver al filtro.` : `Ningún cliente coincide con «${search}».`}
+        </p>
       )}
-      {data && !all.length && (
+      {!searching && data && !list.length && (
         <p className="text-sm text-muted-foreground">
           🎉 {past ? 'No se venció nada' : 'No vence nada'} {data.from === data.to ? `el ${shortDay(data.from)}` : `entre el ${shortDay(data.from)} y el ${shortDay(data.to)}`}.
         </p>
       )}
-      {list.length > 0 && <Ring done={done} total={total} />}
+      {!searching && list.length > 0 && <Ring done={done} total={total} />}
 
       {LIGHTS.map((L) => {
         const group = list.filter((c) => light(c) === L.key);
@@ -286,7 +296,7 @@ export function DueSoon({ onOpenCustomer }: { onOpenCustomer: (id: number) => vo
         return (
           <div key={L.key} className="space-y-2">
             <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              {L.dot} {L.label(days)} ({group.length})
+              {L.dot} {L.label(searching ? 7 : days)} ({group.length})
             </p>
             <div className="flex flex-wrap gap-2">
               {group.map((c) => (
@@ -303,7 +313,7 @@ export function DueSoon({ onOpenCustomer }: { onOpenCustomer: (id: number) => vo
                   )}
                 >
                   <span className="max-w-[11rem] truncate font-medium">{c.name || formatPhone(c.phone)}</span>
-                  <span className="shrink-0 tabular-nums text-muted-foreground">$ {money(amount(c))}</span>
+                  <span className="shrink-0 tabular-nums text-muted-foreground">{L.key === 'aldia' ? 'sin deuda' : `$ ${money(amount(c))}`}</span>
                   <span className="shrink-0">{sent.has(c.contactId) ? '✅' : c.hasPhone ? '💬' : '📵'}</span>
                 </button>
               ))}
@@ -351,7 +361,9 @@ export function DueSoon({ onOpenCustomer }: { onOpenCustomer: (id: number) => vo
                     Incluir las vencidas en el mensaje
                   </label>
                 )}
-                {opened.hasPhone ? (
+                {L.key === 'aldia' ? (
+                  <p className="text-xs text-muted-foreground">No tiene facturas pendientes. Toca su nombre para abrir la ficha.</p>
+                ) : opened.hasPhone ? (
                   <>
                     <pre className="whitespace-pre-wrap rounded-lg bg-background/70 p-2 font-sans text-xs">{textFor(opened)}</pre>
                     <WhatsAppLink

@@ -89,7 +89,7 @@ export function preDueMessage(
   const rest = old.slice(MAX_OLD);
   const total = [...sorted, ...old].reduce((a, i) => a + i.balance, 0);
   const lines = [`Hola${who ? ` ${who}` : ''} 👋 Te escribimos de *Xsite Group* · cartera 💼`];
-  lines.push('', ...sorted.map((i) => `🧾 Fact. *${i.doc}* · *${money(i.balance)}*`));
+  if (sorted.length) lines.push('', ...sorted.map((i) => `🧾 Fact. *${i.doc}* · *${money(i.balance)}*`));
   if (old.length) {
     lines.push('', '⚠️ *Vencidas:*', ...old.slice(0, MAX_OLD).map((o) => `🧾 Fact. *${o.doc}* · ${o.daysLate} días · *${money(o.balance)}*`));
     if (rest.length) lines.push(`🧾 y ${rest.length} factura${rest.length === 1 ? '' : 's'} más · *${money(rest.reduce((a, o) => a + o.balance, 0))}*`);
