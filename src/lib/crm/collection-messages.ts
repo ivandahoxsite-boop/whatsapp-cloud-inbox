@@ -71,25 +71,17 @@ export function collectionMessage(name: string, items: DebtItem[]): { tier: Coll
 
 /**
  * Before or on the due date ("Por vencer" in Cartera, after the morning warning): each invoice on its own line with its
- * value, the ones about to fall due and (optionally) the older overdue ones apart, the total, and the payment date
- * question. Layout "Lista con total" approved by the user on 29-oct-2026. Every invoice of the warning (due today or
- * tomorrow) goes under "Se acaba de vencer": the user counts them as due already ("si hoy es 28 y mañana 29, ya es
- * vencido"), and the closing formally asks for the date the payment is scheduled (user's choice, 29-oct-2026).
+ * value, the older overdue ones (optional) apart, the total, and a formal request for the date the payment is scheduled.
+ * Layout "Lista con total" approved by the user on 29-oct-2026. The invoices of the warning go without a title or due
+ * date: the user does not want to tell the customer they "just fell due", only to ask for the payment date (29-oct-2026).
  */
 export function preDueMessage(
   name: string,
   items: { doc: string; balance: number; dueAt: string }[],
-  overdue: { doc: string; balance: number; daysLate: number }[] = [],
-  today = new Date(Date.now() - 5 * 3_600_000).toISOString().slice(0, 10)
+  overdue: { doc: string; balance: number; daysLate: number }[] = []
 ): string {
   // The whole name in this message (the user asked: "Hola MEGA AUDIO…", not just "Hola MEGA").
   const who = fullName(name);
-  const WEEK = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
-  const MONTH = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
-  const day = (iso: string) => {
-    const [y, m, d] = iso.split('-').map(Number);
-    return `${WEEK[new Date(Date.UTC(y, m - 1, d)).getUTCDay()]} ${d} ${MONTH[m - 1]}`;
-  };
   const sorted = [...items].sort((a, b) => a.dueAt.localeCompare(b.dueAt));
   const old = [...overdue].sort((a, b) => b.daysLate - a.daysLate);
   // Up to 6 overdue invoices one per line; the rest summed in one line so the message stays readable.
@@ -97,7 +89,7 @@ export function preDueMessage(
   const rest = old.slice(MAX_OLD);
   const total = [...sorted, ...old].reduce((a, i) => a + i.balance, 0);
   const lines = [`Hola${who ? ` ${who}` : ''} 👋 Te escribimos de *Xsite Group* · cartera 💼`];
-  lines.push('', '⏰ *Se acaba de vencer:*', ...sorted.map((i) => `🧾 Fact. *${i.doc}* · vencimiento ${i.dueAt === today ? 'hoy' : day(i.dueAt)} · *${money(i.balance)}*`));
+  lines.push('', ...sorted.map((i) => `🧾 Fact. *${i.doc}* · *${money(i.balance)}*`));
   if (old.length) {
     lines.push('', '⚠️ *Vencidas:*', ...old.slice(0, MAX_OLD).map((o) => `🧾 Fact. *${o.doc}* · ${o.daysLate} días · *${money(o.balance)}*`));
     if (rest.length) lines.push(`🧾 y ${rest.length} factura${rest.length === 1 ? '' : 's'} más · *${money(rest.reduce((a, o) => a + o.balance, 0))}*`);
