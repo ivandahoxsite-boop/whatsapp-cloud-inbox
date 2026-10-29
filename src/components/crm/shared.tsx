@@ -299,12 +299,14 @@ const WA_BUSINESS = 'com.whatsapp.w4b';
 
 /**
  * On Android: an intent that opens the chat straight in the WhatsApp Business app, without going through a browser
- * tab (the user asked for it). If the app is missing, Chrome falls back to wa.me.
+ * tab (the user asked for it). It hands the app WhatsApp's own https link (api.whatsapp.com/send, the same format as
+ * wa.me): with the whatsapp:// scheme the app cut long messages on the user's phone. If the app is missing, Chrome
+ * falls back to wa.me.
  */
 export function whatsappBusinessIntent(phone: string, text?: string): string {
   const q = `phone=${phone}${text ? `&text=${encodeURIComponent(text)}` : ''}`;
   const fallback = encodeURIComponent(`https://wa.me/${phone}${text ? `?text=${encodeURIComponent(text)}` : ''}`);
-  return `intent://send/?${q}#Intent;scheme=whatsapp;package=${WA_BUSINESS};S.browser_fallback_url=${fallback};end`;
+  return `intent://api.whatsapp.com/send?${q}#Intent;scheme=https;package=${WA_BUSINESS};S.browser_fallback_url=${fallback};end`;
 }
 
 /**
