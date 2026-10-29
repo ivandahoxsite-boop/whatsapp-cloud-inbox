@@ -168,5 +168,6 @@ async function secondStep(request: NextRequest, password: string): Promise<NextR
 
 export const config = {
   // /api/webhooks (HMAC signature) and /api/agent (bearer token) authenticate themselves.
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|api/webhooks/|api/agent/).*)']
+  // sw.js (the notification worker) has no data: browsers fetch it again on their own, without the login.
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|sw\\.js$|api/webhooks/|api/agent/).*)']
 };

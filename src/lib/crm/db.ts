@@ -172,6 +172,13 @@ function migrate(d: DatabaseSync) {
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
     CREATE INDEX IF NOT EXISTS receivables_contact_idx ON receivables(contact_id, status);
+    -- Phones and computers that asked for CRM notifications (Web Push: Chrome on Android, desktop browsers).
+    CREATE TABLE IF NOT EXISTS push_subscriptions (
+      endpoint TEXT PRIMARY KEY,
+      keys TEXT NOT NULL,
+      device TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
     -- Which WhatsApp contact each customer of the cartera sheet is (key: the sheet's "Cliente", NIT or code, letters and
     -- digits only). Only the user links them ('linked'); 'suggested' is a guess waiting for a yes, 'rejected' a no.
     CREATE TABLE IF NOT EXISTS cartera_links (

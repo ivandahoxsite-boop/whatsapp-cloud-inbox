@@ -62,3 +62,23 @@ export function collectionMessage(name: string, items: DebtItem[]): { tier: Coll
   };
   return { tier, text: texts[tier.level] };
 }
+
+/**
+ * Before the due date ("Por vencer" in Cartera, after the morning warning): a friendly heads-up that names the
+ * invoices that fall due and asks for the payment date. DRAFT of 29-oct-2026: the user has not approved this text yet.
+ */
+export function preDueMessage(name: string, items: { doc: string; balance: number; dueAt: string }[]): string {
+  const who = greetName(name);
+  const sorted = [...items].sort((a, b) => a.dueAt.localeCompare(b.dueAt));
+  const [y, m, d] = sorted[0].dueAt.split('-').map(Number);
+  const when = new Date(Date.UTC(y, m - 1, d)).toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' });
+  const what =
+    sorted.length === 1
+      ? `la factura *${sorted[0].doc}* por *${money(sorted[0].balance)}*`
+      : `las facturas ${sorted.map((i) => `*${i.doc}*`).join(', ')} por *${money(sorted.reduce((a, i) => a + i.balance, 0))}*`;
+  return (
+    `Hola${who ? ` ${who}` : ''} 👋 Te escribimos de *Xsite Group* · cartera 💼\n\n` +
+    `Te recordamos que el *${when}* vence${sorted.length === 1 ? '' : 'n'} ${what} 🧾\n\n` +
+    `¿Nos confirmas la fecha de pago? 📅 ¡Gracias! ✅`
+  );
+}

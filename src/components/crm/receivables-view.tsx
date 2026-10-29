@@ -10,6 +10,7 @@ import { Stat, WhatsAppLink, api, card, checkCollection, cop, formatPhone, money
 import { collectionMessage } from '@/lib/crm/collection-messages';
 import { CarteraLinks, CarteraSheetBox, useCarteraSheet } from './cartera-sheet-panel';
 import { CarteraExtractView } from './cartera-extract';
+import { DueSoon } from './due-soon';
 
 const select = 'h-9 rounded-full border border-border/60 bg-card/50 px-3 text-sm';
 /** The tiered payment reminder for a debtor (oldest overdue invoice), or undefined under 30 days: then the chat opens empty. */
@@ -26,6 +27,8 @@ export function ReceivablesView({ onOpenCustomer }: { onOpenCustomer: (id: numbe
   // How the user wants to see the cartera: the summary, or laid out like the billing system's Excel report.
   const [view, setView] = useState<'resumen' | 'extracto'>(() => {
     try {
+      // The morning warning opens "Por vencer", which lives in the summary.
+      if (window.location.hash === '#por-vencer') return 'resumen';
       return localStorage.getItem('crm-cartera-view') === 'extracto' ? 'extracto' : 'resumen';
     } catch {
       return 'resumen';
@@ -149,6 +152,8 @@ export function ReceivablesView({ onOpenCustomer }: { onOpenCustomer: (id: numbe
         <CarteraExtractView seller={seller} onOpenCustomer={onOpenCustomer} />
       ) : (
       <>
+      <DueSoon onOpenCustomer={onOpenCustomer} />
+
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat tone="blue" icon={Wallet} label="Por cobrar" value={cop(data.totals.balance)} />

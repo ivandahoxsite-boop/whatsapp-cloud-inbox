@@ -5,5 +5,7 @@ export async function register() {
     startCarteraSchedule();
     const { startAnalixSchedule } = await import('./lib/crm/analix');
     startAnalixSchedule();
+    const { startDueNotices } = await import('./lib/crm/push');
+    startDueNotices();
   }
 }

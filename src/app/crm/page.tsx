@@ -39,6 +39,15 @@ const TAB_LABEL: Record<CrmTab, string> = {
 
 export default function CrmPage() {
   const [tab, setTab] = useState<CrmTab>('resumen');
+  // A notification opens /crm#por-vencer: straight to Cartera, where that list is.
+  useEffect(() => {
+    const go = () => {
+      if (window.location.hash === '#por-vencer') setTab('cartera');
+    };
+    go();
+    window.addEventListener('hashchange', go);
+    return () => window.removeEventListener('hashchange', go);
+  }, []);
   const [filter, setFilter] = useState<CustomerFilter>({});
   const [draft, setDraft] = useState<CustomerFilter>({});
   const [openId, setOpenId] = useState<number | null>(null);
