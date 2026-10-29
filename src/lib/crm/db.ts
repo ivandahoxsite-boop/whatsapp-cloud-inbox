@@ -255,6 +255,8 @@ function migrate(d: DatabaseSync) {
   `);
   const taskCols = d.prepare('PRAGMA table_info(tasks)').all() as unknown as { name: string }[];
   if (!taskCols.some((c) => c.name === 'due_time')) d.exec('ALTER TABLE tasks ADD COLUMN due_time TEXT');
+  // 1 = notify this to-do on the phone every 30 minutes until it is done (the user picks which ones).
+  if (!taskCols.some((c) => c.name === 'notify')) d.exec('ALTER TABLE tasks ADD COLUMN notify INTEGER NOT NULL DEFAULT 0');
   // "Ignorar" used to hide a chat only until the customer wrote again; now it hides it for good.
   d.exec(`INSERT OR IGNORE INTO chat_mutes (contact_id) SELECT contact_id FROM chat_resolutions WHERE kind = 'ignored';
           DELETE FROM chat_resolutions WHERE kind = 'ignored';`);

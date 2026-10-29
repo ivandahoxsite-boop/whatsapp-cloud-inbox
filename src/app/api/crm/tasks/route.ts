@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { completeTask, createTask, deleteTask, listTasks, moveTask } from '@/lib/crm/tasks';
+import { completeTask, createTask, deleteTask, listTasks, moveTask, setTaskNotify } from '@/lib/crm/tasks';
 import { todayCo } from '@/lib/crm/tasks-info';
 
 export const runtime = 'nodejs';
@@ -16,24 +16,25 @@ export async function GET(request: Request) {
   }
 }
 
-// POST { text, contactId?, dueDate?, repeat? } creates a to-do.
+// POST { text, contactId?, dueDate?, repeat?, notify? } creates a to-do.
 export async function POST(request: Request) {
   try {
-    const b = (await request.json()) as { text: string; contactId?: number | null; dueDate?: string | null; dueTime?: string | null; repeat?: string };
+    const b = (await request.json()) as { text: string; contactId?: number | null; dueDate?: string | null; dueTime?: string | null; repeat?: string; notify?: boolean };
     return NextResponse.json({ id: createTask(b) });
   } catch (e) {
     return fail(e);
   }
 }
 
-// PATCH { id, action: 'done' | 'move' | 'delete', dueDate? }
+// PATCH { id, action: 'done' | 'move' | 'delete' | 'notify', dueDate?, on? }
 export async function PATCH(request: Request) {
   try {
-    const { id, action, dueDate, dueTime } = (await request.json()) as { id: number; action: string; dueDate?: string | null; dueTime?: string | null };
+    const { id, action, dueDate, dueTime, on } = (await request.json()) as { id: number; action: string; dueDate?: string | null; dueTime?: string | null; on?: boolean };
     if (!Number.isInteger(id)) throw new Error('Falta el pendiente');
     if (action === 'done') completeTask(id);
     else if (action === 'move') moveTask(id, dueDate ?? null, dueTime ?? null);
     else if (action === 'delete') deleteTask(id);
+    else if (action === 'notify') setTaskNotify(id, !!on);
     else throw new Error('Acción inválida');
     return NextResponse.json({ ok: true });
   } catch (e) {

@@ -38,6 +38,7 @@ export function TaskRow({ t, today, showWho, onOpenCustomer }: { t: Task; today:
           <p className="mt-1 text-xs text-muted-foreground">
             <span className={cn(late && 'text-rose-400', label === 'Hoy' && 'text-amber-500')}>{label}</span>
             {t.repeat && ` · 🔁 ${REPEAT_LABEL[t.repeat]}`}
+            {t.notify && <span className="text-amber-500"> · ⏰ cada 30 min</span>}
             {showWho && t.contactId && (
               <>
                 {' · '}
@@ -60,6 +61,14 @@ export function TaskRow({ t, today, showWho, onOpenCustomer }: { t: Task; today:
         )}
         <button onClick={() => setMoving(!moving)} className="h-8 rounded-full border px-3">
           📅 Mover
+        </button>
+        {/* Only the to-dos marked here are notified on the phone every 30 minutes (user's request, 29-oct-2026). */}
+        <button
+          onClick={() => act({ action: 'notify', on: !t.notify })}
+          aria-pressed={t.notify}
+          className={cn('h-8 rounded-full border px-3', t.notify && 'border-amber-500 bg-amber-500/20 font-semibold text-amber-600 dark:text-amber-400')}
+        >
+          {t.notify ? '⏰ Avisando' : '⏰ Avisarme'}
         </button>
         <button
           onClick={() => confirm('¿Borrar este pendiente?') && act({ action: 'delete' })}

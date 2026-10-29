@@ -2,7 +2,7 @@ import webpush from 'web-push';
 import { getDb } from './db';
 import { isRealPhone } from './customers';
 import { daysLate, slotMs } from './receivables';
-import { addDays, dayProblem, dueLabel, todayCo } from './tasks-info';
+import { DEFAULT_TIME, addDays, dayProblem, dueLabel, todayCo } from './tasks-info';
 
 /**
  * Notifications on the user's phone (Chrome on Android) and computer, through Web Push: the browser keeps a
@@ -44,7 +44,8 @@ export function deletePushSubscription(endpoint: string) {
 
 export const pushCount = () => (getDb().prepare('SELECT COUNT(*) AS n FROM push_subscriptions').get() as { n: number }).n;
 
-export type PushMessage = { title: string; body: string; url: string; tag?: string };
+/** `intense`: the notification stays on screen until touched and vibrates hard (to-do reminders). */
+export type PushMessage = { title: string; body: string; url: string; tag?: string; intense?: boolean };
 
 /** Sends to every subscribed device; forgets the ones the browser says no longer exist. */
 export async function sendPush(msg: PushMessage): Promise<{ sent: number; failed: number }> {
@@ -56,8 +57,9 @@ export async function sendPush(msg: PushMessage): Promise<{ sent: number; failed
     try {
       await webpush.sendNotification({ endpoint: s.endpoint, keys: JSON.parse(s.keys) }, JSON.stringify(msg), {
         vapidDetails: { subject: process.env.PUSH_SUBJECT || 'mailto:crm@localhost', publicKey: v.publicKey, privateKey: v.privateKey },
-        TTL: 12 * 3600,
-        urgency: 'normal'
+        // A to-do reminder is urgent (wakes the phone) and useless after its 30 minutes.
+        TTL: msg.intense ? 30 * 60 : 12 * 3600,
+        urgency: msg.intense ? 'high' : 'normal'
       });
       sent++;
     } catch (e) {
@@ -201,10 +203,11 @@ export function dueNotice(today = todayCo()): PushMessage | null {
 }
 
 /**
- * To-do reminders (user's request, 29-oct-2026): every open to-do due today or overdue is notified every 30 minutes
- * until it is marked "Hecho". Today's start at their time (07:00 without a time); overdue ones from 07:00. They stop at
- * 16:00 ("hasta tipo 4pm"); one with a later time is notified once at its time. Overdue ones go on the next working
- * days (not Sundays or holidays). One notification per to-do; the same tag replaces the previous one.
+ * To-do reminders (user's request, 29-oct-2026): only the to-dos the user marks "⏰ Avisarme" (not all of them) are
+ * notified every 30 minutes until marked "Hecho". Today's start at their time (09:00 without a time, as the form says);
+ * overdue ones from 07:00. They stop at 16:00 ("hasta tipo 4pm"); one with a later time is notified at its time. Overdue
+ * ones go on the next working days (not Sundays or holidays). One notification per to-do, insistent (it stays on screen
+ * and vibrates: "que sea bien intenso"); the same tag replaces the previous one.
  */
 export const TASK_NOTICE_START = '07:00';
 export const TASK_NOTICE_END = '16:00';
@@ -220,11 +223,11 @@ export function taskNoticesDue(now: number, last: Record<string, number>): TaskD
   const rows = getDb()
     .prepare(
       `SELECT t.id, t.text, t.due_date, t.due_time, c.name FROM tasks t LEFT JOIN contacts c ON c.id = t.contact_id
-       WHERE t.status = 'open' AND t.due_date IS NOT NULL AND t.due_date <= ? ORDER BY t.due_date, t.due_time, t.id`
+       WHERE t.status = 'open' AND t.notify = 1 AND t.due_date IS NOT NULL AND t.due_date <= ? ORDER BY t.due_date, t.due_time, t.id`
     )
     .all(today) as TaskDue[];
   return rows.filter((t) => {
-    const start = slotMs(today, t.due_date === today && t.due_time ? t.due_time : TASK_NOTICE_START);
+    const start = slotMs(today, t.due_date === today ? (t.due_time ?? DEFAULT_TIME) : TASK_NOTICE_START);
     // A to-do set after 16:00 still gets its notice (10 minutes of margin, in case the CRM was restarting).
     const end = Math.max(slotMs(today, TASK_NOTICE_END), start + 10 * 60_000);
     // A minute of margin: the clock ticks once a minute.
@@ -239,7 +242,8 @@ export function taskNotice(t: TaskDue, today: string): PushMessage {
     title: `⏰ Pendiente: ${t.text}`,
     body: `${t.name ? `${t.name} · ` : ''}${when}. Toca para abrir Pendientes; márcalo «Hecho» para que deje de avisar.`,
     url: '/crm#pendientes',
-    tag: `tarea-${t.id}`
+    tag: `tarea-${t.id}`,
+    intense: true
   };
 }
 

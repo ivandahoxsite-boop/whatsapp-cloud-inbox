@@ -7,7 +7,17 @@ self.addEventListener('push', (event) => {
     msg.body = event.data ? event.data.text() : '';
   }
   event.waitUntil(
-    self.registration.showNotification(msg.title, { body: msg.body, tag: msg.tag, renotify: !!msg.tag, data: { url: msg.url }, icon: '/favicon.ico', badge: '/favicon.ico' })
+    self.registration.showNotification(msg.title, {
+      body: msg.body,
+      tag: msg.tag,
+      renotify: !!msg.tag,
+      data: { url: msg.url },
+      icon: '/favicon.ico',
+      badge: '/favicon.ico',
+      // To-do reminders: stay on screen until touched and vibrate hard.
+      requireInteraction: !!msg.intense,
+      vibrate: msg.intense ? [600, 200, 600, 200, 600, 200, 600] : undefined
+    })
   );
 });
 

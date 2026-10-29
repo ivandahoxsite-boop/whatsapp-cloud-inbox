@@ -65,6 +65,7 @@ export function TaskForm({
   const [date, setDate] = useState(workdayOnOrAfter(nextMonday(todayCo())));
   const [time, setTime] = useState('');
   const [repeat, setRepeat] = useState<Repeat>('');
+  const [notify, setNotify] = useState(false);
   const [who, setWho] = useState<Pickable | null>(null);
   const [q, setQ] = useState('');
   const [err, setErr] = useState('');
@@ -80,7 +81,7 @@ export function TaskForm({
     setErr('');
     setBusy(true);
     try {
-      await api('/api/crm/tasks', 'POST', { text, contactId: fixed ?? who?.id ?? null, dueDate: date || null, dueTime: date ? time || null : null, repeat });
+      await api('/api/crm/tasks', 'POST', { text, contactId: fixed ?? who?.id ?? null, dueDate: date || null, dueTime: date ? time || null : null, repeat, notify: !!date && notify });
       await qc.invalidateQueries({ queryKey: ['crm-tasks'] });
       onDone();
     } catch (e) {
@@ -136,6 +137,15 @@ export function TaskForm({
         <option value="quincenal">Repetir cada 15 días</option>
         <option value="mensual">Repetir cada mes</option>
       </select>
+      {date && (
+        <label className="flex items-start gap-2 text-sm">
+          <input type="checkbox" checked={notify} onChange={(e) => setNotify(e.target.checked)} className="mt-0.5 size-4 accent-amber-500" />
+          <span>
+            ⏰ Avisarme en el celular cada 30 min
+            <span className="block text-xs text-muted-foreground">Desde su hora hasta las 4 pm, hasta que lo marques «Hecho».{repeat ? ' También cada vez que se repita.' : ''}</span>
+          </span>
+        </label>
+      )}
       {err && <p className="text-xs text-destructive">{err}</p>}
       <div className="flex gap-2">
         <button type="button" disabled={busy || !text.trim() || !!(date && dayProblem(date))} onClick={save} className="h-9 rounded-full bg-primary px-4 text-sm text-primary-foreground disabled:opacity-50">

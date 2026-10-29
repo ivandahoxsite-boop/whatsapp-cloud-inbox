@@ -17,6 +17,8 @@ export type Task = {
   /** "HH:MM" (24 h), or null for the default time. */
   dueTime: string | null;
   repeat: Repeat;
+  /** Notified on the phone every 30 minutes from its time until it is done (only the ones the user marks). */
+  notify: boolean;
 };
 
 /** Time of the Calendar reminder when the to-do has a day but no time. */
