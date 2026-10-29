@@ -66,8 +66,9 @@ export function collectionMessage(name: string, items: DebtItem[]): { tier: Coll
 /**
  * Before or on the due date ("Por vencer" in Cartera, after the morning warning): each invoice on its own line with its
  * value, the ones about to fall due and (optionally) the older overdue ones apart, the total, and the payment date
- * question. Layout "Lista con total" approved by the user on 29-oct-2026. Invoices due today or already past go under
- * "Se acaba de vencer" and the closing asks for the day the payment is scheduled (user's wording, 29-oct-2026).
+ * question. Layout "Lista con total" approved by the user on 29-oct-2026. Every invoice of the warning (due today or
+ * tomorrow) goes under "Se acaba de vencer": the user counts them as due already ("si hoy es 28 y mañana 29, ya es
+ * vencido"), and the closing asks for the day the payment is scheduled (user's wording, 29-oct-2026).
  */
 export function preDueMessage(
   name: string,
@@ -83,17 +84,13 @@ export function preDueMessage(
     return `${WEEK[new Date(Date.UTC(y, m - 1, d)).getUTCDay()]} ${d} ${MONTH[m - 1]}`;
   };
   const sorted = [...items].sort((a, b) => a.dueAt.localeCompare(b.dueAt));
-  const justDue = sorted.filter((i) => i.dueAt <= today);
-  const soon = sorted.filter((i) => i.dueAt > today);
   const old = [...overdue].sort((a, b) => b.daysLate - a.daysLate);
   // Up to 6 overdue invoices one per line; the rest summed in one line so the message stays readable.
   const MAX_OLD = 6;
   const rest = old.slice(MAX_OLD);
   const total = [...sorted, ...old].reduce((a, i) => a + i.balance, 0);
   const lines = [`Hola${who ? ` ${who}` : ''} 👋 Te escribimos de *Xsite Group* · cartera 💼`];
-  if (justDue.length)
-    lines.push('', '⏰ *Se acaba de vencer:*', ...justDue.map((i) => `🧾 Fact. *${i.doc}* · venció ${i.dueAt === today ? 'hoy' : day(i.dueAt)} · *${money(i.balance)}*`));
-  if (soon.length) lines.push('', '📅 *Por vencer:*', ...soon.map((i) => `🧾 Fact. *${i.doc}* · vence ${day(i.dueAt)} · *${money(i.balance)}*`));
+  lines.push('', '⏰ *Se acaba de vencer:*', ...sorted.map((i) => `🧾 Fact. *${i.doc}* · vencimiento ${i.dueAt === today ? 'hoy' : day(i.dueAt)} · *${money(i.balance)}*`));
   if (old.length) {
     lines.push('', '⚠️ *Vencidas:*', ...old.slice(0, MAX_OLD).map((o) => `🧾 Fact. *${o.doc}* · ${o.daysLate} días · *${money(o.balance)}*`));
     if (rest.length) lines.push(`🧾 y ${rest.length} factura${rest.length === 1 ? '' : 's'} más · *${money(rest.reduce((a, o) => a + o.balance, 0))}*`);
