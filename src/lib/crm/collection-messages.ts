@@ -29,6 +29,12 @@ function greetName(name: string): string {
   return words[0].length <= 2 && words[1] ? `${words[0]} ${words[1]}` : words[0];
 }
 
+/** The customer's whole name without emojis or odd symbols ("MEGA AUDIO 🔊 S.A.S." -> "MEGA AUDIO S.A.S."). */
+function fullName(name: string): string {
+  const n = name.replace(/[^\p{L}\p{N}\s.'&/()-]/gu, ' ').replace(/\s+/g, ' ').trim();
+  return /^[\d\s]*$/.test(n) ? '' : n;
+}
+
 /** Every level names only the oldest overdue invoice and asks the customer for a payment date. */
 export function collectionMessage(name: string, items: DebtItem[]): { tier: CollectionTier; text: string } | null {
   const overdue = items.filter((i) => i.daysLate > 0 && i.balance > 0).sort((a, b) => b.daysLate - a.daysLate);
@@ -76,7 +82,8 @@ export function preDueMessage(
   overdue: { doc: string; balance: number; daysLate: number }[] = [],
   today = new Date(Date.now() - 5 * 3_600_000).toISOString().slice(0, 10)
 ): string {
-  const who = greetName(name);
+  // The whole name in this message (the user asked: "Hola MEGA AUDIO…", not just "Hola MEGA").
+  const who = fullName(name);
   const WEEK = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
   const MONTH = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
   const day = (iso: string) => {
