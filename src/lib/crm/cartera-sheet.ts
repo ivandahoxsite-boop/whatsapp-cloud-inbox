@@ -184,7 +184,7 @@ export function caliStore(): CaliStore | null {
 type Contact = { id: number; name: string; phone: string };
 export const contactById = (id: number) => getDb().prepare('SELECT id, name, phone FROM contacts WHERE id = ?').get(id) as Contact | undefined;
 const contactByPhone = (phone: string) => getDb().prepare('SELECT id, name, phone FROM contacts WHERE phone = ?').get(phone) as Contact | undefined;
-const linkOf = (key: string) =>
+export const linkOf = (key: string) =>
   getDb().prepare('SELECT contact_id, status FROM cartera_links WHERE cliente = ?').get(key) as { contact_id: number; status: string } | undefined;
 
 /**
@@ -494,7 +494,7 @@ function sheetName(key: string): string {
 }
 
 /** The user says which WhatsApp contact a sheet customer is: by contact id or by phone (creating the contact if needed). */
-export function linkCarteraClient(key: string, to: { contactId?: number; phone?: string }): Contact {
+export function linkCarteraClient(key: string, to: { contactId?: number; phone?: string; name?: string }): Contact {
   const k = linkKey(key);
   if (!k) throw new Error('Falta el cliente de la hoja');
   let contact: Contact | undefined;
@@ -502,7 +502,8 @@ export function linkCarteraClient(key: string, to: { contactId?: number; phone?:
   else if (to.phone) {
     const phone = normalizePhone(String(to.phone));
     if (!isRealPhone(phone) || phone.length < 10) throw new Error('Escribe el celular completo (ej: 3001234567)');
-    contact = contactByPhone(phone) ?? contactById(createCustomer({ phone, name: sheetName(k) }));
+    // A "Cartera Cali" customer is not in the main cartera: its name comes from that tab.
+    contact = contactByPhone(phone) ?? contactById(createCustomer({ phone, name: sheetName(k) || String(to.name ?? '').slice(0, 80) }));
   }
   if (!contact) throw new Error('No encuentro ese contacto');
   if (!isRealPhone(contact.phone)) throw new Error('Ese contacto no tiene WhatsApp');

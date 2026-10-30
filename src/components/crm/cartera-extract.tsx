@@ -5,7 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { ChevronDown, ChevronRight, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { CarteraExtract, ExtractBuckets, ExtractGroup, ExtractRow } from '@/lib/crm/cartera-extract';
-import { collectionMessage } from '@/lib/crm/collection-messages';
+import { CALI_COMPANY, MAIN_COMPANY, collectionMessage } from '@/lib/crm/collection-messages';
 import { WhatsAppLink, api, card, checkCollection, money } from './shared';
 
 /** "2026-10-27" -> "martes, 27 de octubre de 2026", as the Excel report heads it. */
@@ -170,7 +170,7 @@ export function CarteraExtractView({ seller, cali, onOpenCustomer }: { seller: s
               <Fragment key={g.key}>
                 {isOpen(g.key) &&
                   g.rows.map((r) => <InvoiceRow key={r.doc + (r.credit ? '-nc' : '')} g={g} r={r} td={td} />)}
-                <TotalRow g={g} open={isOpen(g.key)} onToggle={() => flip(g.key)} onOpenCustomer={onOpenCustomer} td={td} />
+                <TotalRow g={g} open={isOpen(g.key)} onToggle={() => flip(g.key)} onOpenCustomer={onOpenCustomer} td={td} cali={cali} />
               </Fragment>
             ))}
           </tbody>
@@ -221,8 +221,24 @@ function InvoiceRow({ g, r, td }: { g: ExtractGroup; r: ExtractRow; td: string }
   );
 }
 
-function TotalRow({ g, open, onToggle, onOpenCustomer, td }: { g: ExtractGroup; open: boolean; onToggle: () => void; onOpenCustomer: (id: number) => void; td: string }) {
-  const cobro = g.oldestDoc ? collectionMessage(g.name, [{ doc: g.oldestDoc, balance: g.oldestBalance, daysLate: g.oldestDays }])?.text : undefined;
+function TotalRow({
+  g,
+  open,
+  onToggle,
+  onOpenCustomer,
+  td,
+  cali
+}: {
+  g: ExtractGroup;
+  open: boolean;
+  onToggle: () => void;
+  onOpenCustomer: (id: number) => void;
+  td: string;
+  cali?: boolean;
+}) {
+  const cobro = g.oldestDoc
+    ? collectionMessage(g.name, [{ doc: g.oldestDoc, balance: g.oldestBalance, daysLate: g.oldestDays }], cali ? CALI_COMPANY : MAIN_COMPANY)?.text
+    : undefined;
   return (
     <tr className="border-b border-border bg-muted/50 font-semibold">
       <td className={cn(td, 'sticky left-0 bg-muted')}>
@@ -256,7 +272,8 @@ function TotalRow({ g, open, onToggle, onOpenCustomer, td }: { g: ExtractGroup; 
           <WhatsAppLink
             phone={g.phone}
             text={cobro}
-            beforeOpen={cobro && g.contactId ? () => checkCollection(g.contactId!) : undefined}
+            // Cali debts are not in the CRM's cartera, so its check does not ask for overdue debt there (only hours, etc.).
+            beforeOpen={cobro && g.contactId ? () => checkCollection(g.contactId!, { reminder: !!cali }) : undefined}
             className="inline-flex h-7 items-center rounded-md border border-emerald-500/40 bg-emerald-500/10 px-2 text-[11px] font-medium text-emerald-600 hover:bg-emerald-500/20 dark:text-emerald-400"
           >
             💬 WhatsApp

@@ -1,6 +1,7 @@
 import { getDb } from './db';
 import { CREDITS_SETTING, caliStore, type CreditNote } from './cartera-sheet';
-import { isRealPhone, placeholderKey } from './customers';
+import { caliHolder } from './cartera-cali';
+import { isRealPhone } from './customers';
 import { daysLate } from './receivables';
 import { todayCo } from './tasks-info';
 
@@ -107,29 +108,13 @@ export function carteraExtract(filter: { seller?: string } = {}, now = new Date(
   return buildExtract(rows, credits, holder, filter, now);
 }
 
-/**
- * The "Cartera Cali" tab of the sheet, apart from the CRM's cartera (user's request, 30-oct-2026: "NO JUNTA"). Each
- * customer is matched to the CRM only to show its WhatsApp button and open its file: the link the user made for that
- * NIT, else the customer that holds its invoices of the main cartera, else its customer without phone. Never by name.
- */
+/** The "Cartera Cali" tab of the sheet, apart from the CRM's cartera (user's request, 30-oct-2026: "NO JUNTA"). */
 export function caliExtract(filter: { seller?: string } = {}, now = new Date()): CarteraExtract {
-  const d = getDb();
   const store = caliStore();
   const known = new Map<string, Holder>();
   const holder = (key: string, cliente = '', name = ''): Holder => {
-    if (known.has(key)) return known.get(key);
-    const link = d
-      .prepare("SELECT c.id, c.phone, c.name FROM cartera_links l JOIN contacts c ON c.id = l.contact_id WHERE l.cliente = ? AND l.status = 'linked'")
-      .get(key) as Holder;
-    const main = link
-      ? undefined
-      : (d
-          .prepare("SELECT c.id, c.phone, c.name FROM receivables r JOIN contacts c ON c.id = r.contact_id WHERE json_extract(r.data, '$.cliente') = ? LIMIT 1")
-          .get(key) as Holder);
-    const ph = link || main ? null : placeholderKey(cliente, name);
-    const found = link ?? main ?? (ph ? (d.prepare('SELECT id, phone, name FROM contacts WHERE phone = ?').get(ph) as Holder) : undefined);
-    known.set(key, found);
-    return found;
+    if (!known.has(key)) known.set(key, caliHolder(key, cliente, name));
+    return known.get(key);
   };
   const rows = (store?.invoices ?? []).map((i): Source => {
     const h = holder(i.key, i.cliente, i.name);

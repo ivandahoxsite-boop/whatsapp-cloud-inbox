@@ -35,8 +35,12 @@ function fullName(name: string): string {
   return /^[\d\s]*$/.test(n) ? '' : n;
 }
 
+/** The company as messages name it; the "Cartera Cali" customers get "Xsite Group · sede Cali" (user's choice, 30-oct-2026). */
+export const MAIN_COMPANY = 'Xsite Group';
+export const CALI_COMPANY = 'Xsite Group · sede Cali';
+
 /** Every level names only the oldest overdue invoice and asks the customer for a payment date. */
-export function collectionMessage(name: string, items: DebtItem[]): { tier: CollectionTier; text: string } | null {
+export function collectionMessage(name: string, items: DebtItem[], company = MAIN_COMPANY): { tier: CollectionTier; text: string } | null {
   const overdue = items.filter((i) => i.daysLate > 0 && i.balance > 0).sort((a, b) => b.daysLate - a.daysLate);
   if (!overdue.length) return null;
   const days = overdue[0].daysLate;
@@ -47,22 +51,22 @@ export function collectionMessage(name: string, items: DebtItem[]): { tier: Coll
   const texts: Record<CollectionTier['level'], string> = {
     // Level 1: only the oldest overdue invoice, and ask for a payment date (user's choice, 26-oct-2026).
     1:
-      `Hola${who ? ` ${who}` : ''} 👋 Te escribimos de *Xsite Group* · cartera 💼\n\n` +
+      `Hola${who ? ` ${who}` : ''} 👋 Te escribimos de *${company}* · cartera 💼\n\n` +
       `Tienes pendiente la factura *${overdue[0].doc}* por *${money(overdue[0].balance)}* (vencida hace ${days} días) 🧾\n\n` +
       `¿Qué fecha te programamos para el pago? 📅 Respóndenos con el día y lo dejamos agendado ✅`,
     // Level 2: only the oldest overdue invoice, firmer, asks for the date today (user's choice, 26-oct-2026).
     2:
-      `Hola${who ? ` ${who}` : ''} 👋 Te escribimos de *Xsite Group* · cartera ⚠️\n\n` +
+      `Hola${who ? ` ${who}` : ''} 👋 Te escribimos de *${company}* · cartera ⚠️\n\n` +
       `La factura *${overdue[0].doc}* por *${money(overdue[0].balance)}* ya lleva *${days} días* vencida 🧾\n\n` +
       `Necesitamos que nos confirmes *hoy* la fecha de pago 📅 para seguir despachando sin inconvenientes 🚚`,
     // Level 3: only the oldest overdue invoice; keep the relationship, ask which day (user's choice, 26-oct-2026).
     3:
-      `Hola${who ? ` ${who}` : ''} 👋 Te escribimos de *Xsite Group* · cartera.\n\n` +
+      `Hola${who ? ` ${who}` : ''} 👋 Te escribimos de *${company}* · cartera.\n\n` +
       `La factura *${overdue[0].doc}* por *${money(overdue[0].balance)}* lleva *${days} días* vencida 🧾\n\n` +
       `Queremos seguir trabajando contigo 🤝 pero necesitamos que te pongas al día. Confírmanos hoy *qué día* realizas el pago 📅🙏`,
     // Level 4: only the oldest overdue invoice; formal notice before prejudicial collection (confirmed by the user).
     4:
-      `${who ? `${who}, t` : 'T'}e contactamos de *Xsite Group* · cartera 🔴\n\n` +
+      `${who ? `${who}, t` : 'T'}e contactamos de *${company}* · cartera 🔴\n\n` +
       `La factura *${overdue[0].doc}* por *${money(overdue[0].balance)}* lleva *${days} días* en mora 🧾\n\n` +
       `Es un llamado formal 📌 Si en *5 días hábiles* no recibimos el pago o un acuerdo, la cuenta pasa a cobro prejurídico. Respóndenos hoy con la *fecha de pago* 📅`
   };
@@ -78,7 +82,8 @@ export function collectionMessage(name: string, items: DebtItem[]): { tier: Coll
 export function preDueMessage(
   name: string,
   items: { doc: string; balance: number; dueAt: string }[],
-  overdue: { doc: string; balance: number; daysLate: number }[] = []
+  overdue: { doc: string; balance: number; daysLate: number }[] = [],
+  company = MAIN_COMPANY
 ): string {
   // The whole name in this message (the user asked: "Hola MEGA AUDIO…", not just "Hola MEGA").
   const who = fullName(name);
@@ -88,7 +93,7 @@ export function preDueMessage(
   const MAX_OLD = 6;
   const rest = old.slice(MAX_OLD);
   const total = [...sorted, ...old].reduce((a, i) => a + i.balance, 0);
-  const lines = [`Hola${who ? ` ${who}` : ''} 👋 Te escribimos de *Xsite Group* · cartera 💼`];
+  const lines = [`Hola${who ? ` ${who}` : ''} 👋 Te escribimos de *${company}* · cartera 💼`];
   if (sorted.length) lines.push('', ...sorted.map((i) => `🧾 Fact. *${i.doc}* · *${money(i.balance)}*`));
   if (old.length) {
     lines.push('', '⚠️ *Vencidas:*', ...old.slice(0, MAX_OLD).map((o) => `🧾 Fact. *${o.doc}* · ${o.daysLate} días · *${money(o.balance)}*`));
@@ -103,7 +108,7 @@ export function preDueMessage(
     'Quedamos atentos.',
     '',
     'Cordialmente,',
-    '*Xsite Group* · Cartera'
+    `*${company}* · Cartera`
   );
   return lines.join('\n');
 }

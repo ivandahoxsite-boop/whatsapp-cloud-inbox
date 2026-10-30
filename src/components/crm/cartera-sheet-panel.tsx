@@ -263,6 +263,9 @@ function useLinkAction() {
       qc.invalidateQueries({ queryKey: ['crm-sales-report'] });
       qc.invalidateQueries({ queryKey: ['crm-receivables'] });
       qc.invalidateQueries({ queryKey: ['crm'] });
+      qc.invalidateQueries({ queryKey: ['crm-cali'] });
+      qc.invalidateQueries({ queryKey: ['crm-due'] });
+      qc.invalidateQueries({ queryKey: ['crm-cartera-extract'] });
     } catch (e) {
       setErr((e as Error).message);
     }
@@ -284,7 +287,7 @@ export function LinkRow({ client: c, onOpenCustomer, sales }: { client: CarteraC
   return (
     <li className="rounded-lg border border-border/60 bg-background/40 p-2 text-xs">
       <div className="flex items-center gap-2">
-        <button onClick={() => onOpenCustomer(c.contactId)} className="min-w-0 flex-1 text-left">
+        <button onClick={() => c.contactId > 0 && onOpenCustomer(c.contactId)} className="min-w-0 flex-1 text-left">
           <p className="truncate text-sm font-medium">{c.name}</p>
           <p className="text-muted-foreground">
             {c.key.startsWith('NOM:') ? 'Sin NIT en AnaliX' : `NIT/código ${c.key}`} · {c.invoices}{' '}
@@ -332,7 +335,7 @@ export function LinkRow({ client: c, onOpenCustomer, sales }: { client: CarteraC
             ))}
           </ul>
           {digits.length >= 10 && !(found?.contacts ?? []).length && (
-            <Button size="sm" variant="outline" onClick={() => run({ key: c.key, phone: digits })}>
+            <Button size="sm" variant="outline" onClick={() => run({ key: c.key, phone: digits, name: c.name })}>
               Usar el celular {digits}
             </Button>
           )}

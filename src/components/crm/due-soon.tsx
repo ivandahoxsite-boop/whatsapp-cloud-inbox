@@ -6,7 +6,7 @@ import { Bell, BellOff, CalendarClock, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import type { DueCustomer } from '@/lib/crm/push';
-import { preDueMessage } from '@/lib/crm/collection-messages';
+import { CALI_COMPANY, MAIN_COMPANY, preDueMessage } from '@/lib/crm/collection-messages';
 import { WhatsAppLink, api, card, checkCollection, formatPhone, money } from './shared';
 
 type Due = { from: string; to: string; customers: DueCustomer[] };
@@ -139,21 +139,21 @@ const plain = (t: string) => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').
 const SENT_KEY = 'crm-cobro-avisados';
 
 /** Customers already sent a reminder today from this screen (only this browser remembers it; it resets every day). */
-function useSentToday(today: string) {
+function useSentToday(today: string, store = SENT_KEY) {
   const [sent, setSent] = useState<Set<number>>(new Set());
   useEffect(() => {
     try {
-      const v = JSON.parse(localStorage.getItem(SENT_KEY) ?? '{}') as { day?: string; ids?: number[] };
+      const v = JSON.parse(localStorage.getItem(store) ?? '{}') as { day?: string; ids?: number[] };
       setSent(new Set(v.day === today ? v.ids ?? [] : []));
     } catch {
       /* nothing remembered */
     }
-  }, [today]);
+  }, [today, store]);
   const mark = (id: number) =>
     setSent((prev) => {
       const next = new Set(prev).add(id);
       try {
-        localStorage.setItem(SENT_KEY, JSON.stringify({ day: today, ids: [...next] }));
+        localStorage.setItem(store, JSON.stringify({ day: today, ids: [...next] }));
       } catch {
         /* only this session remembers it */
       }
@@ -199,7 +199,10 @@ function Ring({ done, total }: { done: number; total: number }) {
  * green = due later. Each customer is a bubble; tapping it shows the invoices and the reminder, and "Cobrar" opens
  * WhatsApp with it written (nothing is sent on its own). Customers reminded today get a ✅ and the ring fills up.
  */
-export function DueSoon({ onOpenCustomer }: { onOpenCustomer: (id: number) => void }) {
+export function DueSoon({ onOpenCustomer, cali }: { onOpenCustomer: (id: number) => void; cali?: boolean }) {
+  // `cali`: the same list from the "Cartera Cali" tab (apart from the main cartera), with its own company name in the
+  // message. Its customers without a CRM contact come with a negative id: shown, but not written to or opened.
+  const tab = cali ? '&tab=cali' : '';
   const [days, setDays] = useState(1);
   const [open, setOpen] = useState<number | null>(null);
   const [query, setQuery] = useState('');
@@ -210,10 +213,10 @@ export function DueSoon({ onOpenCustomer }: { onOpenCustomer: (id: number) => vo
     const t = setTimeout(() => setSearch(plain(query).trim().length >= 2 ? query.trim() : ''), 300);
     return () => clearTimeout(t);
   }, [query]);
-  const ranged = useQuery({ queryKey: ['crm-due', days], queryFn: () => api<Due>(`/api/crm/receivables/due?days=${days}`) });
+  const ranged = useQuery({ queryKey: ['crm-due', days, !!cali], queryFn: () => api<Due>(`/api/crm/receivables/due?days=${days}${tab}`) });
   const found = useQuery({
-    queryKey: ['crm-due-search', search],
-    queryFn: () => api<Due>(`/api/crm/receivables/due?q=${encodeURIComponent(search)}`),
+    queryKey: ['crm-due-search', search, !!cali],
+    queryFn: () => api<Due>(`/api/crm/receivables/due?q=${encodeURIComponent(search)}${tab}`),
     enabled: !!search
   });
   const searching = !!search;
@@ -221,7 +224,7 @@ export function DueSoon({ onOpenCustomer }: { onOpenCustomer: (id: number) => vo
   // Customers whose older overdue invoices the user took out of the message (by default they go in).
   const [noOld, setNoOld] = useState<Set<number>>(new Set());
   const today = new Date(Date.now() - 5 * 3_600_000).toISOString().slice(0, 10);
-  const { sent, mark } = useSentToday(today);
+  const { sent, mark } = useSentToday(today, cali ? `${SENT_KEY}-cali` : SENT_KEY);
   const ref = useRef<HTMLElement>(null);
 
   useEffect(() => {
@@ -234,13 +237,13 @@ export function DueSoon({ onOpenCustomer }: { onOpenCustomer: (id: number) => vo
   const light = (c: DueCustomer): Light => (past ? 'pasado' : !c.invoices.length && !c.overdue.length ? 'aldia' : c.overdue.length ? 'rojo' : c.invoices.some((i) => i.dueAt <= today) ? 'naranja' : 'verde');
   const total = list.reduce((a, c) => a + amount(c), 0);
   const done = list.filter((c) => sent.has(c.contactId)).reduce((a, c) => a + amount(c), 0);
-  const textFor = (c: DueCustomer) => preDueMessage(c.name, c.invoices, noOld.has(c.contactId) ? [] : c.overdue);
+  const textFor = (c: DueCustomer) => preDueMessage(c.name, c.invoices, noOld.has(c.contactId) ? [] : c.overdue, cali ? CALI_COMPANY : MAIN_COMPANY);
 
   return (
-    <section ref={ref} id="por-vencer" className={cn(card, 'scroll-mt-28 space-y-4')}>
+    <section ref={ref} id={cali ? 'por-vencer-cali' : 'por-vencer'} className={cn(card, 'scroll-mt-28 space-y-4')}>
       <div className="flex flex-wrap items-center gap-2">
         <CalendarClock className="size-5 text-sky-600 dark:text-sky-400" />
-        <h2 className="text-sm font-medium">Por vencer</h2>
+        <h2 className="text-sm font-medium">{cali ? 'Por vencer · Cali' : 'Por vencer'}</h2>
         <div className="flex w-full rounded-full border border-border/60 p-0.5 text-xs sm:ml-auto sm:w-auto" role="group" aria-label="Rango">
           {RANGES.map(([n, label]) => (
             <button
@@ -260,7 +263,7 @@ export function DueSoon({ onOpenCustomer }: { onOpenCustomer: (id: number) => vo
           ))}
         </div>
       </div>
-      <PushToggle />
+      {!cali && <PushToggle />}
 
       <label className="flex h-9 items-center gap-2 rounded-full border border-border/60 bg-background/60 px-3 text-sm">
         <Search className="size-4 shrink-0 text-muted-foreground" />
@@ -321,7 +324,10 @@ export function DueSoon({ onOpenCustomer }: { onOpenCustomer: (id: number) => vo
             {opened && (
               <div className={cn('space-y-2 rounded-xl border p-3 text-sm', L.ring)}>
                 <div className="flex items-start gap-2">
-                  <button onClick={() => onOpenCustomer(opened.contactId)} className="min-w-0 flex-1 truncate text-left font-semibold hover:underline">
+                  <button
+                    onClick={() => opened.contactId > 0 && onOpenCustomer(opened.contactId)}
+                    className="min-w-0 flex-1 truncate text-left font-semibold hover:underline"
+                  >
                     {opened.name || formatPhone(opened.phone)}
                   </button>
                   <span className="shrink-0 font-semibold tabular-nums">$ {money(amount(opened))}</span>
@@ -381,7 +387,9 @@ export function DueSoon({ onOpenCustomer }: { onOpenCustomer: (id: number) => vo
                     </WhatsAppLink>
                   </>
                 ) : (
-                  <p className="text-xs text-muted-foreground">📵 Sin WhatsApp: búscalo desde su ficha para poder cobrarle.</p>
+                  <p className="text-xs text-muted-foreground">
+                    📵 Sin WhatsApp: {cali ? 'únelo con su WhatsApp en «Clientes de Cali sin WhatsApp» (más arriba)' : 'búscalo desde su ficha'} para poder cobrarle.
+                  </p>
                 )}
               </div>
             )}

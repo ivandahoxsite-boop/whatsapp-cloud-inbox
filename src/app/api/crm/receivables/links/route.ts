@@ -20,11 +20,11 @@ export async function GET(request: Request) {
 // POST { key, contactId } or { key, phone } -> links. { key, reject: true } -> "no es ese". { key, unlink: true } -> undo.
 export async function POST(request: Request) {
   try {
-    const b = (await request.json()) as { key?: string; contactId?: number; phone?: string; reject?: boolean; unlink?: boolean };
+    const b = (await request.json()) as { key?: string; contactId?: number; phone?: string; name?: string; reject?: boolean; unlink?: boolean };
     const key = String(b.key ?? '');
     if (b.reject) rejectCarteraSuggestion(key);
     else if (b.unlink) unlinkCarteraClient(key);
-    else return NextResponse.json({ ok: true, contact: linkCarteraClient(key, { contactId: b.contactId, phone: b.phone }) });
+    else return NextResponse.json({ ok: true, contact: linkCarteraClient(key, { contactId: b.contactId, phone: b.phone, name: b.name }) });
     return NextResponse.json({ ok: true });
   } catch (e) {
     return fail(e);
