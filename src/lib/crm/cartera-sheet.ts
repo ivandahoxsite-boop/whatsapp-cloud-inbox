@@ -45,6 +45,8 @@ export type ParsedSheet = {
   problems: string[];
   /** Whether the "Cartera Cali" tab came in this read (an old Apps Script only sends the main tab). */
   cali?: boolean;
+  /** Why the Cali tab was left out of this read (its invoices stay as they are; the main tab loads anyway). */
+  caliError?: string;
 };
 
 /** "900123456-7" -> "9001234567", "c133" -> "C133": letters and digits only. */
@@ -147,7 +149,11 @@ export async function fetchCarteraSheet(): Promise<SheetTabs> {
   return { main: body.filas, cali: Array.isArray(cali) ? cali : null };
 }
 
-/** Both tabs as one report: the Cali invoices go with the prefix, their problems and credit notes are added. */
+/**
+ * Both tabs as one report: the Cali invoices go with the prefix and their credit notes are added. The main tab never
+ * depends on Cali (user's request, 30-oct-2026): if the Cali tab is missing, unreadable or has incomplete rows, this
+ * read leaves it out (its invoices in the CRM stay as they are) and the main tab loads as always.
+ */
 export function parseCarteraTabs(tabs: SheetTabs): ParsedSheet {
   const main = parseCarteraSheet(tabs.main);
   if (!tabs.cali) return { ...main, cali: false };
@@ -155,14 +161,16 @@ export function parseCarteraTabs(tabs: SheetTabs): ParsedSheet {
   try {
     cali = parseCarteraSheet(tabs.cali, CALI_PREFIX);
   } catch (e) {
-    return { ...main, cali: true, problems: [...main.problems, `${CALI_TAB}: ${e instanceof Error ? e.message : 'no se pudo leer'}`] };
+    return { ...main, cali: false, caliError: e instanceof Error ? e.message : 'no se pudo leer' };
   }
+  if (cali.problems.length) return { ...main, cali: false, caliError: `${cali.problems.length} fila(s) con datos incompletos (${cali.problems.slice(0, 3).join('; ')})` };
+  // A document number in both tabs is kept apart ("CALI-<doc>"), but a repeated one inside Cali is a problem of that tab.
   return {
     invoices: [...main.invoices, ...cali.invoices],
     creditNotes: main.creditNotes + cali.creditNotes,
     credits: [...main.credits, ...cali.credits],
     corte: main.corte,
-    problems: [...main.problems, ...cali.problems.map((p) => `${CALI_TAB}: ${p}`)],
+    problems: main.problems,
     cali: true
   };
 }
@@ -211,6 +219,8 @@ export type CarteraPlan = {
   blockers: string[];
   /** Invoices and money of the "Cartera Cali" tab, or null when it did not come (the Apps Script is the old one). */
   cali: { invoices: number; total: number } | null;
+  /** Why the Cali tab was left out of this load (its invoices stay as they are). */
+  caliError?: string;
 };
 
 const who = (c: Contact | null | undefined, fallback: string) =>
@@ -230,7 +240,8 @@ export function planCartera(sheet: ParsedSheet): CarteraPlan {
   const plan: CarteraPlan = {
     corte: sheet.corte, invoices: sheet.invoices.length, total: 0, creditNotes: sheet.creditNotes, customers: 0, unlinked: 0,
     created: 0, updated: 0, closed: 0, closedAmount: 0, moves: [], problems: sheet.problems, blockers: [],
-    cali: sheet.cali ? { invoices: 0, total: 0 } : null
+    cali: sheet.cali ? { invoices: 0, total: 0 } : null,
+    caliError: sheet.caliError
   };
   const targets = new Map<string, ReturnType<typeof target>>();
   for (const inv of sheet.invoices) {
@@ -281,6 +292,8 @@ export type CarteraLast = {
   updated?: number;
   closed?: number;
   moved?: number;
+  /** The Cali tab was left out of a load that otherwise went fine. */
+  caliError?: string;
 };
 
 function saveLast(last: CarteraLast) {
@@ -381,7 +394,7 @@ export async function syncCarteraSheet(opts: { trigger: 'auto' | 'manual'; force
       getDb().prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)').run(CREDITS_SETTING, JSON.stringify(sheet.credits));
       saveLast({
         at, ok: true, trigger: opts.trigger, corte: plan.corte, invoices: plan.invoices, total: plan.total,
-        created: res.created, updated: res.updated, closed: res.closed, moved: plan.moves.length
+        created: res.created, updated: res.updated, closed: res.closed, moved: plan.moves.length, ...(plan.caliError ? { caliError: plan.caliError } : {})
       });
       return { ok: true, plan };
     } catch (e) {

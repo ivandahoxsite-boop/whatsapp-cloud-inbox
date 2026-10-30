@@ -118,6 +118,11 @@ export function CarteraSheetBox({ freshness }: { freshness: ReceivablesFreshness
           Último intento ({coDateTime(last.at)}): {last.error}
         </p>
       )}
+      {configured && last?.ok && last.caliError && (
+        <p className="text-amber-600 dark:text-amber-400">
+          ⚠️ En la última carga ({coDateTime(last.at)}) «Cartera Cali» no se cargó: {last.caliError}. Sus facturas quedaron como estaban; «Cartera por vendedor» sí se cargó.
+        </p>
+      )}
       {freshness &&
         (freshness.stale ? (
           <p>
@@ -157,7 +162,9 @@ function PlanPreview({ plan, busy, onLoad, onCancel }: { plan: CarteraPlan; busy
         <li>
           {plan.cali
             ? `De ellas, de la pestaña «Cartera Cali»: ${plan.cali.invoices} facturas por ${money(plan.cali.total)}`
-            : 'La pestaña «Cartera Cali» no llegó (falta actualizar el Apps Script); sus facturas quedan como están'}
+            : plan.caliError
+              ? `⚠️ La pestaña «Cartera Cali» tiene un problema y no se carga esta vez (${plan.caliError}); sus facturas quedan como están y «Cartera por vendedor» se carga normal`
+              : 'La pestaña «Cartera Cali» no llegó (falta actualizar el Apps Script); sus facturas quedan como están'}
         </li>
         <li>Nuevas en el CRM: {plan.created}</li>
         <li>Se actualizan: {plan.updated}</li>
