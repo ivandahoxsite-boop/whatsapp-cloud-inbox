@@ -154,6 +154,11 @@ function PlanPreview({ plan, busy, onLoad, onCancel }: { plan: CarteraPlan; busy
         La hoja{plan.corte ? ` (corte ${shortDay(plan.corte)})` : ''} trae {plan.invoices} facturas de {plan.customers} clientes por {money(plan.total)}.
       </p>
       <ul className="list-disc space-y-0.5 pl-4 text-muted-foreground">
+        <li>
+          {plan.cali
+            ? `De ellas, de la pestaña «Cartera Cali»: ${plan.cali.invoices} facturas por ${money(plan.cali.total)}`
+            : 'La pestaña «Cartera Cali» no llegó (falta actualizar el Apps Script); sus facturas quedan como están'}
+        </li>
         <li>Nuevas en el CRM: {plan.created}</li>
         <li>Se actualizan: {plan.updated}</li>
         <li>

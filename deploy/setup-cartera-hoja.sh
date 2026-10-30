@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Connects the CRM to the Google Sheet tab "Cartera por vendedor": the CRM reads it by itself (lun-sáb 10:45, 15:00
+# Connects the CRM to the Google Sheet tabs "Cartera por vendedor" and "Cartera Cali": the CRM reads them by itself (lun-sáb 10:45, 15:00
 # and 17:45) instead of OpenClaw loading it. Read-only: a small Apps Script in the sheet hands the tab to the CRM.
 #   bash /opt/crm/deploy/setup-cartera-hoja.sh
 set -euo pipefail

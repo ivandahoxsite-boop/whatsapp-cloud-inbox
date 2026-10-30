@@ -4,7 +4,7 @@ import { LOAD_TIMES, carteraSheetConfigured, slotMs, upsertReceivables } from '.
 import { dayProblem, todayCo } from './tasks-info';
 
 /**
- * The CRM reads the aging report straight from the Google Sheet tab "Cartera por vendedor" (through a small Apps
+ * The CRM reads the aging report straight from the Google Sheet tabs "Cartera por vendedor" and "Cartera Cali" (through a small Apps
  * Script published by the user, see deploy/cartera-apps-script.gs). Invoices are tied to a customer ONLY by the sheet's
  * "Cliente" (NIT or code): to a WhatsApp contact the user linked, otherwise to a customer without phone. Never by a
  * look-alike name or a guessed phone; a guess is only shown as a suggestion for the user to accept.
@@ -15,8 +15,13 @@ const SETTING_LAST = 'cartera_sheet_last';
 const SETTING_SLOT = 'cartera_sheet_slot';
 export const CREDITS_SETTING = 'cartera_credit_notes';
 const MAX_CLOSED_SHARE = 0.15;
+/** The second tab (user's request, 30-oct-2026): its invoices are stored as "CALI-<doc>" so they never mix with the main tab's. */
+export const CALI_TAB = 'Cartera Cali';
+export const CALI_PREFIX = 'CALI-';
 
 export type SheetInvoice = {
+  /** The receivable's id in the CRM: the document number ("CALI-<doc>" for the Cali tab). */
+  externalId: string;
   cliente: string;
   key: string;
   name: string;
@@ -32,7 +37,15 @@ export type SheetInvoice = {
 /** A credit note of the sheet: never applied to the debt in the CRM, only shown in the "Extracto" view. */
 export type CreditNote = { cliente: string; key: string; name: string; doc: string; issuedAt: string | null; dueAt: string | null; amount: number; seller: string };
 
-export type ParsedSheet = { invoices: SheetInvoice[]; creditNotes: number; credits: CreditNote[]; corte: string | null; problems: string[] };
+export type ParsedSheet = {
+  invoices: SheetInvoice[];
+  creditNotes: number;
+  credits: CreditNote[];
+  corte: string | null;
+  problems: string[];
+  /** Whether the "Cartera Cali" tab came in this read (an old Apps Script only sends the main tab). */
+  cali?: boolean;
+};
 
 /** "900123456-7" -> "9001234567", "c133" -> "C133": letters and digits only. */
 export const clienteKey = (raw: string) =>
@@ -42,7 +55,7 @@ const cell = (v: unknown) => (v === null || v === undefined ? '' : String(v).tri
 const num = (v: unknown) => (typeof v === 'number' ? v : parseAmount(cell(v)));
 
 /** Reads the tab's values (first rows: the filters, then the titles Cliente, Nombre_Cliente, T_Dcto, Documento...). */
-export function parseCarteraSheet(rows: unknown[][]): ParsedSheet {
+export function parseCarteraSheet(rows: unknown[][], prefix = ''): ParsedSheet {
   const h = rows.findIndex((r) => Array.isArray(r) && r.some((c) => cell(c) === 'Documento') && r.some((c) => cell(c) === 'Cliente'));
   if (h < 0) throw new Error('No encuentro los títulos de la cartera (Cliente, Documento…) en la pestaña');
   const titles = rows[h].map((c) => cell(c).toLowerCase());
@@ -101,6 +114,7 @@ export function parseCarteraSheet(rows: unknown[][]): ParsedSheet {
     docs.add(doc);
     const amount = num(r[iDeuda]);
     invoices.push({
+      externalId: prefix + doc.slice(0, 60),
       cliente,
       key,
       name: cell(r[iName]).slice(0, 80),
@@ -116,18 +130,41 @@ export function parseCarteraSheet(rows: unknown[][]): ParsedSheet {
   return { invoices, creditNotes, credits, corte, problems };
 }
 
-/** Downloads the tab through the Apps Script web app. The key keeps anyone else with the link out. */
-export async function fetchCarteraSheet(): Promise<unknown[][]> {
+export type SheetTabs = { main: unknown[][]; cali: unknown[][] | null };
+
+/** Downloads the tabs through the Apps Script web app. The key keeps anyone else with the link out. */
+export async function fetchCarteraSheet(): Promise<SheetTabs> {
   if (!carteraSheetConfigured()) throw new Error('La hoja de cartera no está conectada (bash /opt/crm/deploy/setup-cartera-hoja.sh)');
   const url = new URL(process.env.CARTERA_SHEET_URL!);
   url.searchParams.set('k', process.env.CARTERA_SHEET_KEY!);
   const res = await fetch(url, { redirect: 'follow', cache: 'no-store', signal: AbortSignal.timeout(60_000) });
   if (!res.ok) throw new Error(`Google respondió ${res.status} al leer la hoja`);
-  const body = (await res.json().catch(() => null)) as { ok?: boolean; error?: string; filas?: unknown[][] } | null;
+  const body = (await res.json().catch(() => null)) as { ok?: boolean; error?: string; filas?: unknown[][]; pestanas?: Record<string, unknown[][]> } | null;
   if (!body) throw new Error('Google no devolvió la cartera: revisa que el Apps Script esté implementado con acceso "Cualquier persona"');
   if (body.error) throw new Error(body.error === 'clave' ? 'La clave del Apps Script no coincide con la del CRM' : `Apps Script: ${body.error}`);
   if (!Array.isArray(body.filas)) throw new Error('El Apps Script no devolvió filas');
-  return body.filas;
+  const cali = body.pestanas?.[CALI_TAB];
+  return { main: body.filas, cali: Array.isArray(cali) ? cali : null };
+}
+
+/** Both tabs as one report: the Cali invoices go with the prefix, their problems and credit notes are added. */
+export function parseCarteraTabs(tabs: SheetTabs): ParsedSheet {
+  const main = parseCarteraSheet(tabs.main);
+  if (!tabs.cali) return { ...main, cali: false };
+  let cali: ParsedSheet;
+  try {
+    cali = parseCarteraSheet(tabs.cali, CALI_PREFIX);
+  } catch (e) {
+    return { ...main, cali: true, problems: [...main.problems, `${CALI_TAB}: ${e instanceof Error ? e.message : 'no se pudo leer'}`] };
+  }
+  return {
+    invoices: [...main.invoices, ...cali.invoices],
+    creditNotes: main.creditNotes + cali.creditNotes,
+    credits: [...main.credits, ...cali.credits],
+    corte: main.corte,
+    problems: [...main.problems, ...cali.problems.map((p) => `${CALI_TAB}: ${p}`)],
+    cali: true
+  };
 }
 
 type Contact = { id: number; name: string; phone: string };
@@ -172,6 +209,8 @@ export type CarteraPlan = {
   problems: string[];
   /** Why an automatic load would not go ahead (empty when it can). */
   blockers: string[];
+  /** Invoices and money of the "Cartera Cali" tab, or null when it did not come (the Apps Script is the old one). */
+  cali: { invoices: number; total: number } | null;
 };
 
 const who = (c: Contact | null | undefined, fallback: string) =>
@@ -187,21 +226,26 @@ export function planCartera(sheet: ParsedSheet): CarteraPlan {
     ])
   );
   const open = d.prepare("SELECT external_id, balance FROM receivables WHERE status = 'open' AND source = ?").all(SOURCE) as { external_id: string; balance: number }[];
-  const inSheet = new Set(sheet.invoices.map((i) => i.doc));
+  const inSheet = new Set(sheet.invoices.map((i) => i.externalId));
   const plan: CarteraPlan = {
     corte: sheet.corte, invoices: sheet.invoices.length, total: 0, creditNotes: sheet.creditNotes, customers: 0, unlinked: 0,
-    created: 0, updated: 0, closed: 0, closedAmount: 0, moves: [], problems: sheet.problems, blockers: []
+    created: 0, updated: 0, closed: 0, closedAmount: 0, moves: [], problems: sheet.problems, blockers: [],
+    cali: sheet.cali ? { invoices: 0, total: 0 } : null
   };
   const targets = new Map<string, ReturnType<typeof target>>();
   for (const inv of sheet.invoices) {
     plan.total += inv.balance;
+    if (plan.cali && inv.externalId.startsWith(CALI_PREFIX)) {
+      plan.cali.invoices++;
+      plan.cali.total += inv.balance;
+    }
     let t = targets.get(inv.key);
     if (!t) {
       t = target(inv);
       targets.set(inv.key, t);
       if (!t.linked) plan.unlinked++;
     }
-    const was = current.get(inv.doc);
+    const was = current.get(inv.externalId);
     if (!was) {
       plan.created++;
       continue;
@@ -213,7 +257,8 @@ export function planCartera(sheet: ParsedSheet): CarteraPlan {
   }
   plan.customers = targets.size;
   for (const r of open) {
-    if (inSheet.has(r.external_id)) continue;
+    // Without the Cali tab in this read (old Apps Script), its invoices are left as they are, never taken as paid.
+    if (inSheet.has(r.external_id) || (!sheet.cali && r.external_id.startsWith(CALI_PREFIX))) continue;
     plan.closed++;
     plan.closedAmount += r.balance;
   }
@@ -273,7 +318,7 @@ function rememberSuggestion(inv: SheetInvoice) {
   const d = getDb();
   const holder = d
     .prepare("SELECT c.id, c.phone FROM receivables r JOIN contacts c ON c.id = r.contact_id WHERE r.external_id = ? AND r.source = ?")
-    .get(inv.doc, SOURCE) as { id: number; phone: string } | undefined;
+    .get(inv.externalId, SOURCE) as { id: number; phone: string } | undefined;
   const nit = normalizeNit(inv.cliente);
   const byNit = nit
     ? (d.prepare("SELECT id, phone FROM contacts WHERE json_extract(data, '$.nit') = ? AND phone GLOB '[0-9]*' ORDER BY id LIMIT 1").get(nit) as { id: number; phone: string } | undefined)
@@ -281,6 +326,12 @@ function rememberSuggestion(inv: SheetInvoice) {
   const guess = [holder, byNit].find((c) => c && isRealPhone(c.phone));
   if (guess) d.prepare("INSERT OR IGNORE INTO cartera_links (cliente, contact_id, status) VALUES (?, ?, 'suggested')").run(inv.key, guess.id);
 }
+
+/** Open invoices of the Cali tab already in the CRM. */
+const caliOpenIds = () =>
+  (getDb().prepare("SELECT external_id FROM receivables WHERE status = 'open' AND source = ? AND external_id LIKE ?").all(SOURCE, `${CALI_PREFIX}%`) as { external_id: string }[]).map(
+    (r) => r.external_id
+  );
 
 let running: Promise<unknown> | null = null;
 
@@ -293,7 +344,7 @@ export async function syncCarteraSheet(opts: { trigger: 'auto' | 'manual'; force
   const job = (async () => {
     const at = new Date().toISOString();
     try {
-      const sheet = parseCarteraSheet(await fetchCarteraSheet());
+      const sheet = parseCarteraTabs(await fetchCarteraSheet());
       const plan = planCartera(sheet);
       // Incomplete rows or an empty sheet always stop the load: a missing invoice would be taken as paid.
       const blockers = opts.force ? plan.blockers.filter((b) => !b.startsWith('Se darían por pagadas')) : plan.blockers;
@@ -311,7 +362,7 @@ export async function syncCarteraSheet(opts: { trigger: 'auto' | 'manual'; force
       }
       const res = upsertReceivables(
         sheet.invoices.map((inv) => ({
-          externalId: inv.doc,
+          externalId: inv.externalId,
           doc: inv.doc,
           contactId: contactOf.get(inv.key)!,
           name: inv.name,
@@ -320,9 +371,10 @@ export async function syncCarteraSheet(opts: { trigger: 'auto' | 'manual'; force
           issuedAt: inv.issuedAt,
           dueAt: inv.dueAt,
           seller: inv.seller,
-          data: { cliente: inv.key, clienteRaw: inv.cliente, nombre: inv.name, tipo: inv.tipo }
+          data: { cliente: inv.key, clienteRaw: inv.cliente, nombre: inv.name, tipo: inv.tipo, ...(inv.externalId.startsWith(CALI_PREFIX) ? { pestana: CALI_TAB } : {}) }
         })),
-        { closeMissing: true, source: SOURCE }
+        // Without the Cali tab in this read, its open invoices are kept (they are sent again as they are).
+        { closeMissing: true, source: SOURCE, keep: sheet.cali ? [] : caliOpenIds() }
       );
       dropEmptyPlaceholders();
       // The sheet's credit notes, replaced on every load: the "Extracto" view shows them like the Excel report.
@@ -348,7 +400,7 @@ export async function syncCarteraSheet(opts: { trigger: 'auto' | 'manual'; force
 
 /** Preview of a load, for the user to confirm. */
 export async function previewCarteraSheet(): Promise<CarteraPlan> {
-  return planCartera(parseCarteraSheet(await fetchCarteraSheet()));
+  return planCartera(parseCarteraTabs(await fetchCarteraSheet()));
 }
 
 /** Customers without phone left with nothing on them (their invoices moved to the real contact) are removed. */
