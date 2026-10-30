@@ -48,6 +48,18 @@ function caliInvoices(now: Date): CaliInvoice[] {
 
 export type CaliClient = { key: string; cliente: string; name: string; balance: number; invoices: number; contactId: number | null };
 
+/** A Cali customer with its invoices, for "Quién debe · Cali" (each invoice knows its aging range, 0-4 as `aging`). */
+export type CaliDebtor = {
+  key: string;
+  name: string;
+  contactId: number | null;
+  phone: string;
+  hasPhone: boolean;
+  balance: number;
+  oldestDays: number;
+  invoices: { doc: string; balance: number; late: number; range: number }[];
+};
+
 /** Totals and aging like the main cartera's summary, and the customers without WhatsApp to link. */
 export function caliSummary(now = new Date()) {
   const list = caliInvoices(now);
@@ -61,12 +73,24 @@ export function caliSummary(now = new Date()) {
   let total = 0;
   let overdue = 0;
   const customers = new Map<string, CaliClient & { hasPhone: boolean }>();
+  const debtors = new Map<string, CaliDebtor>();
   for (const i of list) {
     total += i.balance;
     if (i.late > 0) overdue += i.balance;
     const b = i.late <= 0 ? 0 : i.late <= 30 ? 1 : i.late <= 60 ? 2 : i.late <= 90 ? 3 : 4;
     aging[b].amount += i.balance;
     aging[b].invoices++;
+    let dbt = debtors.get(i.key);
+    if (!dbt) {
+      dbt = {
+        key: i.key, name: i.name, contactId: i.holder?.id ?? null, phone: i.holder?.phone ?? '', hasPhone: !!i.holder && isRealPhone(i.holder.phone),
+        balance: 0, oldestDays: 0, invoices: []
+      };
+      debtors.set(i.key, dbt);
+    }
+    dbt.balance += i.balance;
+    dbt.oldestDays = Math.max(dbt.oldestDays, i.late);
+    dbt.invoices.push({ doc: i.doc, balance: i.balance, late: i.late, range: b });
     let c = customers.get(i.key);
     if (!c) {
       c = { key: i.key, cliente: i.cliente, name: i.name, balance: 0, invoices: 0, contactId: i.holder?.id ?? null, hasPhone: !!i.holder && isRealPhone(i.holder.phone) };
@@ -76,7 +100,11 @@ export function caliSummary(now = new Date()) {
     c.invoices++;
   }
   const unlinked = [...customers.values()].filter((c) => !c.hasPhone).sort((a, b) => b.balance - a.balance);
-  return { total, overdue, invoices: list.length, customers: customers.size, aging, unlinked };
+  // Most days late first, as the main "Quién debe".
+  const byDebt = [...debtors.values()]
+    .map((x) => ({ ...x, invoices: x.invoices.sort((a, b) => b.late - a.late) }))
+    .sort((a, b) => b.oldestDays - a.oldestDays || b.balance - a.balance);
+  return { total, overdue, invoices: list.length, customers: customers.size, aging, unlinked, debtors: byDebt };
 }
 
 export type CaliSummary = ReturnType<typeof caliSummary>;
