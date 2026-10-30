@@ -60,9 +60,19 @@ export type CaliDebtor = {
   invoices: { doc: string; balance: number; late: number; range: number }[];
 };
 
-/** Totals and aging like the main cartera's summary, and the customers without WhatsApp to link. */
-export function caliSummary(now = new Date()) {
-  const list = caliInvoices(now);
+/** Totals and aging like the main cartera's summary, and the customers without WhatsApp to link. `seller` narrows it all. */
+export function caliSummary(filter: { seller?: string } = {}, now = new Date()) {
+  const all = caliInvoices(now);
+  const sellers = [...new Set(all.map((i) => i.seller).filter(Boolean))].sort();
+  const bySellerMap = new Map<string, { balance: number; overdue: number }>();
+  for (const i of all) {
+    const s = bySellerMap.get(i.seller || 'Sin vendedor') ?? { balance: 0, overdue: 0 };
+    s.balance += i.balance;
+    if (i.late > 0) s.overdue += i.balance;
+    bySellerMap.set(i.seller || 'Sin vendedor', s);
+  }
+  const bySeller = [...bySellerMap].map(([name, v]) => ({ name, ...v })).sort((a, b) => b.balance - a.balance);
+  const list = filter.seller ? all.filter((i) => i.seller === filter.seller) : all;
   const aging = [
     { label: 'Al día', amount: 0, invoices: 0 },
     { label: '1-30 días', amount: 0, invoices: 0 },
@@ -104,7 +114,7 @@ export function caliSummary(now = new Date()) {
   const byDebt = [...debtors.values()]
     .map((x) => ({ ...x, invoices: x.invoices.sort((a, b) => b.late - a.late) }))
     .sort((a, b) => b.oldestDays - a.oldestDays || b.balance - a.balance);
-  return { total, overdue, invoices: list.length, customers: customers.size, aging, unlinked, debtors: byDebt };
+  return { total, overdue, invoices: list.length, customers: customers.size, aging, unlinked, debtors: byDebt, sellers, bySeller };
 }
 
 export type CaliSummary = ReturnType<typeof caliSummary>;

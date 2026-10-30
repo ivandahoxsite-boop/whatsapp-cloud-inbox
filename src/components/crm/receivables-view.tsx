@@ -12,12 +12,12 @@ import { CarteraLinks, CarteraSheetBox, useCarteraSheet } from './cartera-sheet-
 import { CarteraExtractView } from './cartera-extract';
 import { DueSoon } from './due-soon';
 
-const select = 'h-9 rounded-full border border-border/60 bg-card/50 px-3 text-sm';
+export const select = 'h-9 rounded-full border border-border/60 bg-card/50 px-3 text-sm';
 /** The tiered payment reminder for a debtor (oldest overdue invoice), or undefined under 30 days: then the chat opens empty. */
 const cobroText = (d: { name: string; oldestDoc: string; oldestBalance: number; oldestDays: number }) =>
   d.oldestDoc ? collectionMessage(d.name, [{ doc: d.oldestDoc, balance: d.oldestBalance, daysLate: d.oldestDays }])?.text : undefined;
 
-const AGING_COLOR = ['#34d399', '#fbbf24', '#fb923c', '#f87171', '#e11d48'];
+export const AGING_COLOR = ['#34d399', '#fbbf24', '#fb923c', '#f87171', '#e11d48'];
 
 export function ReceivablesView({ onOpenCustomer }: { onOpenCustomer: (id: number) => void }) {
   const qc = useQueryClient();
@@ -314,97 +314,6 @@ export function ReceivablesView({ onOpenCustomer }: { onOpenCustomer: (id: numbe
           ))}
         </ul>
       </section>
-
-      {!seller && data.bySeller.length > 1 && (
-        <section className={card}>
-          <h2 className="mb-3 text-sm font-medium">Por vendedor</h2>
-          <ul className="space-y-2">
-            {data.bySeller.map((s) => (
-              <li key={s.name}>
-                <button className="block w-full text-left" onClick={() => s.name !== 'Sin vendedor' && setSeller(s.name)}>
-                  <div className="flex items-baseline gap-2 text-xs">
-                    <span className="min-w-0 flex-1 truncate">{s.name}</span>
-                    <span className="text-amber-500">{s.overdue > 0 ? `${money(s.overdue)} vencido` : ''}</span>
-                    <span className="tabular-nums">{money(s.balance)}</span>
-                  </div>
-                  <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-muted">
-                    <div className="h-full rounded-full bg-emerald-400" style={{ width: `${(s.balance / maxSeller) * 100}%` }} />
-                  </div>
-                </button>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-
-      <section className={card}>
-        <h2 className="text-sm font-medium">{bucket ? `Quién debe · ${data.aging.find((a) => a.key === bucket)?.label ?? ''}` : 'Quién debe'}</h2>
-        {bucket ? (
-          <p className="mb-3 flex items-center gap-2 text-xs text-muted-foreground">
-            <span className="min-w-0 flex-1">
-              {data.listed.customers} cliente{data.listed.customers === 1 ? '' : 's'} · {money(data.listed.amount)} en este rango
-            </span>
-            <button onClick={() => setBucket('')} className="shrink-0 underline">
-              Quitar filtro
-            </button>
-          </p>
-        ) : (
-          <p className="mb-3 text-xs text-muted-foreground">Los que más tienen vencido primero. <b>WhatsApp</b> abre el chat con el mensaje de cobro listo para enviar. El recordatorio queda en Aprobaciones; no sale solo. <b>Llamar</b> abre el marcador de tu celular y después te deja anotar cómo te fue.</p>
-        )}
-        {note && <p className="mb-3 rounded-md border bg-background/40 p-2 text-xs">{note}</p>}
-        <ul className="space-y-2">
-          {data.debtors.length === 0 && <li className="text-xs text-muted-foreground">Nadie en este rango.</li>}
-          {data.debtors.map((d) => (
-            <li key={d.contactId} className="rounded-lg border border-border/60 bg-background/40 p-2">
-              <div className="flex items-center gap-2">
-              <button onClick={() => onOpenCustomer(d.contactId)} className="min-w-0 flex-1 text-left">
-                <p className="truncate text-sm font-medium">{d.name || formatPhone(d.phone)}</p>
-                <p className="truncate text-xs text-muted-foreground">
-                  {d.hasPhone ? formatPhone(d.phone) : 'Sin teléfono'} · {d.invoices} factura{d.invoices === 1 ? '' : 's'}
-                  {d.seller ? ` · ${d.seller}` : ''}
-                </p>
-              </button>
-              <div className="shrink-0 text-right">
-                <p className="text-sm font-medium tabular-nums">{money(d.balance)}</p>
-                <p className={cn('text-xs', d.oldestDays > 0 ? 'text-amber-500' : 'text-muted-foreground')}>
-                  {d.oldestDays > 0 ? `${d.oldestDays} días de mora` : 'al día'}
-                </p>
-              </div>
-              {d.hasPhone && d.overdue > 0 && (
-                <div className="flex shrink-0 flex-col gap-1">
-                  <WhatsAppLink
-                    phone={d.phone}
-                    text={cobroText(d)}
-                    beforeOpen={cobroText(d) ? () => checkCollection(d.contactId) : undefined}
-                    className="inline-flex h-8 items-center rounded-md border border-emerald-500/40 bg-emerald-500/10 px-3 text-xs font-medium text-emerald-500 hover:bg-emerald-500/20"
-                  >
-                    💬 WhatsApp
-                  </WhatsAppLink>
-                  <Button size="sm" variant="outline" onClick={() => remind(d.contactId, d.name)}>
-                    Recordar
-                  </Button>
-                  <Button size="sm" variant="outline" onClick={() => dial(d.contactId, d.name, d.phone)}>
-                    📞 Llamar
-                  </Button>
-                </div>
-              )}
-              </div>
-              {calling === d.contactId && (
-                <CallLog
-                  contactId={d.contactId}
-                  name={d.name}
-                  onClose={() => setCalling(null)}
-                  onSaved={(m) => {
-                    setCalling(null);
-                    setNote(m);
-                    qc.invalidateQueries({ queryKey: ['crm'] });
-                  }}
-                />
-              )}
-            </li>
-          ))}
-        </ul>
-      </section>
       </>
       )}
     </div>
@@ -423,7 +332,7 @@ const OUTCOMES: [string, string][] = [
 ];
 
 /** Short form to leave what happened on a call; it lands in the customer's timeline as "Llamada de cobro". */
-function CallLog({ contactId, name, onClose, onSaved }: { contactId: number; name: string; onClose: () => void; onSaved: (msg: string) => void }) {
+export function CallLog({ contactId, name, onClose, onSaved }: { contactId: number; name: string; onClose: () => void; onSaved: (msg: string) => void }) {
   const [outcome, setOutcome] = useState('promesa_pago');
   const [summary, setSummary] = useState('');
   const [promiseDate, setPromiseDate] = useState('');
@@ -487,7 +396,7 @@ function CallLog({ contactId, name, onClose, onSaved }: { contactId: number; nam
 }
 
 /** Picks a date and time (Colombian time) for a call. The CRM refuses hours when collecting is not allowed and suggests the next slot. */
-function ScheduleCall({ contactId, name, onClose, onSaved }: { contactId: number; name: string; onClose: () => void; onSaved: (msg: string) => void }) {
+export function ScheduleCall({ contactId, name, onClose, onSaved }: { contactId: number; name: string; onClose: () => void; onSaved: (msg: string) => void }) {
   const [when, setWhen] = useState('');
   const [err, setErr] = useState('');
   const [suggest, setSuggest] = useState<{ value: string; label: string } | null>(null);
