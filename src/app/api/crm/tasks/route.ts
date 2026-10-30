@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { completeTask, createTask, deleteTask, listTasks, moveTask, setTaskNotify } from '@/lib/crm/tasks';
+import { completeTask, createTask, deleteTask, listTasks, moveTask, setTaskNotify, updateTask } from '@/lib/crm/tasks';
 import { todayCo } from '@/lib/crm/tasks-info';
 
 export const runtime = 'nodejs';
@@ -26,15 +26,26 @@ export async function POST(request: Request) {
   }
 }
 
-// PATCH { id, action: 'done' | 'move' | 'delete' | 'notify', dueDate?, on? }
+// PATCH { id, action: 'done' | 'move' | 'delete' | 'notify' | 'edit', dueDate?, on?, text?, dueTime?, repeat?, notify? }
 export async function PATCH(request: Request) {
   try {
-    const { id, action, dueDate, dueTime, on } = (await request.json()) as { id: number; action: string; dueDate?: string | null; dueTime?: string | null; on?: boolean };
+    const b = (await request.json()) as {
+      id: number;
+      action: string;
+      dueDate?: string | null;
+      dueTime?: string | null;
+      on?: boolean;
+      text?: string;
+      repeat?: string;
+      notify?: boolean;
+    };
+    const { id, action, dueDate, dueTime, on } = b;
     if (!Number.isInteger(id)) throw new Error('Falta el pendiente');
     if (action === 'done') completeTask(id);
     else if (action === 'move') moveTask(id, dueDate ?? null, dueTime ?? null);
     else if (action === 'delete') deleteTask(id);
     else if (action === 'notify') setTaskNotify(id, !!on);
+    else if (action === 'edit') updateTask(id, { text: b.text ?? '', dueDate, dueTime, repeat: b.repeat, notify: b.notify });
     else throw new Error('Acción inválida');
     return NextResponse.json({ ok: true });
   } catch (e) {

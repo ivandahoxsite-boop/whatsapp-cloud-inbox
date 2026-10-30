@@ -5,7 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
 import { REPEAT_LABEL, calendarUrl, dueLabel, type Task } from '@/lib/crm/tasks-info';
 import { api, formatPhone } from './shared';
-import { DatePick } from './task-form';
+import { DatePick, TaskForm } from './task-form';
 
 export const tasksQuery = (contactId?: number) => ({
   queryKey: contactId ? ['crm-tasks', contactId] : ['crm-tasks'],
@@ -16,6 +16,7 @@ export const tasksQuery = (contactId?: number) => ({
 export function TaskRow({ t, today, showWho, onOpenCustomer }: { t: Task; today: string; showWho: boolean; onOpenCustomer?: (id: number) => void }) {
   const qc = useQueryClient();
   const [moving, setMoving] = useState(false);
+  const [editing, setEditing] = useState(false);
   const [err, setErr] = useState('');
   const act = async (body: Record<string, unknown>) => {
     setErr('');
@@ -30,6 +31,11 @@ export function TaskRow({ t, today, showWho, onOpenCustomer }: { t: Task; today:
   const label = dueLabel(t.dueDate, today, t.dueTime);
   const cal = typeof window === 'undefined' ? null : calendarUrl(t, `${window.location.origin}/crm`);
   const late = !!t.dueDate && t.dueDate < today;
+  if (editing) return (
+    <li>
+      <TaskForm editing={t} onDone={() => setEditing(false)} />
+    </li>
+  );
   return (
     <li className="rounded-lg border border-border/60 bg-background/40 p-2">
       <div className="flex items-start gap-2">
@@ -61,6 +67,9 @@ export function TaskRow({ t, today, showWho, onOpenCustomer }: { t: Task; today:
         )}
         <button onClick={() => setMoving(!moving)} className="h-8 rounded-full border px-3">
           📅 Mover
+        </button>
+        <button onClick={() => setEditing(true)} className="h-8 rounded-full border px-3">
+          ✏️ Editar
         </button>
         {/* Only the to-dos marked here are notified on the phone every 30 minutes (user's request, 29-oct-2026). */}
         <button

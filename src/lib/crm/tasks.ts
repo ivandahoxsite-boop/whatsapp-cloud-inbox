@@ -38,7 +38,10 @@ export function listTasks(contactId?: number): Task[] {
   }));
 }
 
-export function createTask(input: { contactId?: number | null; text: string; dueDate?: string | null; dueTime?: string | null; repeat?: string; notify?: boolean }): number {
+type TaskInput = { text: string; dueDate?: string | null; dueTime?: string | null; repeat?: string; notify?: boolean };
+
+/** Checks and cleans what the form sends (the same rules to create and to edit). */
+function cleanTask(input: TaskInput) {
   const text = (input.text ?? '').trim();
   if (!text) throw new Error('Escribe qué hay que hacer');
   if (text.length > 300) throw new Error('Máximo 300 letras');
@@ -49,9 +52,14 @@ export function createTask(input: { contactId?: number | null; text: string; due
   if (dueTime && !dueDate) throw new Error('La hora necesita una fecha');
   const repeat = (input.repeat ?? '') as Repeat;
   if (!REPEATS.includes(repeat)) throw new Error('Repetición inválida');
+  if (input.notify && !dueDate) throw new Error('Para avisarte, ponle un día');
+  return { text, dueDate, dueTime, repeat };
+}
+
+export function createTask(input: TaskInput & { contactId?: number | null }): number {
+  const { text, dueDate, dueTime, repeat } = cleanTask(input);
   const db = getDb();
   if (input.contactId != null && !db.prepare('SELECT 1 FROM contacts WHERE id = ?').get(input.contactId)) throw new Error('El cliente no existe');
-  if (input.notify && !dueDate) throw new Error('Para avisarte, ponle un día');
   const r = db
     .prepare('INSERT INTO tasks (contact_id, text, due_date, due_time, repeat, notify) VALUES (?, ?, ?, ?, ?, ?)')
     .run(input.contactId ?? null, text, dueDate, dueTime, repeat, input.notify ? 1 : 0);
@@ -80,6 +88,15 @@ export function completeTask(id: number, now = Date.now()) {
     t.repeat,
     t.notify
   );
+}
+
+/** Edits an open to-do: its text, day, time, repetition and phone reminder (the customer stays). */
+export function updateTask(id: number, input: TaskInput) {
+  const { text, dueDate, dueTime, repeat } = cleanTask(input);
+  const r = getDb()
+    .prepare("UPDATE tasks SET text = ?, due_date = ?, due_time = ?, repeat = ?, notify = ? WHERE id = ? AND status = 'open'")
+    .run(text, dueDate, dueTime, repeat, input.notify ? 1 : 0, id);
+  if (!r.changes) throw new Error('El pendiente ya no está abierto');
 }
 
 /** Turns the phone reminder of one to-do on or off. */

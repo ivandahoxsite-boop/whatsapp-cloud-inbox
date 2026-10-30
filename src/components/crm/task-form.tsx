@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
-import { DEFAULT_TIME, addDays, dayProblem, nextMonday, todayCo, workdayOnOrAfter, type Repeat } from '@/lib/crm/tasks-info';
+import { DEFAULT_TIME, addDays, dayProblem, nextMonday, todayCo, workdayOnOrAfter, type Repeat, type Task } from '@/lib/crm/tasks-info';
 import { api, displayName } from './shared';
 
 const chip = 'h-8 rounded-full border px-3 text-xs';
@@ -47,25 +47,27 @@ type Pickable = { id: number; name: string; phone: string };
 
 /**
  * Writes a to-do. With `fixed` it belongs to that customer (the file view); with `customers` the user may pick one
- * (or none, for something loose like "comprar cinta").
+ * (or none, for something loose like "comprar cinta"). With `editing` it changes that to-do (its customer stays).
  */
 export function TaskForm({
   fixed,
   customers,
   initialText = '',
+  editing,
   onDone
 }: {
   fixed?: number;
   customers?: Pickable[];
   initialText?: string;
+  editing?: Task;
   onDone: () => void;
 }) {
   const qc = useQueryClient();
-  const [text, setText] = useState(initialText);
-  const [date, setDate] = useState(workdayOnOrAfter(nextMonday(todayCo())));
-  const [time, setTime] = useState('');
-  const [repeat, setRepeat] = useState<Repeat>('');
-  const [notify, setNotify] = useState(false);
+  const [text, setText] = useState(editing?.text ?? initialText);
+  const [date, setDate] = useState(editing ? editing.dueDate ?? '' : workdayOnOrAfter(nextMonday(todayCo())));
+  const [time, setTime] = useState(editing?.dueTime ?? '');
+  const [repeat, setRepeat] = useState<Repeat>(editing?.repeat ?? '');
+  const [notify, setNotify] = useState(editing?.notify ?? false);
   const [who, setWho] = useState<Pickable | null>(null);
   const [q, setQ] = useState('');
   const [err, setErr] = useState('');
@@ -81,7 +83,9 @@ export function TaskForm({
     setErr('');
     setBusy(true);
     try {
-      await api('/api/crm/tasks', 'POST', { text, contactId: fixed ?? who?.id ?? null, dueDate: date || null, dueTime: date ? time || null : null, repeat, notify: !!date && notify });
+      const fields = { text, dueDate: date || null, dueTime: date ? time || null : null, repeat, notify: !!date && notify };
+      if (editing) await api('/api/crm/tasks', 'PATCH', { id: editing.id, action: 'edit', ...fields });
+      else await api('/api/crm/tasks', 'POST', { ...fields, contactId: fixed ?? who?.id ?? null });
       await qc.invalidateQueries({ queryKey: ['crm-tasks'] });
       onDone();
     } catch (e) {
@@ -93,7 +97,7 @@ export function TaskForm({
 
   return (
     <div className="space-y-3 rounded-lg border border-border/60 bg-background/40 p-3">
-      {!fixed && customers && (
+      {!fixed && !editing && customers && (
         <div className="space-y-1">
           {who ? (
             <p className="flex items-center gap-2 text-sm">
@@ -149,7 +153,7 @@ export function TaskForm({
       {err && <p className="text-xs text-destructive">{err}</p>}
       <div className="flex gap-2">
         <button type="button" disabled={busy || !text.trim() || !!(date && dayProblem(date))} onClick={save} className="h-9 rounded-full bg-primary px-4 text-sm text-primary-foreground disabled:opacity-50">
-          Guardar pendiente
+          {editing ? 'Guardar cambios' : 'Guardar pendiente'}
         </button>
         <button type="button" onClick={onDone} className="h-9 rounded-full border px-4 text-sm">
           Cancelar
