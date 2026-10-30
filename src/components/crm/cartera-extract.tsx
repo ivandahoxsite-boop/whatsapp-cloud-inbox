@@ -29,10 +29,15 @@ const norm = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCa
  * the sheet's credit notes subtracted. Days (DiasVc) and aging ranges count from the issue date (the age of the debt).
  * "Solo totales" works like the Excel's outline level 2.
  */
-export function CarteraExtractView({ seller, onOpenCustomer }: { seller: string; onOpenCustomer: (id: number) => void }) {
+export function CarteraExtractView({ seller, cali, onOpenCustomer }: { seller: string; cali?: boolean; onOpenCustomer: (id: number) => void }) {
   const { data, isLoading, error } = useQuery({
-    queryKey: ['crm-cartera-extract', seller],
-    queryFn: () => api<CarteraExtract>(`/api/crm/receivables/extract${seller ? `?seller=${encodeURIComponent(seller)}` : ''}`),
+    queryKey: ['crm-cartera-extract', seller, !!cali],
+    queryFn: () => {
+      const q = new URLSearchParams();
+      if (seller) q.set('seller', seller);
+      if (cali) q.set('tab', 'cali');
+      return api<CarteraExtract>(`/api/crm/receivables/extract${q.size ? `?${q}` : ''}`);
+    },
     placeholderData: (prev) => prev
   });
   const [q, setQ] = useState('');
@@ -81,9 +86,19 @@ export function CarteraExtractView({ seller, onOpenCustomer }: { seller: string;
   return (
     <section className={cn(card, 'space-y-3 p-0 sm:p-0')}>
       <div className="rounded-t-2xl bg-sky-500/10 px-4 py-3">
-        <p className="text-lg font-bold tracking-tight">Reporte Extracto de Cartera</p>
+        <p className="text-lg font-bold tracking-tight">{cali ? 'Cartera Cali' : 'Reporte Extracto de Cartera'}</p>
         <p className="text-sm font-semibold uppercase">Xsite Group{seller ? ` · ${seller}` : ''}</p>
         <p className="text-xs text-muted-foreground">{longDate(data.date)}</p>
+        {cali && (
+          <p className="mt-1 text-xs text-muted-foreground">
+            {data.sheet
+              ? `Pestaña «Cartera Cali» de la hoja${data.sheet.corte ? ` · corte ${day(data.sheet.corte)}` : ''} · leída ${new Date(data.sheet.at).toLocaleString('es-CO', { timeZone: 'America/Bogota', dateStyle: 'medium', timeStyle: 'short' })} · va aparte de la cartera principal: no se suma ni se mezcla.`
+              : 'Todavía no se ha leído la pestaña «Cartera Cali». Se lee junto con la cartera principal (lun-sáb 10:45, 3:00 y 5:45, o con «Actualizar» en Cartera).'}
+          </p>
+        )}
+        {cali && data.sheet?.error && (
+          <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">⚠️ La última lectura de Cali tuvo un problema ({data.sheet.error}); se muestra la copia anterior.</p>
+        )}
       </div>
 
       <div className="flex flex-wrap items-center gap-2 px-3">

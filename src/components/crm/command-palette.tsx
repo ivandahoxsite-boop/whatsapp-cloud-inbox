@@ -7,7 +7,7 @@ import type { CustomerFilter } from '@/lib/crm/filters';
 import type { Customer } from '@/lib/crm/customers';
 import { cityOptions, displayName } from './shared';
 
-export type CrmTab = 'resumen' | 'clientes' | 'ventas' | 'cartera' | 'pendientes' | 'segmentos' | 'campanas' | 'aprobaciones' | 'importar' | 'estructura';
+export type CrmTab = 'resumen' | 'clientes' | 'ventas' | 'cartera' | 'cali' | 'pendientes' | 'segmentos' | 'campanas' | 'aprobaciones' | 'importar' | 'estructura';
 
 type Item = { id: string; group: string; label: string; hint?: string; run: () => void };
 
@@ -71,6 +71,7 @@ export function CommandPalette({
         ['clientes', 'Ir a Clientes'],
         ['ventas', 'Ver reporte de ventas (vendedor, zona, productos)'],
         ['cartera', 'Cartera: quién me debe y desde cuándo'],
+        ['cali', 'Cartera Cali (pestaña aparte de la hoja)'],
         ['segmentos', 'Ir a Segmentos'],
         ['campanas', 'Campañas: enviar una plantilla a un grupo de clientes'],
         ['aprobaciones', 'Aprobar mensajes del agente'],

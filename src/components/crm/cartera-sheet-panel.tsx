@@ -120,7 +120,7 @@ export function CarteraSheetBox({ freshness }: { freshness: ReceivablesFreshness
       )}
       {configured && last?.ok && last.caliError && (
         <p className="text-amber-600 dark:text-amber-400">
-          ⚠️ En la última carga ({coDateTime(last.at)}) «Cartera Cali» no se cargó: {last.caliError}. Sus facturas quedaron como estaban; «Cartera por vendedor» sí se cargó.
+          ⚠️ En la última carga ({coDateTime(last.at)}) «Cartera Cali» no se pudo leer: {last.caliError}. Su pestaña muestra la copia anterior; «Cartera por vendedor» sí se cargó.
         </p>
       )}
       {freshness &&
@@ -161,11 +161,12 @@ function PlanPreview({ plan, busy, onLoad, onCancel }: { plan: CarteraPlan; busy
       <ul className="list-disc space-y-0.5 pl-4 text-muted-foreground">
         <li>
           {plan.cali
-            ? `De ellas, de la pestaña «Cartera Cali»: ${plan.cali.invoices} facturas por ${money(plan.cali.total)}`
+            ? `Aparte, en la pestaña «Cartera Cali» del CRM (no se suma aquí): ${plan.cali.invoices} facturas por ${money(plan.cali.total)}`
             : plan.caliError
-              ? `⚠️ La pestaña «Cartera Cali» tiene un problema y no se carga esta vez (${plan.caliError}); sus facturas quedan como están y «Cartera por vendedor» se carga normal`
-              : 'La pestaña «Cartera Cali» no llegó (falta actualizar el Apps Script); sus facturas quedan como están'}
+              ? `⚠️ La pestaña «Cartera Cali» tiene un problema (${plan.caliError}); en el CRM queda la copia anterior y «Cartera por vendedor» se carga normal`
+              : 'La pestaña «Cartera Cali» no llegó (falta actualizar el Apps Script)'}
         </li>
+        {plan.caliMixed > 0 && <li>Se sacan de esta cartera {plan.caliMixed} facturas de Cali que se habían sumado aquí (pasan a su pestaña aparte)</li>}
         <li>Nuevas en el CRM: {plan.created}</li>
         <li>Se actualizan: {plan.updated}</li>
         <li>

@@ -4,7 +4,7 @@ import { LOAD_TIMES, carteraSheetConfigured, slotMs, upsertReceivables } from '.
 import { dayProblem, todayCo } from './tasks-info';
 
 /**
- * The CRM reads the aging report straight from the Google Sheet tabs "Cartera por vendedor" and "Cartera Cali" (through a small Apps
+ * The CRM reads the aging report straight from the Google Sheet tab "Cartera por vendedor" (through a small Apps
  * Script published by the user, see deploy/cartera-apps-script.gs). Invoices are tied to a customer ONLY by the sheet's
  * "Cliente" (NIT or code): to a WhatsApp contact the user linked, otherwise to a customer without phone. Never by a
  * look-alike name or a guessed phone; a guess is only shown as a suggestion for the user to accept.
@@ -15,12 +15,18 @@ const SETTING_LAST = 'cartera_sheet_last';
 const SETTING_SLOT = 'cartera_sheet_slot';
 export const CREDITS_SETTING = 'cartera_credit_notes';
 const MAX_CLOSED_SHARE = 0.15;
-/** The second tab (user's request, 30-oct-2026): its invoices are stored as "CALI-<doc>" so they never mix with the main tab's. */
+/**
+ * The second tab, "Cartera Cali" (user's request, 30-oct-2026): read in the same call but kept APART, never mixed with
+ * the main cartera ("NO JUNTA"). It is stored as it comes in `settings.cartera_cali` and shown in its own CRM tab.
+ * "CALI-<doc>" receivables are leftovers of the first version that mixed them, removed on the next load.
+ */
 export const CALI_TAB = 'Cartera Cali';
 export const CALI_PREFIX = 'CALI-';
+export const CALI_SETTING = 'cartera_cali';
+export type CaliStore = { at: string; corte: string | null; invoices: SheetInvoice[]; credits: CreditNote[]; error?: string };
 
 export type SheetInvoice = {
-  /** The receivable's id in the CRM: the document number ("CALI-<doc>" for the Cali tab). */
+  /** The receivable's id in the CRM: the document number. */
   externalId: string;
   cliente: string;
   key: string;
@@ -43,9 +49,9 @@ export type ParsedSheet = {
   credits: CreditNote[];
   corte: string | null;
   problems: string[];
-  /** Whether the "Cartera Cali" tab came in this read (an old Apps Script only sends the main tab). */
-  cali?: boolean;
-  /** Why the Cali tab was left out of this read (its invoices stay as they are; the main tab loads anyway). */
+  /** The "Cartera Cali" tab read apart (null when it did not come: an old Apps Script only sends the main tab). */
+  caliSheet?: ParsedSheet | null;
+  /** Why the Cali tab could not be read this time (its last good copy stays; the main tab loads anyway). */
   caliError?: string;
 };
 
@@ -57,7 +63,7 @@ const cell = (v: unknown) => (v === null || v === undefined ? '' : String(v).tri
 const num = (v: unknown) => (typeof v === 'number' ? v : parseAmount(cell(v)));
 
 /** Reads the tab's values (first rows: the filters, then the titles Cliente, Nombre_Cliente, T_Dcto, Documento...). */
-export function parseCarteraSheet(rows: unknown[][], prefix = ''): ParsedSheet {
+export function parseCarteraSheet(rows: unknown[][]): ParsedSheet {
   const h = rows.findIndex((r) => Array.isArray(r) && r.some((c) => cell(c) === 'Documento') && r.some((c) => cell(c) === 'Cliente'));
   if (h < 0) throw new Error('No encuentro los títulos de la cartera (Cliente, Documento…) en la pestaña');
   const titles = rows[h].map((c) => cell(c).toLowerCase());
@@ -116,7 +122,7 @@ export function parseCarteraSheet(rows: unknown[][], prefix = ''): ParsedSheet {
     docs.add(doc);
     const amount = num(r[iDeuda]);
     invoices.push({
-      externalId: prefix + doc.slice(0, 60),
+      externalId: doc.slice(0, 60),
       cliente,
       key,
       name: cell(r[iName]).slice(0, 80),
@@ -150,29 +156,29 @@ export async function fetchCarteraSheet(): Promise<SheetTabs> {
 }
 
 /**
- * Both tabs as one report: the Cali invoices go with the prefix and their credit notes are added. The main tab never
- * depends on Cali (user's request, 30-oct-2026): if the Cali tab is missing, unreadable or has incomplete rows, this
- * read leaves it out (its invoices in the CRM stay as they are) and the main tab loads as always.
+ * The main tab, with the Cali tab read apart. The main tab never depends on Cali: if the Cali tab is missing,
+ * unreadable or has incomplete rows, only Cali is left as it was and the main tab loads as always.
  */
 export function parseCarteraTabs(tabs: SheetTabs): ParsedSheet {
   const main = parseCarteraSheet(tabs.main);
-  if (!tabs.cali) return { ...main, cali: false };
-  let cali: ParsedSheet;
+  if (!tabs.cali) return { ...main, caliSheet: null };
   try {
-    cali = parseCarteraSheet(tabs.cali, CALI_PREFIX);
+    const cali = parseCarteraSheet(tabs.cali);
+    if (cali.problems.length) return { ...main, caliSheet: null, caliError: `${cali.problems.length} fila(s) con datos incompletos (${cali.problems.slice(0, 3).join('; ')})` };
+    return { ...main, caliSheet: cali };
   } catch (e) {
-    return { ...main, cali: false, caliError: e instanceof Error ? e.message : 'no se pudo leer' };
+    return { ...main, caliSheet: null, caliError: e instanceof Error ? e.message : 'no se pudo leer' };
   }
-  if (cali.problems.length) return { ...main, cali: false, caliError: `${cali.problems.length} fila(s) con datos incompletos (${cali.problems.slice(0, 3).join('; ')})` };
-  // A document number in both tabs is kept apart ("CALI-<doc>"), but a repeated one inside Cali is a problem of that tab.
-  return {
-    invoices: [...main.invoices, ...cali.invoices],
-    creditNotes: main.creditNotes + cali.creditNotes,
-    credits: [...main.credits, ...cali.credits],
-    corte: main.corte,
-    problems: main.problems,
-    cali: true
-  };
+}
+
+/** The last good copy of the "Cartera Cali" tab (null if it never came). */
+export function caliStore(): CaliStore | null {
+  const r = getDb().prepare('SELECT value FROM settings WHERE key = ?').get(CALI_SETTING) as { value: string } | undefined;
+  try {
+    return r ? (JSON.parse(r.value) as CaliStore) : null;
+  } catch {
+    return null;
+  }
 }
 
 type Contact = { id: number; name: string; phone: string };
@@ -217,10 +223,12 @@ export type CarteraPlan = {
   problems: string[];
   /** Why an automatic load would not go ahead (empty when it can). */
   blockers: string[];
-  /** Invoices and money of the "Cartera Cali" tab, or null when it did not come (the Apps Script is the old one). */
+  /** Invoices and money of the "Cartera Cali" tab (kept apart, in its own tab), or null when it did not come. */
   cali: { invoices: number; total: number } | null;
-  /** Why the Cali tab was left out of this load (its invoices stay as they are). */
+  /** Why the Cali tab could not be read this time (its last copy stays). */
   caliError?: string;
+  /** Cali invoices that the first version had mixed into the main cartera, taken out on this load. */
+  caliMixed: number;
 };
 
 const who = (c: Contact | null | undefined, fallback: string) =>
@@ -240,16 +248,13 @@ export function planCartera(sheet: ParsedSheet): CarteraPlan {
   const plan: CarteraPlan = {
     corte: sheet.corte, invoices: sheet.invoices.length, total: 0, creditNotes: sheet.creditNotes, customers: 0, unlinked: 0,
     created: 0, updated: 0, closed: 0, closedAmount: 0, moves: [], problems: sheet.problems, blockers: [],
-    cali: sheet.cali ? { invoices: 0, total: 0 } : null,
-    caliError: sheet.caliError
+    cali: sheet.caliSheet ? { invoices: sheet.caliSheet.invoices.length, total: sheet.caliSheet.invoices.reduce((a, i) => a + i.balance, 0) } : null,
+    caliError: sheet.caliError,
+    caliMixed: open.filter((r) => r.external_id.startsWith(CALI_PREFIX)).length
   };
   const targets = new Map<string, ReturnType<typeof target>>();
   for (const inv of sheet.invoices) {
     plan.total += inv.balance;
-    if (plan.cali && inv.externalId.startsWith(CALI_PREFIX)) {
-      plan.cali.invoices++;
-      plan.cali.total += inv.balance;
-    }
     let t = targets.get(inv.key);
     if (!t) {
       t = target(inv);
@@ -268,8 +273,8 @@ export function planCartera(sheet: ParsedSheet): CarteraPlan {
   }
   plan.customers = targets.size;
   for (const r of open) {
-    // Without the Cali tab in this read (old Apps Script), its invoices are left as they are, never taken as paid.
-    if (inSheet.has(r.external_id) || (!sheet.cali && r.external_id.startsWith(CALI_PREFIX))) continue;
+    // Mixed-in Cali invoices are taken out (not paid): counted apart in `caliMixed`.
+    if (inSheet.has(r.external_id) || r.external_id.startsWith(CALI_PREFIX)) continue;
     plan.closed++;
     plan.closedAmount += r.balance;
   }
@@ -340,11 +345,17 @@ function rememberSuggestion(inv: SheetInvoice) {
   if (guess) d.prepare("INSERT OR IGNORE INTO cartera_links (cliente, contact_id, status) VALUES (?, ?, 'suggested')").run(inv.key, guess.id);
 }
 
-/** Open invoices of the Cali tab already in the CRM. */
-const caliOpenIds = () =>
-  (getDb().prepare("SELECT external_id FROM receivables WHERE status = 'open' AND source = ? AND external_id LIKE ?").all(SOURCE, `${CALI_PREFIX}%`) as { external_id: string }[]).map(
-    (r) => r.external_id
-  );
+/** Cali goes apart and on its own: its copy is replaced whenever it reads fine, whatever happens with the main tab. */
+function saveCali(sheet: ParsedSheet, at: string) {
+  const d = getDb();
+  if (sheet.caliSheet) {
+    const store: CaliStore = { at, corte: sheet.caliSheet.corte, invoices: sheet.caliSheet.invoices, credits: sheet.caliSheet.credits };
+    d.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)').run(CALI_SETTING, JSON.stringify(store));
+  } else if (sheet.caliError) {
+    const old = caliStore();
+    if (old) d.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)').run(CALI_SETTING, JSON.stringify({ ...old, error: sheet.caliError }));
+  }
+}
 
 let running: Promise<unknown> | null = null;
 
@@ -359,6 +370,7 @@ export async function syncCarteraSheet(opts: { trigger: 'auto' | 'manual'; force
     try {
       const sheet = parseCarteraTabs(await fetchCarteraSheet());
       const plan = planCartera(sheet);
+      saveCali(sheet, at);
       // Incomplete rows or an empty sheet always stop the load: a missing invoice would be taken as paid.
       const blockers = opts.force ? plan.blockers.filter((b) => !b.startsWith('Se darían por pagadas')) : plan.blockers;
       if (blockers.length) {
@@ -366,6 +378,9 @@ export async function syncCarteraSheet(opts: { trigger: 'auto' | 'manual'; force
         saveLast({ at, ok: false, trigger: opts.trigger, error, corte: plan.corte, invoices: plan.invoices });
         return { ok: false, plan, error };
       }
+      // The leftovers of the first version, which mixed Cali into this cartera, go away (Cali lives in its own tab).
+      const d = getDb();
+      d.prepare('DELETE FROM receivables WHERE source = ? AND external_id LIKE ?').run(SOURCE, `${CALI_PREFIX}%`);
       const contactOf = new Map<string, number>();
       for (const inv of sheet.invoices) {
         if (contactOf.has(inv.key)) continue;
@@ -384,10 +399,9 @@ export async function syncCarteraSheet(opts: { trigger: 'auto' | 'manual'; force
           issuedAt: inv.issuedAt,
           dueAt: inv.dueAt,
           seller: inv.seller,
-          data: { cliente: inv.key, clienteRaw: inv.cliente, nombre: inv.name, tipo: inv.tipo, ...(inv.externalId.startsWith(CALI_PREFIX) ? { pestana: CALI_TAB } : {}) }
+          data: { cliente: inv.key, clienteRaw: inv.cliente, nombre: inv.name, tipo: inv.tipo }
         })),
-        // Without the Cali tab in this read, its open invoices are kept (they are sent again as they are).
-        { closeMissing: true, source: SOURCE, keep: sheet.cali ? [] : caliOpenIds() }
+        { closeMissing: true, source: SOURCE }
       );
       dropEmptyPlaceholders();
       // The sheet's credit notes, replaced on every load: the "Extracto" view shows them like the Excel report.

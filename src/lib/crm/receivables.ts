@@ -31,8 +31,6 @@ export type ReceivablesOptions = {
   closeMissing?: boolean;
   /** Label for where the items come from (e.g. "cartera"); only items with the same source are ever closed. */
   source?: string;
-  /** With closeMissing: open items of the source left as they are although they are not in the request. */
-  keep?: string[];
 };
 
 type Skip = { index: number; reason: string };
@@ -117,9 +115,8 @@ export function upsertReceivables(items: ReceivableUpsert[], options: Receivable
     if (options.closeMissing) {
       if (!source) throw new Error('closeMissing necesita "source" (ej: "cartera") para saber qué reporte se está reemplazando');
       const open = d.prepare("SELECT id, external_id FROM receivables WHERE status = 'open' AND source = ?").all(source) as unknown as { id: number; external_id: string }[];
-      const keep = new Set(options.keep ?? []);
       for (const r of open) {
-        if (seen.has(r.external_id) || keep.has(r.external_id)) continue;
+        if (seen.has(r.external_id)) continue;
         d.prepare("UPDATE receivables SET status = 'paid', balance = 0, paid_at = date('now'), updated_at = datetime('now') WHERE id = ?").run(r.id);
         res.closed++;
       }

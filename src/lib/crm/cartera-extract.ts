@@ -1,6 +1,6 @@
 import { getDb } from './db';
-import { CREDITS_SETTING, type CreditNote } from './cartera-sheet';
-import { isRealPhone } from './customers';
+import { CREDITS_SETTING, caliStore, type CreditNote } from './cartera-sheet';
+import { isRealPhone, placeholderKey } from './customers';
 import { daysLate } from './receivables';
 import { todayCo } from './tasks-info';
 
@@ -38,7 +38,21 @@ export type ExtractGroup = {
   oldestBalance: number;
   oldestDays: number;
 };
-export type CarteraExtract = { date: string; groups: ExtractGroup[]; grand: ExtractGroup['total']; sellers: string[] };
+export type CarteraExtract = {
+  date: string;
+  groups: ExtractGroup[];
+  grand: ExtractGroup['total'];
+  sellers: string[];
+  /** Only for the "Cartera Cali" tab: when the sheet was read, its cut-off date and the last reading problem. */
+  sheet?: { at: string; corte: string | null; error?: string } | null;
+};
+
+/** One open invoice, wherever it comes from (the CRM's cartera or the "Cartera Cali" copy). */
+type Source = {
+  doc: string; issued_at: string | null; due_at: string | null; amount: number; balance: number; seller: string;
+  key: string; raw: string; nombre: string; contactId: number | null; contactName: string; phone: string;
+};
+type Holder = { id: number; phone: string; name: string } | undefined;
 
 const DAY = 86_400_000;
 const zero = (): ExtractBuckets => ({ v91: 0, v61_90: 0, v31_60: 0, v0_30: 0, porVenc: 0 });
@@ -61,6 +75,74 @@ const addTotals = (t: ExtractGroup['total'], r: ExtractRow) => {
 
 export function carteraExtract(filter: { seller?: string } = {}, now = new Date()): CarteraExtract {
   const d = getDb();
+  const rows = (
+    d
+      .prepare(
+        `SELECT r.doc, r.issued_at, r.due_at, r.amount, r.balance, r.seller, r.contact_id, c.name AS contact_name, c.phone,
+                json_extract(r.data, '$.cliente') AS key, json_extract(r.data, '$.clienteRaw') AS raw, json_extract(r.data, '$.nombre') AS nombre
+         FROM receivables r JOIN contacts c ON c.id = r.contact_id WHERE r.status = 'open'`
+      )
+      .all() as {
+      doc: string; issued_at: string | null; due_at: string | null; amount: number; balance: number; seller: string; contact_id: number;
+      contact_name: string; phone: string; key: string | null; raw: string | null; nombre: string | null;
+    }[]
+  ).map(
+    (r): Source => ({
+      ...r, key: r.key ?? `c${r.contact_id}`, raw: r.raw ?? r.key ?? '', nombre: r.nombre || r.contact_name,
+      contactId: r.contact_id, contactName: r.contact_name
+    })
+  );
+  // The sheet's credit notes, subtracted only here (the user crosses them by hand elsewhere).
+  const stored = d.prepare('SELECT value FROM settings WHERE key = ?').get(CREDITS_SETTING) as { value: string } | undefined;
+  let credits: CreditNote[] = [];
+  try {
+    credits = stored ? (JSON.parse(stored.value) as CreditNote[]) : [];
+  } catch {
+    credits = [];
+  }
+  const holder = (key: string): Holder =>
+    d
+      .prepare("SELECT c.id, c.phone, c.name FROM receivables r JOIN contacts c ON c.id = r.contact_id WHERE json_extract(r.data, '$.cliente') = ? LIMIT 1")
+      .get(key) as Holder;
+  return buildExtract(rows, credits, holder, filter, now);
+}
+
+/**
+ * The "Cartera Cali" tab of the sheet, apart from the CRM's cartera (user's request, 30-oct-2026: "NO JUNTA"). Each
+ * customer is matched to the CRM only to show its WhatsApp button and open its file: the link the user made for that
+ * NIT, else the customer that holds its invoices of the main cartera, else its customer without phone. Never by name.
+ */
+export function caliExtract(filter: { seller?: string } = {}, now = new Date()): CarteraExtract {
+  const d = getDb();
+  const store = caliStore();
+  const known = new Map<string, Holder>();
+  const holder = (key: string, cliente = '', name = ''): Holder => {
+    if (known.has(key)) return known.get(key);
+    const link = d
+      .prepare("SELECT c.id, c.phone, c.name FROM cartera_links l JOIN contacts c ON c.id = l.contact_id WHERE l.cliente = ? AND l.status = 'linked'")
+      .get(key) as Holder;
+    const main = link
+      ? undefined
+      : (d
+          .prepare("SELECT c.id, c.phone, c.name FROM receivables r JOIN contacts c ON c.id = r.contact_id WHERE json_extract(r.data, '$.cliente') = ? LIMIT 1")
+          .get(key) as Holder);
+    const ph = link || main ? null : placeholderKey(cliente, name);
+    const found = link ?? main ?? (ph ? (d.prepare('SELECT id, phone, name FROM contacts WHERE phone = ?').get(ph) as Holder) : undefined);
+    known.set(key, found);
+    return found;
+  };
+  const rows = (store?.invoices ?? []).map((i): Source => {
+    const h = holder(i.key, i.cliente, i.name);
+    return {
+      doc: i.doc, issued_at: i.issuedAt, due_at: i.dueAt, amount: i.amount, balance: i.balance, seller: i.seller,
+      key: i.key, raw: i.cliente, nombre: i.name, contactId: h?.id ?? null, contactName: h?.name ?? '', phone: h?.phone ?? ''
+    };
+  });
+  const out = buildExtract(rows, store?.credits ?? [], (k) => holder(k), filter, now);
+  return { ...out, sheet: store ? { at: store.at, corte: store.corte, error: store.error } : null };
+}
+
+function buildExtract(rows: Source[], credits: CreditNote[], holderOf: (key: string) => Holder, filter: { seller?: string }, now: Date): CarteraExtract {
   const today = todayCo(now.getTime());
   const todayMs = Date.parse(`${today}T00:00:00Z`);
   const terms = Number(process.env.CRM_DEFAULT_TERMS_DAYS || 30);
@@ -69,17 +151,6 @@ export function carteraExtract(filter: { seller?: string } = {}, now = new Date(
     const from = issued ? Date.parse(`${issued.slice(0, 10)}T00:00:00Z`) : due ? Date.parse(`${due.slice(0, 10)}T00:00:00Z`) - terms * DAY : NaN;
     return Number.isFinite(from) ? Math.max(0, Math.round((todayMs - from) / DAY)) : null;
   };
-
-  const rows = d
-    .prepare(
-      `SELECT r.doc, r.issued_at, r.due_at, r.amount, r.balance, r.seller, r.contact_id, c.name AS contact_name, c.phone,
-              json_extract(r.data, '$.cliente') AS key, json_extract(r.data, '$.clienteRaw') AS raw, json_extract(r.data, '$.nombre') AS nombre
-       FROM receivables r JOIN contacts c ON c.id = r.contact_id WHERE r.status = 'open'`
-    )
-    .all() as {
-    doc: string; issued_at: string | null; due_at: string | null; amount: number; balance: number; seller: string; contact_id: number;
-    contact_name: string; phone: string; key: string | null; raw: string | null; nombre: string | null;
-  }[];
 
   const sellers = new Set<string>();
   const groups = new Map<string, ExtractGroup>();
@@ -95,12 +166,11 @@ export function carteraExtract(filter: { seller?: string } = {}, now = new Date(
   for (const r of rows) {
     if (r.seller) sellers.add(r.seller);
     if (filter.seller && r.seller !== filter.seller) continue;
-    const key = r.key ?? `c${r.contact_id}`;
-    const g = group(key, () => ({
-      key,
-      cliente: r.raw ?? r.key ?? '',
-      name: r.nombre || r.contact_name,
-      contactId: r.contact_id,
+    const g = group(r.key, () => ({
+      key: r.key,
+      cliente: r.raw,
+      name: r.nombre,
+      contactId: r.contactId,
       phone: r.phone,
       hasPhone: isRealPhone(r.phone)
     }));
@@ -117,21 +187,11 @@ export function carteraExtract(filter: { seller?: string } = {}, now = new Date(
     if (late > 0 && late >= g.oldestDays) Object.assign(g, { oldestDoc: r.doc, oldestBalance: r.balance, oldestDays: late });
   }
 
-  // The sheet's credit notes, subtracted only here (the user crosses them by hand elsewhere).
-  const stored = d.prepare('SELECT value FROM settings WHERE key = ?').get(CREDITS_SETTING) as { value: string } | undefined;
-  let credits: CreditNote[] = [];
-  try {
-    credits = stored ? (JSON.parse(stored.value) as CreditNote[]) : [];
-  } catch {
-    credits = [];
-  }
   for (const n of credits) {
     if (n.seller) sellers.add(n.seller);
     if (filter.seller && n.seller !== filter.seller) continue;
     const g = group(n.key, () => {
-      const holder = d
-        .prepare("SELECT c.id, c.phone FROM receivables r JOIN contacts c ON c.id = r.contact_id WHERE json_extract(r.data, '$.cliente') = ? LIMIT 1")
-        .get(n.key) as { id: number; phone: string } | undefined;
+      const holder = holderOf(n.key);
       return { key: n.key, cliente: n.cliente, name: n.name, contactId: holder?.id ?? null, phone: holder?.phone ?? '', hasPhone: !!holder && isRealPhone(holder.phone) };
     });
     const dv = dias(n.issuedAt, n.dueAt);

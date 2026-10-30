@@ -12,6 +12,7 @@ import { CustomersView } from '@/components/crm/customers-view';
 import { CustomerSheet } from '@/components/crm/customer-sheet';
 import { LockGate } from '@/components/crm/lock-gate';
 import { ReceivablesView } from '@/components/crm/receivables-view';
+import { CarteraExtractView } from '@/components/crm/cartera-extract';
 import { SalesReportView } from '@/components/crm/sales-report';
 import { Campaigns } from '@/components/crm/campaigns';
 import { SegmentsView } from '@/components/crm/segments-view';
@@ -29,6 +30,7 @@ const TAB_LABEL: Record<CrmTab, string> = {
   clientes: 'Clientes',
   ventas: 'Ventas',
   cartera: 'Cartera',
+  cali: 'Cartera Cali',
   pendientes: 'Pendientes',
   segmentos: 'Segmentos',
   campanas: 'Campañas',
@@ -44,6 +46,7 @@ export default function CrmPage() {
     const go = () => {
       if (window.location.hash === '#por-vencer') setTab('cartera');
       if (window.location.hash === '#pendientes') setTab('pendientes');
+      if (window.location.hash === '#cartera-cali') setTab('cali');
     };
     go();
     window.addEventListener('hashchange', go);
@@ -163,6 +166,7 @@ export default function CrmPage() {
           </LockGate>
         )}
         {data && tab === 'cartera' && <ReceivablesView onOpenCustomer={setOpenId} />}
+        {data && tab === 'cali' && <CarteraExtractView seller="" cali onOpenCustomer={setOpenId} />}
         {tab === 'pendientes' && <PendingView onOpenCustomer={setOpenId} />}
         {data && tab === 'segmentos' && <SegmentsView data={data} draft={draft} setDraft={setDraft} onOpen={showCustomers} />}
         {data && tab === 'campanas' && <Campaigns data={data} />}
