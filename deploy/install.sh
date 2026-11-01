@@ -80,7 +80,7 @@ sudo -u "$RUN_USER" -H env PATH="$NODE_DIR:/usr/bin:/bin" bash -c "cd '$APP' && 
 if [ ! -f "$ENV_FILE" ]; then
   say "Creando la configuración en $ENV_FILE"
   INBOX_PASSWORD=$(openssl rand -base64 24 | tr -d '/+=\n' | cut -c1-20)
-  umask 077
+  OLD_UMASK=$(umask); umask 077
   cat > "$ENV_FILE" <<EOF
 NODE_ENV=production
 INBOX_USERNAME=admin
@@ -90,6 +90,7 @@ CRM_DB_PATH=$DATA/crm.db
 CRM_DEFAULT_TERMS_DAYS=30
 PUSH_SUBJECT=mailto:admin@$DOMAIN
 EOF
+  umask "$OLD_UMASK"
   NEW_ENV=1
 else
   say "Se conserva la configuración existente en $ENV_FILE"
@@ -131,6 +132,12 @@ $DOMAIN {
 	reverse_proxy 127.0.0.1:$PORT
 }
 EOF
+# Caddy runs as its own user: the file must be readable by it (validate runs as root and would not notice).
+chown root:root "$CADDY_SITE"; chmod 644 "$CADDY_SITE"
+if id caddy >/dev/null 2>&1 && ! runuser -u caddy -- test -r "$CADDY_SITE"; then
+  rm -f "$CADDY_SITE"; [ -f "$CADDY_SITE.bak" ] && mv "$CADDY_SITE.bak" "$CADDY_SITE"
+  die "Caddy no puede leer $CADDY_SITE. No se cambió nada en Caddy; el CRM original no se tocó."
+fi
 grep -qxF "import $CADDY_SITE" /etc/caddy/Caddyfile || printf '\nimport %s\n' "$CADDY_SITE" >> /etc/caddy/Caddyfile
 if ! caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile >/tmp/$NAME-caddy.log 2>&1; then
   tail -n 15 /tmp/$NAME-caddy.log
@@ -153,6 +160,7 @@ echo "backup: \$out"
 EOF
 chmod 755 "/usr/local/bin/$NAME-backup"
 echo "25 3 * * * $RUN_USER /usr/local/bin/$NAME-backup >/dev/null 2>&1" > "/etc/cron.d/$NAME-backup"
+chmod 644 "/etc/cron.d/$NAME-backup"
 
 cat > "/usr/local/bin/$NAME-update" <<EOF
 #!/bin/sh
@@ -197,7 +205,11 @@ cat <<EOF
 CRM de cartera:  https://$DOMAIN/crm
 Usuario:         admin
 EOF
-[ "$NEW_ENV" = 1 ] && echo "Contraseña:      $INBOX_PASSWORD   (anótala; NO la pegues en el chat)"
+if [ "$NEW_ENV" = 1 ]; then
+  echo "Contraseña:      $INBOX_PASSWORD   (anótala; NO la pegues en el chat)"
+else
+  echo "Contraseña:      la que ya está en $ENV_FILE  (para verla aquí en el servidor: grep INBOX_PASSWORD $ENV_FILE)"
+fi
 cat <<EOF
 
 Siguiente paso, conectar la hoja:  bash $APP/deploy/setup-cartera-hoja.sh
