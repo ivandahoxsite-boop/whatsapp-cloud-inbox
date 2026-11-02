@@ -26,7 +26,8 @@ const principal = [
 const cali = [
   ['900000011-1', 'CLIENTE CALI DEMO UNO', 'FC', 800201, 30, 30, 980000, 'VENDEDOR DEMO'],
   ['900000012-2', 'CLIENTE CALI DEMO DOS', 'FC', 800202, 45, 30, 1250000, 'VENDEDOR DEMO'],
-  ['900000001-1', 'CLIENTE DEMO UNO SAS', 'FC', 800203, 29, 30, 300000, 'VENDEDOR DEMO'] // mismo NIT que en la principal
+  ['900000001-1', 'CLIENTE DEMO UNO SAS', 'FC', 800203, 29, 30, 300000, 'VENDEDOR DEMO'], // mismo NIT que en la principal
+  ['900000013-3', 'CLIENTE CALI DEMO TRES', 'FC', 800204, 20, 30, 500000, 'OTRO VENDEDOR DEMO'] // otro vendedor (filtro CARTERA_SELLER)
 ];
 
 function body() {

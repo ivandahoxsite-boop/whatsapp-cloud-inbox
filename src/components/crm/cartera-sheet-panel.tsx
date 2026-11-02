@@ -156,7 +156,8 @@ function PlanPreview({ plan, busy, onLoad, onCancel }: { plan: CarteraPlan; busy
   return (
     <div className="mt-2 space-y-2 rounded-lg border border-border/60 bg-background/60 p-2 text-foreground">
       <p className="font-medium">
-        La hoja{plan.corte ? ` (corte ${shortDay(plan.corte)})` : ''} trae {plan.invoices} facturas de {plan.customers} clientes por {money(plan.total)}.
+        La hoja{plan.corte ? ` (corte ${shortDay(plan.corte)})` : ''} trae {plan.invoices} facturas de {plan.customers} clientes por {money(plan.total)}
+        {plan.seller ? ` del vendedor ${plan.seller}` : ''}.
       </p>
       <ul className="list-disc space-y-0.5 pl-4 text-muted-foreground">
         <li>
@@ -173,6 +174,7 @@ function PlanPreview({ plan, busy, onLoad, onCancel }: { plan: CarteraPlan; busy
           Se dan por pagadas (ya no están en la hoja): {plan.closed}
           {plan.closed ? ` · ${money(plan.closedAmount)}` : ''}
         </li>
+        {plan.seller && plan.otherSellers > 0 && <li>Filas de otros vendedores que este CRM no carga: {plan.otherSellers}</li>}
         {plan.creditNotes > 0 && <li>Notas crédito que no se cargan (las cruzas tú): {plan.creditNotes}</li>}
         <li>Clientes sin WhatsApp vinculado: {plan.unlinked}</li>
       </ul>

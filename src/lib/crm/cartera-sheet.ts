@@ -53,6 +53,10 @@ export type ParsedSheet = {
   caliSheet?: ParsedSheet | null;
   /** Why the Cali tab could not be read this time (its last good copy stays; the main tab loads anyway). */
   caliError?: string;
+  /** Only this seller's rows were read (CARTERA_SELLER), or '' when every seller is loaded. */
+  seller: string;
+  /** Rows of other sellers left out by that filter (their problems do not block the load either). */
+  otherSellers: number;
 };
 
 /** "900123456-7" -> "9001234567", "c133" -> "C133": letters and digits only. */
@@ -60,10 +64,21 @@ export const clienteKey = (raw: string) =>
   raw.normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/[^0-9A-Z]/g, '');
 
 const cell = (v: unknown) => (v === null || v === undefined ? '' : String(v).trim());
+
+/** "Alfonso  Hoyós" -> "ALFONSO HOYOS": no accents, upper case, single spaces. */
+export const sellerKey = (raw: string) =>
+  raw.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/\s+/g, ' ').trim();
+
+/**
+ * CARTERA_SELLER: when set, this CRM only loads that seller's invoices and credit notes (both tabs) and ignores the
+ * rest of the sheet. It is compared without accents, case or extra spaces, against Nombre_Vendedor (or the
+ * "Vendedor" of the header when the column is empty). Empty: every seller, as in the original CRM.
+ */
+export const sellerFilter = () => sellerKey(process.env.CARTERA_SELLER ?? '');
 const num = (v: unknown) => (typeof v === 'number' ? v : parseAmount(cell(v)));
 
 /** Reads the tab's values (first rows: the filters, then the titles Cliente, Nombre_Cliente, T_Dcto, Documento...). */
-export function parseCarteraSheet(rows: unknown[][]): ParsedSheet {
+export function parseCarteraSheet(rows: unknown[][], seller = sellerFilter()): ParsedSheet {
   const h = rows.findIndex((r) => Array.isArray(r) && r.some((c) => cell(c) === 'Documento') && r.some((c) => cell(c) === 'Cliente'));
   if (h < 0) throw new Error('No encuentro los títulos de la cartera (Cliente, Documento…) en la pestaña');
   const titles = rows[h].map((c) => cell(c).toLowerCase());
@@ -89,11 +104,14 @@ export function parseCarteraSheet(rows: unknown[][]): ParsedSheet {
   const problems: string[] = [];
   const docs = new Set<string>();
   let creditNotes = 0;
+  let otherSellers = 0;
   const credits: CreditNote[] = [];
   rows.slice(h + 1).forEach((r, i) => {
     const line = h + i + 2;
     const doc = cell(r?.[iDoc]);
     if (!doc) return;
+    const rowSeller = (iSeller >= 0 ? cell(r[iSeller]) : '') || sellerAll;
+    if (seller && sellerKey(rowSeller) !== seller) return void otherSellers++;
     const tipo = cell(r[iTipo]).toUpperCase();
     const balance = num(r[iSaldo]);
     // Credit notes are crossed by hand by the user: they never reach the CRM.
@@ -108,7 +126,7 @@ export function parseCarteraSheet(rows: unknown[][]): ParsedSheet {
         issuedAt: parseDate(cell(r[iExp])),
         dueAt: parseDate(cell(r[iVen])),
         amount: Number.isFinite(balance) ? balance : num(r[iDeuda]),
-        seller: (iSeller >= 0 ? cell(r[iSeller]) : '') || sellerAll
+        seller: rowSeller
       });
       return;
     }
@@ -132,10 +150,10 @@ export function parseCarteraSheet(rows: unknown[][]): ParsedSheet {
       dueAt,
       amount: Number.isFinite(amount) ? amount : balance,
       balance,
-      seller: (iSeller >= 0 ? cell(r[iSeller]) : '') || sellerAll
+      seller: rowSeller
     });
   });
-  return { invoices, creditNotes, credits, corte, problems };
+  return { invoices, creditNotes, credits, corte, problems, seller, otherSellers };
 }
 
 export type SheetTabs = { main: unknown[][]; cali: unknown[][] | null };
@@ -229,6 +247,10 @@ export type CarteraPlan = {
   caliError?: string;
   /** Cali invoices that the first version had mixed into the main cartera, taken out on this load. */
   caliMixed: number;
+  /** Only this seller is loaded (CARTERA_SELLER), or '' for every seller. */
+  seller: string;
+  /** Rows of other sellers left out (main tab). */
+  otherSellers: number;
 };
 
 const who = (c: Contact | null | undefined, fallback: string) =>
@@ -250,7 +272,9 @@ export function planCartera(sheet: ParsedSheet): CarteraPlan {
     created: 0, updated: 0, closed: 0, closedAmount: 0, moves: [], problems: sheet.problems, blockers: [],
     cali: sheet.caliSheet ? { invoices: sheet.caliSheet.invoices.length, total: sheet.caliSheet.invoices.reduce((a, i) => a + i.balance, 0) } : null,
     caliError: sheet.caliError,
-    caliMixed: open.filter((r) => r.external_id.startsWith(CALI_PREFIX)).length
+    caliMixed: open.filter((r) => r.external_id.startsWith(CALI_PREFIX)).length,
+    seller: sheet.seller,
+    otherSellers: sheet.otherSellers
   };
   const targets = new Map<string, ReturnType<typeof target>>();
   for (const inv of sheet.invoices) {
@@ -279,7 +303,12 @@ export function planCartera(sheet: ParsedSheet): CarteraPlan {
     plan.closedAmount += r.balance;
   }
   if (plan.problems.length) plan.blockers.push(`La hoja tiene ${plan.problems.length} fila(s) con datos incompletos (${plan.problems.slice(0, 3).join('; ')})`);
-  if (!plan.invoices) plan.blockers.push('La hoja no trae facturas');
+  if (!plan.invoices)
+    plan.blockers.push(
+      sheet.seller
+        ? `La hoja no trae facturas del vendedor ${sheet.seller} (revisa que el nombre en CARTERA_SELLER sea igual al de la columna Nombre_Vendedor)`
+        : 'La hoja no trae facturas'
+    );
   if (open.length && plan.closed > open.length * MAX_CLOSED_SHARE)
     plan.blockers.push(`Se darían por pagadas ${plan.closed} de ${open.length} facturas abiertas (más del ${MAX_CLOSED_SHARE * 100} %)`);
   return plan;
