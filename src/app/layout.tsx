@@ -70,7 +70,7 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: "WhatsApp inbox",
+  title: "CRM Alfonso",
   description: "A simple WhatsApp inbox built with Next.js",
 };
 

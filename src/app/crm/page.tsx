@@ -35,7 +35,7 @@ export default function CrmPage() {
     <div className="min-h-dvh bg-background">
       <header className="sticky top-0 z-20 border-b border-border/60 bg-background/80 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-3">
-          <h1 className="flex-1 text-xl font-bold tracking-tight">CRM</h1>
+          <h1 className="flex-1 text-xl font-bold tracking-tight">CRM Alfonso</h1>
           <ThemeToggle />
         </div>
         <nav className="mx-auto flex max-w-6xl gap-2 overflow-x-auto px-4 pb-2" aria-label="Secciones">
