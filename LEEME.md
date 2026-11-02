@@ -257,6 +257,11 @@ igual que antes.
    columna está vacía). Las filas de otros vendedores no se guardan y sus problemas no frenan la carga; la vista previa
    dice cuántas se dejaron fuera. Si no hay ninguna factura de ese vendedor, la carga se frena (nunca da todo por pagado).
    Sin la variable, carga todos los vendedores como el CRM original. Prueba: `tests/vendedor.e2e.js`.
+6. **Traer los WhatsApp del CRM original** (`deploy/importar-whatsapp.sh`): el CRM nuevo empieza sin contactos. Este script
+   abre la base del CRM original SOLO PARA LEER y, para cada cliente con facturas aquí (Cartera o Cartera Cali) que allá
+   ya estaba unido POR NIT («Es este» / «Sí, es él»), lo une aquí por la misma API de «Buscar su WhatsApp». Nunca por
+   nombre. Dice cuántos va a unir, pregunta antes y no muestra teléfonos. Los que no estaban unidos allá se unen a mano
+   en «Clientes de la hoja sin WhatsApp».
 
 **Instalar** (como root en el servidor):
 1. `git clone --branch claude/gallant-cerf-q36pfa https://github.com/ivandahoxsite-boop/whatsapp-cloud-inbox.git /root/crm-cartera-instalador`
