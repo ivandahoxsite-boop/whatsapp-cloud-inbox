@@ -22,6 +22,27 @@ const BUCKETS: [keyof ExtractBuckets, string][] = [
   ['v0_30', 'Venc_0_30'],
   ['porVenc', 'Por_Venc']
 ];
+/** Aging ranges the extract can be narrowed to (same cut as the columns: days since the issue date). */
+const RANGES: [keyof ExtractBuckets | '', string][] = [
+  ['', 'Todos'],
+  ['v0_30', '0-30 días'],
+  ['v31_60', '31-60 días'],
+  ['v61_90', '61-90 días'],
+  ['v91', 'Más de 90']
+];
+const rowRange = (r: ExtractRow): keyof ExtractBuckets =>
+  r.diasVc === null ? 'porVenc' : r.diasVc <= 30 ? 'v0_30' : r.diasVc <= 60 ? 'v31_60' : r.diasVc <= 90 ? 'v61_90' : 'v91';
+const sumRows = (rows: ExtractRow[]): ExtractGroup['total'] =>
+  rows.reduce(
+    (t, r) => {
+      t.deuda += r.deuda;
+      t.pagado += r.pagado;
+      t.saldo += r.saldo;
+      for (const [k] of BUCKETS) t.buckets[k] += r.buckets[k];
+      return t;
+    },
+    { deuda: 0, pagado: 0, saldo: 0, buckets: { v91: 0, v61_90: 0, v31_60: 0, v0_30: 0, porVenc: 0 } }
+  );
 const norm = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 
 /**
@@ -42,6 +63,7 @@ export function CarteraExtractView({ seller, cali, onOpenCustomer }: { seller: s
   });
   const [q, setQ] = useState('');
   const [onlyTotals, setOnlyTotals] = useState(false);
+  const [range, setRange] = useState<keyof ExtractBuckets | ''>('');
   const [closed, setClosed] = useState<Set<string>>(new Set());
   const [opened, setOpened] = useState<Set<string>>(new Set());
 
@@ -49,16 +71,23 @@ export function CarteraExtractView({ seller, cali, onOpenCustomer }: { seller: s
     const s = norm(q.trim());
     const digits = q.replace(/\D/g, '');
     if (!data) return [];
-    if (!s) return data.groups;
-    return data.groups.filter((g) => norm(g.name).includes(s) || norm(g.cliente).includes(s) || (digits.length >= 3 && g.cliente.replace(/\D/g, '').includes(digits)));
-  }, [data, q]);
+    const found = s
+      ? data.groups.filter((g) => norm(g.name).includes(s) || norm(g.cliente).includes(s) || (digits.length >= 3 && g.cliente.replace(/\D/g, '').includes(digits)))
+      : data.groups;
+    if (!range) return found;
+    // A range keeps only the invoices (and credit notes) of that age, with the customer's total redone for them.
+    return found.flatMap((g) => {
+      const rows = g.rows.filter((r) => rowRange(r) === range);
+      return rows.length ? [{ ...g, rows, total: sumRows(rows) }] : [];
+    });
+  }, [data, q, range]);
 
   if (isLoading) return <p className="text-sm text-muted-foreground">Armando el extracto…</p>;
   if (error) return <p className="text-sm text-destructive">{(error as Error).message}</p>;
   if (!data) return null;
 
-  // With a search, the totals shown are those of the customers found.
-  const shown = q.trim()
+  // With a search or a range, the totals shown are those of the customers (and invoices) found.
+  const shown = q.trim() || range
     ? groups.reduce(
         (t, g) => {
           t.deuda += g.total.deuda;
@@ -132,6 +161,22 @@ export function CarteraExtractView({ seller, cali, onOpenCustomer }: { seller: s
           ))}
         </div>
       </div>
+      <div className="flex flex-wrap items-center gap-1.5 px-3" role="group" aria-label="Filtrar por días">
+        <span className="text-xs text-muted-foreground">Días:</span>
+        {RANGES.map(([k, label]) => (
+          <button
+            key={k || 'todos'}
+            onClick={() => setRange(k)}
+            aria-pressed={range === k}
+            className={cn(
+              'h-8 rounded-full border px-3 text-xs',
+              range === k ? 'border-primary bg-primary font-semibold text-primary-foreground' : 'border-border/60 text-muted-foreground hover:text-foreground'
+            )}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
       <p className="px-3 text-[11px] text-muted-foreground">
         DiasVc = días que lleva la deuda, contados desde la fecha de expedición; el saldo va en el rango de esos días aunque la factura no
         haya vencido. Las notas crédito (en rojo) se restan solo en esta vista.
@@ -162,7 +207,7 @@ export function CarteraExtractView({ seller, cali, onOpenCustomer }: { seller: s
             {groups.length === 0 && (
               <tr>
                 <td colSpan={15} className="px-3 py-4 text-muted-foreground">
-                  {q ? `Ningún cliente coincide con «${q}».` : 'No hay cartera cargada.'}
+                  {q ? `Ningún cliente coincide con «${q}».` : range ? 'No hay facturas en ese rango de días.' : 'No hay cartera cargada.'}
                 </td>
               </tr>
             )}
@@ -176,7 +221,7 @@ export function CarteraExtractView({ seller, cali, onOpenCustomer }: { seller: s
           </tbody>
           <tfoot>
             <tr className="border-t-2 border-foreground/40 bg-emerald-500/10 font-bold">
-              <td className={cn(td, 'sticky left-0 bg-card')}>{q ? 'Total búsqueda' : 'Total general'}</td>
+              <td className={cn(td, 'sticky left-0 bg-card')}>{q || range ? 'Total filtrado' : 'Total general'}</td>
               <td className={td}>{groups.length} clientes</td>
               <td className={td} colSpan={4} />
               <td className={cn(td, right)}>{num(shown.deuda)}</td>
