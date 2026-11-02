@@ -125,7 +125,7 @@ Restos de una versión anterior: si en `receivables` hay facturas con `external_
 ## 4. Variables de entorno (solo nombres)
 
 Obligatorias: `INBOX_PASSWORD`, `CRM_DB_PATH`, `CARTERA_SHEET_URL`, `CARTERA_SHEET_KEY`.
-Opcionales: `CARTERA_SELLER` (solo cargar ese vendedor; ver sección 9), `INBOX_USERNAME` (por defecto `admin`), `INBOX_ACCESS_KEY` (enlace privado), `CRM_TOTP_SECRET` y `CRM_2FA_DAYS` (dos pasos), `CRM_DEFAULT_TERMS_DAYS` (plazo cuando falta una fecha, 30), `CRM_DEFAULT_COUNTRY_CODE` (57), `PUSH_SUBJECT` (mailto de Web Push), `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM`, `TWILIO_CALLER_ID`, `TWILIO_AGENT_PHONE`, `TWILIO_API_URL`, `TWILIO_MAX_CALLS_PER_HOUR`. De Next: `NODE_ENV`, `NEXT_RUNTIME`, `NEXT_DIST_DIR`.
+Opcionales: `CARTERA_SELLER` y `CARTERA_CALI_SELLER` (solo cargar ese vendedor; ver sección 9), `INBOX_USERNAME` (por defecto `admin`), `INBOX_ACCESS_KEY` (enlace privado), `CRM_TOTP_SECRET` y `CRM_2FA_DAYS` (dos pasos), `CRM_DEFAULT_TERMS_DAYS` (plazo cuando falta una fecha, 30), `CRM_DEFAULT_COUNTRY_CODE` (57), `PUSH_SUBJECT` (mailto de Web Push), `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM`, `TWILIO_CALLER_ID`, `TWILIO_AGENT_PHONE`, `TWILIO_API_URL`, `TWILIO_MAX_CALLS_PER_HOUR`. De Next: `NODE_ENV`, `NEXT_RUNTIME`, `NEXT_DIST_DIR`.
 Van en `/etc/crm/crm.env` (permisos 600), nunca en el código ni en un chat.
 
 ---
@@ -257,6 +257,8 @@ igual que antes.
    columna está vacía). Las filas de otros vendedores no se guardan y sus problemas no frenan la carga; la vista previa
    dice cuántas se dejaron fuera. Si no hay ninguna factura de ese vendedor, la carga se frena (nunca da todo por pagado).
    Sin la variable, carga todos los vendedores como el CRM original. Prueba: `tests/vendedor.e2e.js`.
+   La pestaña «Cartera Cali» puede tener otro vendedor: `CARTERA_CALI_SELLER="NOMBRE APELLIDO"` (si no está, usa
+   `CARTERA_SELLER`). Si en Cali no hay facturas de ese vendedor, se deja la copia anterior de Cali con aviso ⚠️.
 6. **Traer los WhatsApp del CRM original** (`deploy/importar-whatsapp.sh`): el CRM nuevo empieza sin contactos. Este script
    abre la base del CRM original SOLO PARA LEER y, para cada cliente con facturas aquí (Cartera o Cartera Cali) que allá
    ya estaba unido POR NIT («Es este» / «Sí, es él»), lo une aquí por la misma API de «Buscar su WhatsApp». Nunca por

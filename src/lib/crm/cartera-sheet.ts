@@ -75,6 +75,12 @@ export const sellerKey = (raw: string) =>
  * "Vendedor" of the header when the column is empty). Empty: every seller, as in the original CRM.
  */
 export const sellerFilter = () => sellerKey(process.env.CARTERA_SELLER ?? '');
+
+/**
+ * CARTERA_CALI_SELLER: the same filter for the "Cartera Cali" tab, whose seller can be another person. When it is not
+ * set, Cali uses CARTERA_SELLER.
+ */
+export const caliSellerFilter = () => sellerKey(process.env.CARTERA_CALI_SELLER ?? '') || sellerFilter();
 const num = (v: unknown) => (typeof v === 'number' ? v : parseAmount(cell(v)));
 
 /** Reads the tab's values (first rows: the filters, then the titles Cliente, Nombre_Cliente, T_Dcto, Documento...). */
@@ -181,7 +187,10 @@ export function parseCarteraTabs(tabs: SheetTabs): ParsedSheet {
   const main = parseCarteraSheet(tabs.main);
   if (!tabs.cali) return { ...main, caliSheet: null };
   try {
-    const cali = parseCarteraSheet(tabs.cali);
+    const cali = parseCarteraSheet(tabs.cali, caliSellerFilter());
+    // A wrong name must not wipe Cali: its last good copy stays, as with any other Cali problem.
+    if (cali.seller && !cali.invoices.length)
+      return { ...main, caliSheet: null, caliError: `no trae facturas del vendedor ${cali.seller} (revisa CARTERA_CALI_SELLER)` };
     if (cali.problems.length) return { ...main, caliSheet: null, caliError: `${cali.problems.length} fila(s) con datos incompletos (${cali.problems.slice(0, 3).join('; ')})` };
     return { ...main, caliSheet: cali };
   } catch (e) {
