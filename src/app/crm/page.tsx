@@ -32,7 +32,9 @@ export default function CrmPage() {
     console.info('Abrir ficha del cliente', id);
   };
   return (
-    <div className="min-h-dvh bg-background">
+    // html/body keep overflow: hidden (globals.css, from the inbox), so the page scrolls inside this box; the header stays
+    // sticky inside it. Without it the page cannot be scrolled on a phone at all.
+    <div className="h-dvh overflow-y-auto overscroll-contain bg-background" data-testid="crm-scroll">
       <header className="sticky top-0 z-20 border-b border-border/60 bg-background/80 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-3">
           <h1 className="flex-1 text-xl font-bold tracking-tight">CRM Alfonso</h1>

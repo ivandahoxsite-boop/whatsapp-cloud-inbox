@@ -4,6 +4,7 @@
 // haya facturas que vencen hoy, mañana, vencidas y viejas.
 //   node tests/hoja-simulada.js            -> escucha en http://127.0.0.1:4112/exec (clave: prueba)
 //   MODO=sin-cali | cali-danada | mitad    -> casos de error (sin pestaña Cali, Cali sin títulos, media hoja)
+//   MODO=grande                           -> 111 facturas de 60 clientes en la principal (para probar el scroll en el celular)
 // En el CRM de prueba: CARTERA_SHEET_URL=http://127.0.0.1:4112/exec CARTERA_SHEET_KEY=prueba
 const http = require('http');
 
@@ -32,7 +33,10 @@ const cali = [
 
 function body() {
   const modo = process.env.MODO || '';
-  const main = [...head(day(0)), TITLES, ...(modo === 'mitad' ? principal.slice(0, 2) : principal).map(row)];
+  // MODO=grande: muchas facturas inventadas, como una cartera real, para probar pantallas largas.
+  const grande = Array.from({ length: 111 }, (_, i) => [`9000001${String(i % 60).padStart(2, '0')}-${i % 9}`, `CLIENTE DEMO ${i % 60}`, 'FV', 910000 + i, (i * 7) % 120, 30, 100000 + i * 1000, 'VENDEDOR DEMO']);
+  const filasPrincipal = modo === 'mitad' ? principal.slice(0, 2) : modo === 'grande' ? [...principal, ...grande] : principal;
+  const main = [...head(day(0)), TITLES, ...filasPrincipal.map(row)];
   const pestanas = { 'Cartera por vendedor': main };
   if (modo === 'cali-danada') pestanas['Cartera Cali'] = [['sin títulos']];
   else if (modo !== 'sin-cali') pestanas['Cartera Cali'] = [...head(day(0)), TITLES, ...cali.map(row)];
