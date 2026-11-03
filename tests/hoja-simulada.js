@@ -5,6 +5,8 @@
 //   node tests/hoja-simulada.js            -> escucha en http://127.0.0.1:4112/exec (clave: prueba)
 //   MODO=sin-cali | cali-danada | mitad    -> casos de error (sin pestaña Cali, Cali sin títulos, media hoja)
 //   MODO=grande                           -> 111 facturas de 60 clientes en la principal (para probar el scroll en el celular)
+//   CALI_VENDEDOR="NOMBRE"                -> la pestaña Cali trae SOLO a ese vendedor (encabezado y filas), con 10 facturas,
+//                                            como el reporte real de Cali (que cambia de vendedor según quién lo exporte)
 // En el CRM de prueba: CARTERA_SHEET_URL=http://127.0.0.1:4112/exec CARTERA_SHEET_KEY=prueba
 const http = require('http');
 
@@ -39,7 +41,23 @@ function body() {
   const main = [...head(day(0)), TITLES, ...filasPrincipal.map(row)];
   const pestanas = { 'Cartera por vendedor': main };
   if (modo === 'cali-danada') pestanas['Cartera Cali'] = [['sin títulos']];
-  else if (modo !== 'sin-cali') pestanas['Cartera Cali'] = [...head(day(0)), TITLES, ...cali.map(row)];
+  else if (process.env.CALI_VENDEDOR) {
+    // Report of ONE seller, as the real "Cartera Cali" tab: its name in the header and in every row.
+    const v = process.env.CALI_VENDEDOR;
+    const filas = [
+      ['900000011-1', 'CLIENTE CALI DEMO UNO', 'FC', 800201, 30, 30, 980000], // vence hoy
+      ['900000012-2', 'CLIENTE CALI DEMO DOS', 'FC', 800202, 45, 30, 1250000], // 45 días
+      ['900000012-2', 'CLIENTE CALI DEMO DOS', 'FC', 800205, 70, 30, 410000], // 70 días
+      ['900000014-4', 'CLIENTE CALI DEMO CUATRO', 'FC', 800206, 95, 30, 760000], // más de 90
+      ['900000015-5', 'CLIENTE CALI DEMO CINCO', 'FC', 800207, 33, 30, 120000], // vencida hace 3 días
+      ['900000016-6', 'CLIENTE CALI DEMO SEIS', 'FC', 800208, 26, 30, 230000], // vence en 4 días
+      ['900000017-7', 'CLIENTE CALI DEMO SIETE', 'FC', 800209, 12, 30, 540000], // al día
+      ['900000001-1', 'CLIENTE DEMO UNO SAS', 'FC', 800203, 29, 30, 300000], // mismo NIT que en la principal
+      ['900000018-8', 'CLIENTE CALI DEMO OCHO', 'FC', 800210, 58, 30, 650000], // 58 días
+      ['900000018-8', 'CLIENTE CALI DEMO OCHO', 'NC', 700210, 20, 0, -50000] // nota crédito
+    ];
+    pestanas['Cartera Cali'] = [['Fecha inicio', '2021/01/01', 'Fecha final', day(0), 'Vendedor', v], [], TITLES, ...filas.map((f) => row([...f, v]))];
+  } else if (modo !== 'sin-cali') pestanas['Cartera Cali'] = [...head(day(0)), TITLES, ...cali.map(row)];
   return { ok: true, pestana: 'Cartera por vendedor', filas: main, pestanas, faltan: modo === 'sin-cali' ? ['Cartera Cali'] : [] };
 }
 
