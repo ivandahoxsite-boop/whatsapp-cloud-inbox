@@ -115,14 +115,23 @@ export function CaliView({ onOpenCustomer }: { onOpenCustomer: (id: number) => v
             </button>
           ))}
         </div>
-        <select value={seller} onChange={(e) => setSeller(e.target.value)} className={select} aria-label="Vendedor">
-          <option value="">Todos los vendedores</option>
-          {(data?.sellers ?? []).map((s) => (
-            <option key={s} value={s}>
-              {s}
-            </option>
-          ))}
-        </select>
+        {/* This CRM loads one seller per tab (CARTERA_SELLER / CARTERA_CALI_SELLER): no seller picker, only the name. */}
+        {(data?.sellers ?? []).length > 1 ? (
+          <select value={seller} onChange={(e) => setSeller(e.target.value)} className={select} aria-label="Vendedor">
+            <option value="">Todos los vendedores</option>
+            {(data?.sellers ?? []).map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </select>
+        ) : (
+          (data?.sellers ?? [])[0] && (
+            <span className="rounded-full border border-border/60 bg-card/60 px-3 py-1.5 text-sm" data-testid="vendedor">
+              Vendedor: <b>{(data?.sellers ?? [])[0]}</b>
+            </span>
+          )
+        )}
       </div>
 
       {/* The same sheet: Cali is read with "Cartera por vendedor", at the same times and with the same button. */}
