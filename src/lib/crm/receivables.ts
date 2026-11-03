@@ -145,6 +145,8 @@ export type Debtor = {
   oldestDoc: string;
   oldestBalance: number;
   invoices: number;
+  /** Its invoices in the list (only those of the chosen aging range), most days first: shown under the name, as in Cali. */
+  docs: { doc: string; balance: number; late: number }[];
 };
 
 export type AgingKey = 'current' | 'd1_30' | 'd31_60' | 'd61_90' | 'd90';
@@ -215,13 +217,14 @@ export function receivablesSummary(filter: { seller?: string; bucket?: AgingKey 
     allDebtors.add(r.contact_id);
     if (filter.bucket && AGING_KEYS[bucket] !== filter.bucket) continue;
     const dbt = debtors.get(r.contact_id) ?? {
-      contactId: r.contact_id, name: r.name, phone: r.phone, hasPhone: /^\d{7,}$/.test(r.phone), seller: r.seller, balance: 0, overdue: 0, oldestDays: 0, oldestDoc: '', oldestBalance: 0, invoices: 0
+      contactId: r.contact_id, name: r.name, phone: r.phone, hasPhone: /^\d{7,}$/.test(r.phone), seller: r.seller, balance: 0, overdue: 0, oldestDays: 0, oldestDoc: '', oldestBalance: 0, invoices: 0, docs: []
     };
     dbt.balance += r.balance;
     if (late > 0) dbt.overdue += r.balance;
     if (late > 0 && late >= dbt.oldestDays) Object.assign(dbt, { oldestDoc: r.doc, oldestBalance: r.balance });
     dbt.oldestDays = Math.max(dbt.oldestDays, late);
     dbt.invoices++;
+    dbt.docs.push({ doc: r.doc, balance: r.balance, late });
     debtors.set(r.contact_id, dbt);
   }
 
@@ -232,7 +235,11 @@ export function receivablesSummary(filter: { seller?: string; bucket?: AgingKey 
     aging,
     bucket: filter.bucket ?? null,
     bySeller: [...bySeller].map(([name, v]) => ({ name, ...v })).sort((a, b) => b.overdue - a.overdue || b.balance - a.balance),
-    debtors: [...debtors.values()].sort((a, b) => b.overdue - a.overdue || b.balance - a.balance).slice(0, 100),
+    // Most days late first (as «Quién debe · Cali»), then the biggest overdue.
+    debtors: [...debtors.values()]
+      .map((d) => ({ ...d, docs: d.docs.sort((a, b) => b.late - a.late) }))
+      .sort((a, b) => b.oldestDays - a.oldestDays || b.overdue - a.overdue || b.balance - a.balance)
+      .slice(0, 100),
     sellers: [...sellers].sort(),
     freshness: receivablesFreshness(now.getTime())
   };

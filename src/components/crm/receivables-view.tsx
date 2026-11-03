@@ -17,6 +17,12 @@ export const select = 'h-9 rounded-full border border-border/60 bg-card/50 px-3 
 const cobroText = (d: { name: string; oldestDoc: string; oldestBalance: number; oldestDays: number }) =>
   d.oldestDoc ? collectionMessage(d.name, [{ doc: d.oldestDoc, balance: d.oldestBalance, daysLate: d.oldestDays }])?.text : undefined;
 
+/** After tapping an aging range: bring «Quién debe» (now filtered) into view, below the sticky header. */
+export function jumpTo(id: string) {
+  // Wait for the filtered list to render, then scroll the page box (not the window: html/body do not scroll).
+  window.setTimeout(() => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 250);
+}
+
 export const AGING_COLOR = ['#34d399', '#fbbf24', '#fb923c', '#f87171', '#e11d48'];
 
 export function ReceivablesView({ onOpenCustomer }: { onOpenCustomer: (id: number) => void }) {
@@ -116,7 +122,8 @@ export function ReceivablesView({ onOpenCustomer }: { onOpenCustomer: (id: numbe
   const maxAging = Math.max(1, ...data.aging.map((a) => a.amount));
   const maxSeller = Math.max(1, ...data.bySeller.map((s) => s.balance));
   return (
-    <div className="space-y-4">
+    // flex + order: with an aging range chosen, «Quién debe» moves above «Clientes de la hoja sin WhatsApp».
+    <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-sm text-muted-foreground">¿Cómo quieres ver la cartera?</span>
         <div className="flex rounded-full border border-border/60 bg-card/60 p-0.5 text-xs" role="group" aria-label="Vista de la cartera">
@@ -178,7 +185,11 @@ export function ReceivablesView({ onOpenCustomer }: { onOpenCustomer: (id: numbe
           {data.aging.map((a, i) => (
             <li key={a.key}>
               <button
-                onClick={() => setBucket(bucket === a.key ? '' : a.key)}
+                onClick={() => {
+                  const next = bucket === a.key ? '' : a.key;
+                  setBucket(next);
+                  if (next) jumpTo('quien-debe');
+                }}
                 aria-pressed={bucket === a.key}
                 className={cn(
                   'block w-full rounded-lg border border-transparent p-2 text-left transition-colors hover:bg-accent/40',
@@ -222,9 +233,11 @@ export function ReceivablesView({ onOpenCustomer }: { onOpenCustomer: (id: numbe
         </section>
       )}
 
-      <CarteraLinks onOpenCustomer={onOpenCustomer} />
+      <div className={cn('empty:hidden', bucket && 'order-2')}>
+        <CarteraLinks onOpenCustomer={onOpenCustomer} />
+      </div>
 
-      <section className={card}>
+      <section id="quien-debe" className={cn(card, 'scroll-mt-28', bucket && 'order-1')}>
         <h2 className="text-sm font-medium">{bucket ? `Quién debe · ${data.aging.find((a) => a.key === bucket)?.label ?? ''}` : 'Quién debe'}</h2>
         {bucket ? (
           <p className="mb-3 flex items-center gap-2 text-xs text-muted-foreground">
@@ -236,7 +249,7 @@ export function ReceivablesView({ onOpenCustomer }: { onOpenCustomer: (id: numbe
             </button>
           </p>
         ) : (
-          <p className="mb-3 text-xs text-muted-foreground">Los que más tienen vencido primero. <b>WhatsApp</b> abre el chat con el mensaje de cobro listo para enviar. El recordatorio queda en Aprobaciones; no sale solo. <b>Llamar</b> abre el marcador de tu celular y después te deja anotar cómo te fue. <b>Programar</b> deja la llamada para una fecha y hora.</p>
+          <p className="mb-3 text-xs text-muted-foreground">Los que más días llevan primero. <b>WhatsApp</b> abre el chat con el mensaje de cobro listo para enviar. El recordatorio queda en Aprobaciones; no sale solo. <b>Llamar</b> abre el marcador de tu celular y después te deja anotar cómo te fue. <b>Programar</b> deja la llamada para una fecha y hora.</p>
         )}
         {note && <p className="mb-3 rounded-md border bg-background/40 p-2 text-xs">{note}</p>}
         <ul className="space-y-2">
@@ -258,6 +271,20 @@ export function ReceivablesView({ onOpenCustomer }: { onOpenCustomer: (id: numbe
                   </p>
                 </div>
               </div>
+              {/* Its invoices (of the chosen range), as in «Quién debe · Cali». */}
+              <ul className="mt-1 space-y-0.5 text-xs" data-testid="facturas-deudor">
+                {d.docs.map((i) => (
+                  <li key={i.doc} className={cn('flex gap-2', i.late > 0 && 'text-rose-600 dark:text-rose-400')}>
+                    <span className="flex-1">
+                      🧾 Fact. {i.doc} · {i.late > 0 ? `${i.late} días` : 'al día'}
+                    </span>
+                    <span className="tabular-nums">$ {money(i.balance)}</span>
+                  </li>
+                ))}
+              </ul>
+              {!d.hasPhone && (
+                <p className="mt-1 text-xs text-muted-foreground">📵 Únelo con su WhatsApp en «Clientes de la hoja sin WhatsApp» para poder escribirle o llamarlo.</p>
+              )}
               {d.hasPhone && d.overdue > 0 && (
                 <>
                   {scheduledOf.get(d.contactId)?.label && (

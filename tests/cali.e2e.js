@@ -110,6 +110,30 @@ const ok = (cond, que) => {
     const ex90 = await p.locator('table').first().locator('tbody').innerText();
     ok(ex90.includes('800206') && !ex90.includes('800202'), 'Extracto Cali: «Más de 90» deja solo la factura de 95 días');
     await p.screenshot({ path: path.join(FOTOS, '9-cali-extracto.png') });
+
+    // Al tocar un rango de «Antigüedad», la pantalla baja sola a «Quién debe» filtrado (no se queda en «sin WhatsApp»).
+    const enPantalla = async (loc) => {
+      const box = await loc.boundingBox();
+      return !!box && box.y >= 0 && box.y < 420;
+    };
+    await abrirCali();
+    await p.locator('section', { has: p.getByRole('heading', { name: 'Antigüedad de la deuda · Cali' }) }).getByRole('button', { name: /Más de 90/ }).click();
+    await p.waitForTimeout(1500);
+    ok(await enPantalla(p.getByRole('heading', { name: /Quién debe · Cali · Más de 90/ })), 'Cali: al tocar «Más de 90» la pantalla baja sola a «Quién debe · Cali · Más de 90»');
+    await p.screenshot({ path: path.join(FOTOS, '10-cali-salto.png') });
+
+    await p.goto(`${URL_CRM}/crm`);
+    await p.evaluate(() => localStorage.setItem('crm-cartera-view', 'resumen'));
+    await p.reload();
+    await p.waitForTimeout(2500);
+    await p.locator('section', { has: p.getByRole('heading', { name: 'Antigüedad de la deuda', exact: true }) }).getByRole('button', { name: /Más de 90/ }).click();
+    await p.waitForTimeout(1500);
+    const qd = p.getByRole('heading', { name: /^Quién debe · Más de 90/ });
+    ok(await enPantalla(qd), 'Medellín: al tocar «Más de 90» la pantalla baja sola a «Quién debe · Más de 90»');
+    const lista = await p.locator('#quien-debe').innerText();
+    ok(/🧾 Fact\. \d+ · \d+ días/.test(lista) && !/al día/.test(lista), 'Medellín: «Quién debe» muestra cada factura con sus días (solo las del rango)');
+    ok(lista.includes('Únelo con su WhatsApp'), 'Medellín: a los clientes sin WhatsApp les dice cómo unirlos');
+    await p.screenshot({ path: path.join(FOTOS, '11-medellin-salto.png') });
   }
   ok(errores.length === 0, `Sin errores en la página ${errores.length ? JSON.stringify(errores) : ''}`);
   await b.close();

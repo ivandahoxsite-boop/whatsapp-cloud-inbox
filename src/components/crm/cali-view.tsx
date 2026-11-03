@@ -10,7 +10,7 @@ import { cn } from '@/lib/utils';
 import { CarteraExtractView } from './cartera-extract';
 import { CarteraSheetBox, LinkRow } from './cartera-sheet-panel';
 import { DueSoon } from './due-soon';
-import { AGING_COLOR, CallLog, ScheduleCall, select } from './receivables-view';
+import { AGING_COLOR, CallLog, ScheduleCall, jumpTo, select } from './receivables-view';
 import { Stat, WhatsAppLink, api, card, checkCollection, cop, formatPhone, money, twilioCall, useTwilio } from './shared';
 
 const VIEW_KEY = 'crm-cali-view';
@@ -95,7 +95,8 @@ export function CaliView({ onOpenCustomer }: { onOpenCustomer: (id: number) => v
   const inRange = debtors.reduce((a, d) => a + d.invoices.reduce((s, i) => s + i.balance, 0), 0);
 
   return (
-    <div className="space-y-4">
+    // flex + order: with an aging range chosen, «Quién debe · Cali» moves above «Clientes de Cali sin WhatsApp».
+    <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-sm text-muted-foreground">¿Cómo quieres ver la cartera de Cali?</span>
         <div className="flex rounded-full border border-border/60 bg-card/60 p-0.5 text-xs" role="group" aria-label="Vista de la cartera de Cali">
@@ -162,7 +163,11 @@ export function CaliView({ onOpenCustomer }: { onOpenCustomer: (id: number) => v
                   {data.aging.map((a, i) => (
                     <li key={a.label}>
                       <button
-                        onClick={() => setRange(range === i ? -1 : i)}
+                        onClick={() => {
+                          const next = range === i ? -1 : i;
+                          setRange(next);
+                          if (next >= 0) jumpTo('quien-debe-cali');
+                        }}
                         aria-pressed={range === i}
                         className={cn(
                           'block w-full rounded-lg border border-transparent p-2 text-left transition-colors hover:bg-accent/40',
@@ -209,7 +214,7 @@ export function CaliView({ onOpenCustomer }: { onOpenCustomer: (id: number) => v
           )}
 
           {data && data.unlinked.length > 0 && (
-            <section className={card}>
+            <section className={cn(card, range >= 0 && 'order-2')}>
               <h2 className="text-sm font-medium">📵 Clientes de Cali sin WhatsApp ({data.unlinked.length})</h2>
               <p className="mb-2 text-xs text-muted-foreground">
                 Sin su WhatsApp no se les puede escribir. Toca «Buscar su WhatsApp», escribe su nombre o celular y elige «Es este».
@@ -228,7 +233,7 @@ export function CaliView({ onOpenCustomer }: { onOpenCustomer: (id: number) => v
           )}
 
           {data && data.invoices > 0 && (
-            <section id="quien-debe-cali" className={card}>
+            <section id="quien-debe-cali" className={cn(card, 'scroll-mt-28', range >= 0 && 'order-1')}>
               <h2 className="text-sm font-medium">{range >= 0 ? `Quién debe · Cali · ${data.aging[range].label}` : 'Quién debe · Cali'}</h2>
               {range >= 0 ? (
                 <p className="mb-3 flex items-center gap-2 text-xs text-muted-foreground">
