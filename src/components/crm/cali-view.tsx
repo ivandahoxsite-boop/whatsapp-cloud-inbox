@@ -126,7 +126,7 @@ export function CaliView({ onOpenCustomer }: { onOpenCustomer: (id: number) => v
       </div>
 
       {/* The same sheet: Cali is read with "Cartera por vendedor", at the same times and with the same button. */}
-      <CarteraSheetBox freshness={null} />
+      <CarteraSheetBox freshness={null} cali />
 
       {view === 'extracto' ? (
         <CarteraExtractView seller={seller} cali onOpenCustomer={onOpenCustomer} />

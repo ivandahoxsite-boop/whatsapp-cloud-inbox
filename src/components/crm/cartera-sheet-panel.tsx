@@ -9,7 +9,12 @@ import type { ReceivablesFreshness } from '@/lib/crm/receivables';
 import { coDateTime, dayWord } from '@/lib/crm/tasks-info';
 import { api, card, formatPhone, money } from './shared';
 
-type SheetStatus = { configured: boolean; last: CarteraLast | null };
+type SheetStatus = {
+  configured: boolean;
+  last: CarteraLast | null;
+  seller: { main: string | null; cali: string | null };
+  sellers: { main: string[]; cali: string[] };
+};
 
 const shortDay = (iso: string) => {
   const [y, m, d] = iso.split('-');
@@ -24,7 +29,7 @@ export function useCarteraSheet() {
  * When the cartera was last brought in and, with the Google Sheet connected, a button to read it now: it first shows
  * what would change (invoices that move to another customer, invoices taken as paid) and loads only on confirm.
  */
-export function CarteraSheetBox({ freshness }: { freshness: ReceivablesFreshness | null }) {
+export function CarteraSheetBox({ freshness, cali }: { freshness: ReceivablesFreshness | null; cali?: boolean }) {
   const qc = useQueryClient();
   const { data: sheet } = useCarteraSheet();
   const [plan, setPlan] = useState<CarteraPlan | null>(null);
@@ -32,6 +37,21 @@ export function CarteraSheetBox({ freshness }: { freshness: ReceivablesFreshness
   const [msg, setMsg] = useState('');
   const configured = !!sheet?.configured;
   const last = sheet?.last;
+  // The seller this CRM loads (each CRM picks its own; the sheet's shared filter cell no longer decides it).
+  const seller = (cali ? sheet?.seller?.cali : sheet?.seller?.main) ?? '';
+  const sellers = [...new Set([...(cali ? sheet?.sellers?.cali : sheet?.sellers?.main) ?? [], ...(seller ? [seller] : [])])].sort();
+  const pickSeller = async (s: string) => {
+    if (!s || s === seller) return;
+    setMsg('');
+    try {
+      await api('/api/crm/receivables/sheet', 'POST', { action: 'seller', seller: s, cali: !!cali });
+      await qc.invalidateQueries({ queryKey: ['crm-cartera-sheet'] });
+      // Nothing is loaded yet: the preview opens so the user sees what that seller's cartera brings, and confirms.
+      await preview();
+    } catch (e) {
+      setMsg((e as Error).message);
+    }
+  };
 
   const preview = async () => {
     setBusy(true);
@@ -140,6 +160,26 @@ export function CarteraSheetBox({ freshness }: { freshness: ReceivablesFreshness
           {busy ? 'Actualizando…' : '🔄 Actualizar ahora'}
         </Button>
       )}
+      {configured && (
+        <label className="flex flex-wrap items-center gap-2 text-foreground">
+          <span>Vendedor de este CRM{cali ? ' · Cali' : ''}:</span>
+          <select
+            value={seller}
+            onChange={(e) => pickSeller(e.target.value)}
+            disabled={busy}
+            aria-label={cali ? 'Vendedor de Cartera Cali' : 'Vendedor de este CRM'}
+            className="h-8 rounded-full border border-border/60 bg-card px-3 text-xs font-semibold"
+          >
+            {!seller && <option value="">— Elige el vendedor —</option>}
+            {sellers.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </select>
+          {!seller && <span className="text-amber-600 dark:text-amber-400">Sin elegir: se carga lo que muestre la hoja.</span>}
+        </label>
+      )}
       {configured && !plan && (
         <button className="underline" onClick={preview} disabled={busy}>
           Ver qué cambia antes de cargar
@@ -156,7 +196,11 @@ function PlanPreview({ plan, busy, onLoad, onCancel }: { plan: CarteraPlan; busy
   return (
     <div className="mt-2 space-y-2 rounded-lg border border-border/60 bg-background/60 p-2 text-foreground">
       <p className="font-medium">
-        La hoja{plan.corte ? ` (corte ${shortDay(plan.corte)})` : ''} trae {plan.invoices} facturas de {plan.customers} clientes por {money(plan.total)}.
+        La hoja{plan.corte ? ` (corte ${shortDay(plan.corte)})` : ''} trae {plan.invoices} facturas de {plan.customers} clientes por {money(plan.total)}
+        {plan.seller ? ` · vendedor ${plan.seller}` : ''}.
+      </p>
+      <p className="text-muted-foreground">
+        Leído de la pestaña «{plan.source}»{plan.caliSeller ? ` · Cali: vendedor ${plan.caliSeller}` : ''}.
       </p>
       <ul className="list-disc space-y-0.5 pl-4 text-muted-foreground">
         <li>

@@ -1,11 +1,13 @@
 /**
- * Xsite CRM: entrega al CRM las pestañas de cartera ("Cartera por vendedor" y "Cartera Cali"). Solo lee; no cambia nada.
+ * Xsite CRM: entrega al CRM las pestañas de cartera ("Cartera por vendedor", "Cartera Cali" y las de todos los vendedores). Solo lee; no cambia nada.
  * Va en un proyecto de Apps Script APARTE (script.google.com → Nuevo proyecto), nunca dentro del de la hoja:
  * así no toca el código que ya tenga la hoja. Lo instala deploy/setup-cartera-hoja.sh, que pone la hoja y la clave.
  */
 const CRM_CLAVE = '__CLAVE__';
 const CRM_HOJA = '__HOJA__';
-const CRM_PESTANAS = ['Cartera por vendedor', 'Cartera Cali'];
+// "Import_Extracto" / "Import_ExtractoCali" traen la cartera de TODOS los vendedores: el CRM filtra la del vendedor
+// que se elija en el CRM, así el filtro "Vendedor" de "Cartera por vendedor" ya no decide qué carga cada CRM.
+const CRM_PESTANAS = ['Cartera por vendedor', 'Cartera Cali', 'Import_Extracto', 'Import_ExtractoCali'];
 
 function doGet(e) {
   const salida = (o) => ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON);

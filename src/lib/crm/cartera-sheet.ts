@@ -53,6 +53,9 @@ export type ParsedSheet = {
   caliSheet?: ParsedSheet | null;
   /** Why the Cali tab could not be read this time (its last good copy stays; the main tab loads anyway). */
   caliError?: string;
+  /** The seller read and the tab it came from (shown in the preview). */
+  seller?: string | null;
+  source?: string;
 };
 
 /** "900123456-7" -> "9001234567", "c133" -> "C133": letters and digits only. */
@@ -62,8 +65,15 @@ export const clienteKey = (raw: string) =>
 const cell = (v: unknown) => (v === null || v === undefined ? '' : String(v).trim());
 const num = (v: unknown) => (typeof v === 'number' ? v : parseAmount(cell(v)));
 
-/** Reads the tab's values (first rows: the filters, then the titles Cliente, Nombre_Cliente, T_Dcto, Documento...). */
-export function parseCarteraSheet(rows: unknown[][]): ParsedSheet {
+/** "Iván  Hoyos" -> "IVAN HOYOS": how seller names are compared. */
+export const sellerKey = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/\s+/g, ' ').trim();
+
+/**
+ * Reads the tab's values (first rows: the filters, then the titles Cliente, Nombre_Cliente, T_Dcto, Documento...).
+ * With `seller`, only that seller's rows are read (column Nombre_Vendedor); the others are skipped before any check,
+ * so another seller's incomplete row never stops this one.
+ */
+export function parseCarteraSheet(rows: unknown[][], opts: { seller?: string } = {}): ParsedSheet {
   const h = rows.findIndex((r) => Array.isArray(r) && r.some((c) => cell(c) === 'Documento') && r.some((c) => cell(c) === 'Cliente'));
   if (h < 0) throw new Error('No encuentro los títulos de la cartera (Cliente, Documento…) en la pestaña');
   const titles = rows[h].map((c) => cell(c).toLowerCase());
@@ -73,6 +83,7 @@ export function parseCarteraSheet(rows: unknown[][]): ParsedSheet {
   if (missing.length) throw new Error(`Faltan columnas en la pestaña: ${missing.join(', ')}`);
   const [iCli, iName, iTipo, iDoc, iExp, iVen, iDeuda, iSaldo] = need.map(col);
   const iSeller = col('Nombre_Vendedor');
+  if (opts.seller && iSeller < 0) throw new Error('La pestaña no tiene la columna Nombre_Vendedor para separar el vendedor');
 
   // Header area: "Fecha final" (the cut-off date of the report) and "Vendedor", each followed by its value.
   const after = (label: string) => {
@@ -93,7 +104,9 @@ export function parseCarteraSheet(rows: unknown[][]): ParsedSheet {
   rows.slice(h + 1).forEach((r, i) => {
     const line = h + i + 2;
     const doc = cell(r?.[iDoc]);
-    if (!doc) return;
+    // Empty rows and the "---------" line under the titles of the system's export.
+    if (!doc || /^-+$/.test(doc)) return;
+    if (opts.seller && sellerKey(cell(r[iSeller])) !== sellerKey(opts.seller)) return;
     const tipo = cell(r[iTipo]).toUpperCase();
     const balance = num(r[iSaldo]);
     // Credit notes are crossed by hand by the user: they never reach the CRM.
@@ -138,7 +151,89 @@ export function parseCarteraSheet(rows: unknown[][]): ParsedSheet {
   return { invoices, creditNotes, credits, corte, problems };
 }
 
-export type SheetTabs = { main: unknown[][]; cali: unknown[][] | null };
+/**
+ * The tabs the Apps Script hands over. `extract` / `extractCali` ("Import_Extracto" / "Import_ExtractoCali") carry
+ * EVERY seller's cartera: with a seller chosen in the CRM it is read from them, filtered, so the seller filter cell of
+ * "Cartera por vendedor" (shared with other CRMs) no longer decides what this CRM loads (user's request, 3-nov-2026).
+ */
+export type SheetTabs = { main: unknown[][]; cali: unknown[][] | null; extract?: unknown[][] | null; extractCali?: unknown[][] | null };
+export const EXTRACT_TAB = 'Import_Extracto';
+export const EXTRACT_CALI_TAB = 'Import_ExtractoCali';
+export const SELLER_SETTING = 'cartera_seller';
+export const CALI_SELLER_SETTING = 'cartera_cali_seller';
+const SELLERS_SETTING = 'cartera_sellers';
+
+const getSetting = (key: string) => (getDb().prepare('SELECT value FROM settings WHERE key = ?').get(key) as { value: string } | undefined)?.value ?? null;
+const putSetting = (key: string, value: string) => getDb().prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)').run(key, value);
+
+/** The seller this CRM loads (main and Cali), or null when none was chosen (then the tab is read as it comes). */
+export function chosenSellers(): { main: string | null; cali: string | null } {
+  return { main: getSetting(SELLER_SETTING), cali: getSetting(CALI_SELLER_SETTING) };
+}
+export function setChosenSeller(seller: string, cali = false) {
+  const s = sellerKey(String(seller ?? ''));
+  if (!s) throw new Error('Elige un vendedor');
+  putSetting(cali ? CALI_SELLER_SETTING : SELLER_SETTING, s);
+}
+/** The sellers seen in the last reading of the sheet, to pick from. */
+export function knownSellers(): { main: string[]; cali: string[] } {
+  try {
+    return JSON.parse(getSetting(SELLERS_SETTING) ?? '') as { main: string[]; cali: string[] };
+  } catch {
+    return { main: [], cali: [] };
+  }
+}
+
+/** The sellers of a tab: its rows' Nombre_Vendedor, and the "Vendedor" of its header. */
+function sellersOf(rows: unknown[][] | null | undefined): string[] {
+  if (!rows) return [];
+  const h = rows.findIndex((r) => Array.isArray(r) && r.some((c) => cell(c) === 'Documento') && r.some((c) => cell(c) === 'Cliente'));
+  if (h < 0) return [];
+  const i = rows[h].map((c) => cell(c).toLowerCase()).indexOf('nombre_vendedor');
+  const out = new Set<string>();
+  for (const r of rows.slice(0, h)) {
+    const j = (r ?? []).findIndex((c) => cell(c).toLowerCase() === 'vendedor');
+    if (j >= 0 && cell(r[j + 1])) out.add(sellerKey(cell(r[j + 1])));
+  }
+  if (i >= 0) for (const r of rows.slice(h + 1)) if (cell(r?.[i]) && !/^-+$/.test(cell(r[i]))) out.add(sellerKey(cell(r[i])));
+  return [...out].sort();
+}
+
+/** The "Fecha final" (cut-off date) written in a tab's header, or null. */
+function headerCorte(rows: unknown[][]): string | null {
+  for (const r of rows.slice(0, 5)) {
+    const j = (r ?? []).findIndex((c) => cell(c).toLowerCase() === 'fecha final');
+    if (j >= 0) return parseDate(cell(r[j + 1]));
+  }
+  return null;
+}
+
+/** The "Vendedor" written in a filtered tab's header (what "Cartera por vendedor" shows right now). */
+function headerSeller(rows: unknown[][]): string {
+  for (const r of rows.slice(0, 5)) {
+    const j = (r ?? []).findIndex((c) => cell(c).toLowerCase() === 'vendedor');
+    if (j >= 0) return sellerKey(cell(r[j + 1]));
+  }
+  return '';
+}
+
+/**
+ * One cartera (main or Cali) for the chosen seller: from the all-sellers tab when it came and has rows of that seller;
+ * else from the filtered tab, only if its header filter is that same seller. Never another seller's cartera.
+ */
+function readFor(seller: string | null, filtered: unknown[][], all: unknown[][] | null | undefined, name: string): ParsedSheet {
+  if (!seller) return { ...parseCarteraSheet(filtered), seller: null, source: name };
+  if (all) {
+    const fromAll = parseCarteraSheet(all, { seller });
+    // The all-sellers export has no header with the cut-off date: it is taken from the filtered tab's header.
+    if (fromAll.invoices.length || fromAll.creditNotes)
+      return { ...fromAll, corte: fromAll.corte ?? headerCorte(filtered), seller, source: name === CALI_TAB ? EXTRACT_CALI_TAB : EXTRACT_TAB };
+  }
+  const shown = headerSeller(filtered);
+  if (shown && shown !== sellerKey(seller))
+    throw new Error(`La pestaña «${name}» está filtrada para ${shown} y este CRM es de ${seller}: no se cargó, para no traer la cartera de otro vendedor`);
+  return { ...parseCarteraSheet(filtered, { seller }), seller, source: name };
+}
 
 /** Downloads the tabs through the Apps Script web app. The key keeps anyone else with the link out. */
 export async function fetchCarteraSheet(): Promise<SheetTabs> {
@@ -151,19 +246,22 @@ export async function fetchCarteraSheet(): Promise<SheetTabs> {
   if (!body) throw new Error('Google no devolvió la cartera: revisa que el Apps Script esté implementado con acceso "Cualquier persona"');
   if (body.error) throw new Error(body.error === 'clave' ? 'La clave del Apps Script no coincide con la del CRM' : `Apps Script: ${body.error}`);
   if (!Array.isArray(body.filas)) throw new Error('El Apps Script no devolvió filas');
-  const cali = body.pestanas?.[CALI_TAB];
-  return { main: body.filas, cali: Array.isArray(cali) ? cali : null };
+  const tab = (name: string) => (Array.isArray(body.pestanas?.[name]) ? body.pestanas![name] : null);
+  const tabs = { main: body.filas, cali: tab(CALI_TAB), extract: tab(EXTRACT_TAB), extractCali: tab(EXTRACT_CALI_TAB) };
+  // The sellers to pick from in the CRM, from this reading.
+  putSetting(SELLERS_SETTING, JSON.stringify({ main: sellersOf(tabs.extract ?? tabs.main), cali: sellersOf(tabs.extractCali ?? tabs.cali) }));
+  return tabs;
 }
 
 /**
  * The main tab, with the Cali tab read apart. The main tab never depends on Cali: if the Cali tab is missing,
  * unreadable or has incomplete rows, only Cali is left as it was and the main tab loads as always.
  */
-export function parseCarteraTabs(tabs: SheetTabs): ParsedSheet {
-  const main = parseCarteraSheet(tabs.main);
-  if (!tabs.cali) return { ...main, caliSheet: null };
+export function parseCarteraTabs(tabs: SheetTabs, sellers = chosenSellers()): ParsedSheet {
+  const main = readFor(sellers.main, tabs.main, tabs.extract, 'Cartera por vendedor');
+  if (!tabs.cali && !(sellers.cali && tabs.extractCali)) return { ...main, caliSheet: null };
   try {
-    const cali = parseCarteraSheet(tabs.cali);
+    const cali = readFor(sellers.cali, tabs.cali ?? [], tabs.extractCali, CALI_TAB);
     if (cali.problems.length) return { ...main, caliSheet: null, caliError: `${cali.problems.length} fila(s) con datos incompletos (${cali.problems.slice(0, 3).join('; ')})` };
     return { ...main, caliSheet: cali };
   } catch (e) {
@@ -229,6 +327,10 @@ export type CarteraPlan = {
   caliError?: string;
   /** Cali invoices that the first version had mixed into the main cartera, taken out on this load. */
   caliMixed: number;
+  /** The seller this CRM loads (null = the tab as it comes) and the tab read. */
+  seller: string | null;
+  source: string;
+  caliSeller: string | null;
 };
 
 const who = (c: Contact | null | undefined, fallback: string) =>
@@ -250,7 +352,10 @@ export function planCartera(sheet: ParsedSheet): CarteraPlan {
     created: 0, updated: 0, closed: 0, closedAmount: 0, moves: [], problems: sheet.problems, blockers: [],
     cali: sheet.caliSheet ? { invoices: sheet.caliSheet.invoices.length, total: sheet.caliSheet.invoices.reduce((a, i) => a + i.balance, 0) } : null,
     caliError: sheet.caliError,
-    caliMixed: open.filter((r) => r.external_id.startsWith(CALI_PREFIX)).length
+    caliMixed: open.filter((r) => r.external_id.startsWith(CALI_PREFIX)).length,
+    seller: sheet.seller ?? null,
+    source: sheet.source ?? 'Cartera por vendedor',
+    caliSeller: sheet.caliSheet?.seller ?? null
   };
   const targets = new Map<string, ReturnType<typeof target>>();
   for (const inv of sheet.invoices) {
