@@ -21,6 +21,13 @@ const MAX_CLOSED_SHARE = 0.15;
  * "CALI-<doc>" receivables are leftovers of the first version that mixed them, removed on the next load.
  */
 export const CALI_TAB = 'Cartera Cali';
+/**
+ * Tab names this CRM reads (the Apps Script's CRM_PESTANAS must send them). Configurable so that a second CRM can read
+ * its OWN tabs with a fixed seller (e.g. "Cartera Alfonso", "Cartera Cali Ricardo") and not the shared tabs whose
+ * seller selector another CRM changes. CARTERA_TAB: main tab (checked: a different one is refused, never loaded).
+ */
+const mainTabName = () => process.env.CARTERA_TAB?.trim() || '';
+const caliTabName = () => process.env.CARTERA_CALI_TAB?.trim() || CALI_TAB;
 export const CALI_PREFIX = 'CALI-';
 export const CALI_SETTING = 'cartera_cali';
 export type CaliStore = { at: string; corte: string | null; invoices: SheetInvoice[]; credits: CreditNote[]; error?: string };
@@ -171,11 +178,15 @@ export async function fetchCarteraSheet(): Promise<SheetTabs> {
   url.searchParams.set('k', process.env.CARTERA_SHEET_KEY!);
   const res = await fetch(url, { redirect: 'follow', cache: 'no-store', signal: AbortSignal.timeout(60_000) });
   if (!res.ok) throw new Error(`Google respondió ${res.status} al leer la hoja`);
-  const body = (await res.json().catch(() => null)) as { ok?: boolean; error?: string; filas?: unknown[][]; pestanas?: Record<string, unknown[][]> } | null;
+  const body = (await res.json().catch(() => null)) as { ok?: boolean; error?: string; pestana?: string; filas?: unknown[][]; pestanas?: Record<string, unknown[][]> } | null;
   if (!body) throw new Error('Google no devolvió la cartera: revisa que el Apps Script esté implementado con acceso "Cualquier persona"');
   if (body.error) throw new Error(body.error === 'clave' ? 'La clave del Apps Script no coincide con la del CRM' : `Apps Script: ${body.error}`);
   if (!Array.isArray(body.filas)) throw new Error('El Apps Script no devolvió filas');
-  const cali = body.pestanas?.[CALI_TAB];
+  // Reading another tab than the configured one would load (and mark as paid) the wrong cartera: refuse it.
+  const want = mainTabName();
+  if (want && body.pestana && body.pestana !== want)
+    throw new Error(`El Apps Script entrega la pestaña «${body.pestana}» y este CRM lee «${want}»: en el Apps Script, CRM_PESTANAS debe empezar por '${want}'`);
+  const cali = body.pestanas?.[caliTabName()];
   return { main: body.filas, cali: Array.isArray(cali) ? cali : null };
 }
 

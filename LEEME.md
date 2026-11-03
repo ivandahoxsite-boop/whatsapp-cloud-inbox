@@ -125,7 +125,7 @@ Restos de una versión anterior: si en `receivables` hay facturas con `external_
 ## 4. Variables de entorno (solo nombres)
 
 Obligatorias: `INBOX_PASSWORD`, `CRM_DB_PATH`, `CARTERA_SHEET_URL`, `CARTERA_SHEET_KEY`.
-Opcionales: `CARTERA_SELLER` y `CARTERA_CALI_SELLER` (solo cargar ese vendedor; ver sección 9), `INBOX_USERNAME` (por defecto `admin`), `INBOX_ACCESS_KEY` (enlace privado), `CRM_TOTP_SECRET` y `CRM_2FA_DAYS` (dos pasos), `CRM_DEFAULT_TERMS_DAYS` (plazo cuando falta una fecha, 30), `CRM_DEFAULT_COUNTRY_CODE` (57), `PUSH_SUBJECT` (mailto de Web Push), `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM`, `TWILIO_CALLER_ID`, `TWILIO_AGENT_PHONE`, `TWILIO_API_URL`, `TWILIO_MAX_CALLS_PER_HOUR`. De Next: `NODE_ENV`, `NEXT_RUNTIME`, `NEXT_DIST_DIR`.
+Opcionales: `CARTERA_TAB` y `CARTERA_CALI_TAB` (nombres de las pestañas; sección 9), `CARTERA_SELLER` y `CARTERA_CALI_SELLER` (solo cargar ese vendedor; ver sección 9), `INBOX_USERNAME` (por defecto `admin`), `INBOX_ACCESS_KEY` (enlace privado), `CRM_TOTP_SECRET` y `CRM_2FA_DAYS` (dos pasos), `CRM_DEFAULT_TERMS_DAYS` (plazo cuando falta una fecha, 30), `CRM_DEFAULT_COUNTRY_CODE` (57), `PUSH_SUBJECT` (mailto de Web Push), `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM`, `TWILIO_CALLER_ID`, `TWILIO_AGENT_PHONE`, `TWILIO_API_URL`, `TWILIO_MAX_CALLS_PER_HOUR`. De Next: `NODE_ENV`, `NEXT_RUNTIME`, `NEXT_DIST_DIR`.
 Van en `/etc/crm/crm.env` (permisos 600), nunca en el código ni en un chat.
 
 ---
@@ -259,6 +259,12 @@ igual que antes.
    Sin la variable, carga todos los vendedores como el CRM original. Prueba: `tests/vendedor.e2e.js`.
    La pestaña «Cartera Cali» puede tener otro vendedor: `CARTERA_CALI_SELLER="NOMBRE APELLIDO"` (si no está, usa
    `CARTERA_SELLER`). Si en Cali no hay facturas de ese vendedor, se deja la copia anterior de Cali con aviso ⚠️.
+7. **Pestañas propias** (`CARTERA_TAB` y `CARTERA_CALI_TAB`): las pestañas «Cartera por vendedor» y «Cartera Cali» de
+   la hoja tienen un selector de vendedor que el CRM original cambia (por ejemplo a IVAN HOYOS). Para no depender de
+   él, este CRM puede leer sus propias pestañas, copias con el vendedor fijo (por ejemplo «Cartera Alfonso» y
+   «Cartera Cali Ricardo»). En el Apps Script de este CRM, `CRM_PESTANAS` debe tener esos nombres (la principal
+   primero). Si el Apps Script entrega otra pestaña principal que `CARTERA_TAB`, la carga se rechaza (nunca carga la
+   cartera equivocada).
 6. **Traer los WhatsApp del CRM original** (`deploy/importar-whatsapp.sh`): el CRM nuevo empieza sin contactos. Este script
    abre la base del CRM original SOLO PARA LEER y, para cada cliente con facturas aquí (Cartera o Cartera Cali) que allá
    ya estaba unido POR NIT («Es este» / «Sí, es él»), lo une aquí por la misma API de «Buscar su WhatsApp». Nunca por

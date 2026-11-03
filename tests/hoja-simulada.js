@@ -5,6 +5,7 @@
 //   node tests/hoja-simulada.js            -> escucha en http://127.0.0.1:4112/exec (clave: prueba)
 //   MODO=sin-cali | cali-danada | mitad    -> casos de error (sin pestaña Cali, Cali sin títulos, media hoja)
 //   MODO=grande                           -> 111 facturas de 60 clientes en la principal (para probar el scroll en el celular)
+//   TAB="Cartera Alfonso" TAB_CALI="Cartera Cali Ricardo" -> otros nombres de pestaña (por defecto los de la hoja real)
 //   CALI_VENDEDOR="NOMBRE"                -> la pestaña Cali trae SOLO a ese vendedor (encabezado y filas), con 10 facturas,
 //                                            como el reporte real de Cali (que cambia de vendedor según quién lo exporte)
 // En el CRM de prueba: CARTERA_SHEET_URL=http://127.0.0.1:4112/exec CARTERA_SHEET_KEY=prueba
@@ -58,7 +59,12 @@ function body() {
     ];
     pestanas['Cartera Cali'] = [['Fecha inicio', '2021/01/01', 'Fecha final', day(0), 'Vendedor', v], [], TITLES, ...filas.map((f) => row([...f, v]))];
   } else if (modo !== 'sin-cali') pestanas['Cartera Cali'] = [...head(day(0)), TITLES, ...cali.map(row)];
-  return { ok: true, pestana: 'Cartera por vendedor', filas: main, pestanas, faltan: modo === 'sin-cali' ? ['Cartera Cali'] : [] };
+  // Other tab names (TAB, TAB_CALI), as an Apps Script with another CRM_PESTANAS would send them.
+  const tab = process.env.TAB || 'Cartera por vendedor';
+  const tabCali = process.env.TAB_CALI || 'Cartera Cali';
+  const renamed = {};
+  for (const [k, v] of Object.entries(pestanas)) renamed[k === 'Cartera por vendedor' ? tab : k === 'Cartera Cali' ? tabCali : k] = v;
+  return { ok: true, pestana: tab, filas: main, pestanas: renamed, faltan: modo === 'sin-cali' ? [tabCali] : [] };
 }
 
 http
