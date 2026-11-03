@@ -8,7 +8,7 @@ import type { ReceivablesSummary } from '@/lib/crm/receivables';
 import { FileText, TriangleAlert, Users, Wallet } from 'lucide-react';
 import { Stat, WhatsAppLink, api, card, checkCollection, cop, formatPhone, money, twilioCall, useTwilio } from './shared';
 import { collectionMessage } from '@/lib/crm/collection-messages';
-import { CarteraLinks, CarteraSheetBox, useCarteraSheet } from './cartera-sheet-panel';
+import { AddWhatsApp, CarteraLinks, CarteraSheetBox, useCarteraSheet } from './cartera-sheet-panel';
 import { CarteraExtractView } from './cartera-extract';
 import { DueSoon } from './due-soon';
 
@@ -283,7 +283,10 @@ export function ReceivablesView({ onOpenCustomer }: { onOpenCustomer: (id: numbe
                 ))}
               </ul>
               {!d.hasPhone && (
-                <p className="mt-1 text-xs text-muted-foreground">📵 Únelo con su WhatsApp en «Clientes de la hoja sin WhatsApp» para poder escribirle o llamarlo.</p>
+                <>
+                  <p className="mt-1 text-xs text-muted-foreground">📵 Sin WhatsApp: agrégalo aquí para poder escribirle o llamarlo.</p>
+                  <AddWhatsApp sheetKey={d.key} name={d.name} />
+                </>
               )}
               {d.hasPhone && d.overdue > 0 && (
                 <>

@@ -145,6 +145,8 @@ export type Debtor = {
   oldestDoc: string;
   oldestBalance: number;
   invoices: number;
+  /** The customer's NIT/code in the sheet ('' if unknown): to add its WhatsApp right from «Quién debe». */
+  key: string;
   /** Its invoices in the list (only those of the chosen aging range), most days first: shown under the name, as in Cali. */
   docs: { doc: string; balance: number; late: number }[];
 };
@@ -154,7 +156,7 @@ export type Aging = { key: AgingKey; label: string; amount: number; invoices: nu
 const AGING_KEYS: AgingKey[] = ['current', 'd1_30', 'd31_60', 'd61_90', 'd90'];
 export const isAgingKey = (v: unknown): v is AgingKey => AGING_KEYS.includes(v as AgingKey);
 
-type OpenRow = { id: number; contact_id: number; doc: string; issued_at: string | null; due_at: string | null; balance: number; seller: string; name: string; phone: string };
+type OpenRow = { id: number; contact_id: number; doc: string; issued_at: string | null; due_at: string | null; balance: number; seller: string; name: string; phone: string; cliente?: string | null };
 
 /**
  * Days of arrears the way the business counts them: an invoice is overdue once its due date has passed, and its days
@@ -178,7 +180,7 @@ export function daysLate(r: { issued_at: string | null; due_at: string | null },
 export function receivablesSummary(filter: { seller?: string; bucket?: AgingKey } = {}, now = new Date()) {
   const rows = getDb()
     .prepare(
-      `SELECT r.id, r.contact_id, r.doc, r.issued_at, r.due_at, r.balance, r.seller, c.name, c.phone
+      `SELECT r.id, r.contact_id, r.doc, r.issued_at, r.due_at, r.balance, r.seller, c.name, c.phone, json_extract(r.data, '$.cliente') AS cliente
        FROM receivables r JOIN contacts c ON c.id = r.contact_id WHERE r.status = 'open'`
     )
     .all() as unknown as OpenRow[];
@@ -217,7 +219,7 @@ export function receivablesSummary(filter: { seller?: string; bucket?: AgingKey 
     allDebtors.add(r.contact_id);
     if (filter.bucket && AGING_KEYS[bucket] !== filter.bucket) continue;
     const dbt = debtors.get(r.contact_id) ?? {
-      contactId: r.contact_id, name: r.name, phone: r.phone, hasPhone: /^\d{7,}$/.test(r.phone), seller: r.seller, balance: 0, overdue: 0, oldestDays: 0, oldestDoc: '', oldestBalance: 0, invoices: 0, docs: []
+      contactId: r.contact_id, key: r.cliente ?? '', name: r.name, phone: r.phone, hasPhone: /^\d{7,}$/.test(r.phone), seller: r.seller, balance: 0, overdue: 0, oldestDays: 0, oldestDoc: '', oldestBalance: 0, invoices: 0, docs: []
     };
     dbt.balance += r.balance;
     if (late > 0) dbt.overdue += r.balance;

@@ -132,8 +132,26 @@ const ok = (cond, que) => {
     ok(await enPantalla(qd), 'Medellín: al tocar «Más de 90» la pantalla baja sola a «Quién debe · Más de 90»');
     const lista = await p.locator('#quien-debe').innerText();
     ok(/🧾 Fact\. \d+ · \d+ días/.test(lista) && !/al día/.test(lista), 'Medellín: «Quién debe» muestra cada factura con sus días (solo las del rango)');
-    ok(lista.includes('Únelo con su WhatsApp'), 'Medellín: a los clientes sin WhatsApp les dice cómo unirlos');
+    ok(lista.includes('Sin WhatsApp: agrégalo aquí'), 'Medellín: a los clientes sin WhatsApp les dice que se puede agregar ahí mismo');
     await p.screenshot({ path: path.join(FOTOS, '11-medellin-salto.png') });
+
+    // «📱 Agregar su WhatsApp» en la misma tarjeta de «Quién debe»: escribir el celular y queda unido de una vez.
+    const agregar = async (lista, nombre, celular, que) => {
+      // La tarjeta del cliente (las facturas de adentro también son <li>, pero no llevan el nombre).
+      const tarjeta = lista.locator('li', { hasText: nombre }).first();
+      await tarjeta.getByRole('button', { name: /Agregar su WhatsApp/ }).click();
+      await tarjeta.getByTestId('agregar-whatsapp').locator('input').fill(celular);
+      await tarjeta.getByRole('button', { name: `Guardar el celular ${celular}` }).click();
+      await p.waitForTimeout(2500);
+      const ya = lista.locator('li', { hasText: nombre }).first();
+      ok((await ya.getByRole('link', { name: /WhatsApp/ }).count()) > 0 && !(await ya.innerText()).includes('Sin WhatsApp'), que);
+    };
+    await agregar(p.locator('#quien-debe'), 'CLIENTE DEMO 17', '3000000017', 'Medellín: «Agregar su WhatsApp» en Quién debe lo une y ya sale el botón 💬 WhatsApp');
+    await p.screenshot({ path: path.join(FOTOS, '12-agregar-whatsapp.png') });
+    await abrirCali();
+    await p.locator('section', { has: p.getByRole('heading', { name: 'Antigüedad de la deuda · Cali' }) }).getByRole('button', { name: /Más de 90/ }).click();
+    await p.waitForTimeout(1500);
+    await agregar(p.locator('#quien-debe-cali'), 'CLIENTE CALI DEMO CUATRO', '3000000014', 'Cali: «Agregar su WhatsApp» en Quién debe · Cali lo une y ya sale el botón 💬 WhatsApp');
   }
   ok(errores.length === 0, `Sin errores en la página ${errores.length ? JSON.stringify(errores) : ''}`);
   await b.close();

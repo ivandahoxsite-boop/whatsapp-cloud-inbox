@@ -8,7 +8,7 @@ import type { CaliDebtor, CaliSummary } from '@/lib/crm/cartera-cali';
 import { CALI_COMPANY, collectionMessage } from '@/lib/crm/collection-messages';
 import { cn } from '@/lib/utils';
 import { CarteraExtractView } from './cartera-extract';
-import { CarteraSheetBox, LinkRow } from './cartera-sheet-panel';
+import { AddWhatsApp, CarteraSheetBox, LinkRow } from './cartera-sheet-panel';
 import { DueSoon } from './due-soon';
 import { AGING_COLOR, CallLog, ScheduleCall, jumpTo, select } from './receivables-view';
 import { Stat, WhatsAppLink, api, card, checkCollection, cop, formatPhone, money, twilioCall, useTwilio } from './shared';
@@ -383,7 +383,10 @@ function DebtorRow({
           </div>
         </>
       ) : (
-        <p className="mt-1 text-xs text-muted-foreground">📵 Únelo con su WhatsApp en «Clientes de Cali sin WhatsApp» para poder escribirle o llamarlo.</p>
+        <>
+          <p className="mt-1 text-xs text-muted-foreground">📵 Sin WhatsApp: agrégalo aquí para poder escribirle o llamarlo.</p>
+          <AddWhatsApp sheetKey={d.key} name={d.name} />
+        </>
       )}
       {children}
     </li>

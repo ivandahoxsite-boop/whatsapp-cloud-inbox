@@ -291,13 +291,6 @@ export function LinkRow({
   const { run, err } = useLinkAction();
   const [open, setOpen] = useState(false);
   const [showInvoices, setShowInvoices] = useState(false);
-  const [q, setQ] = useState('');
-  const { data: found } = useQuery({
-    queryKey: ['crm-cartera-search', q],
-    queryFn: () => api<{ contacts: { id: number; name: string; phone: string }[] }>(`/api/crm/receivables/links?q=${encodeURIComponent(q)}`),
-    enabled: open && q.trim().length >= 2
-  });
-  const digits = q.replace(/\D/g, '');
   return (
     <li className="rounded-lg border border-border/60 bg-background/40 p-2 text-xs">
       <div className="flex items-center gap-2">
@@ -338,35 +331,68 @@ export function LinkRow({
           Buscar su WhatsApp
         </button>
       ) : (
-        <div className="mt-2 space-y-1">
-          <input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Nombre del contacto o su celular"
-            className="w-full rounded-md border bg-transparent px-2 py-1.5 text-sm outline-none focus:border-primary/60"
-            autoFocus
-          />
-          <ul className="space-y-1">
-            {(found?.contacts ?? []).map((x) => (
-              <li key={x.id} className="flex items-center gap-2">
-                <span className="min-w-0 flex-1 truncate">
-                  {x.name || 'Sin nombre'} · {formatPhone(x.phone)}
-                </span>
-                <Button size="sm" variant="outline" onClick={() => run({ key: c.key, contactId: x.id })}>
-                  Es este
-                </Button>
-              </li>
-            ))}
-          </ul>
-          {digits.length >= 10 && !(found?.contacts ?? []).length && (
-            <Button size="sm" variant="outline" onClick={() => run({ key: c.key, phone: digits, name: c.name })}>
-              Usar el celular {digits}
-            </Button>
-          )}
-        </div>
+        <WhatsAppPicker sheetKey={c.key} name={c.name} />
       )}
       {err && <p className="mt-1 text-destructive">{err}</p>}
     </li>
+  );
+}
+
+/**
+ * Says which WhatsApp a sheet customer (by its NIT/code) is: search an existing contact («Es este») or type the cell
+ * phone («Guardar el celular»). The link is made by the user, by NIT, never by name. Its invoices move to that chat.
+ */
+export function WhatsAppPicker({ sheetKey, name }: { sheetKey: string; name: string }) {
+  const { run, err } = useLinkAction();
+  const [q, setQ] = useState('');
+  const { data: found } = useQuery({
+    queryKey: ['crm-cartera-search', q],
+    queryFn: () => api<{ contacts: { id: number; name: string; phone: string }[] }>(`/api/crm/receivables/links?q=${encodeURIComponent(q)}`),
+    enabled: q.trim().length >= 2
+  });
+  const digits = q.replace(/\D/g, '');
+  return (
+    <div className="mt-2 space-y-1" data-testid="agregar-whatsapp">
+      <input
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        placeholder="Celular (ej: 3001234567) o nombre del contacto"
+        inputMode="text"
+        className="w-full rounded-md border bg-transparent px-2 py-1.5 text-sm outline-none focus:border-primary/60"
+        autoFocus
+      />
+      <ul className="space-y-1">
+        {(found?.contacts ?? []).map((x) => (
+          <li key={x.id} className="flex items-center gap-2">
+            <span className="min-w-0 flex-1 truncate">
+              {x.name || 'Sin nombre'} · {formatPhone(x.phone)}
+            </span>
+            <Button size="sm" variant="outline" onClick={() => run({ key: sheetKey, contactId: x.id })}>
+              Es este
+            </Button>
+          </li>
+        ))}
+      </ul>
+      {digits.length >= 10 && !(found?.contacts ?? []).length && (
+        <Button size="sm" variant="outline" onClick={() => run({ key: sheetKey, phone: digits, name })}>
+          Guardar el celular {digits}
+        </Button>
+      )}
+      {err && <p className="text-xs text-destructive">{err}</p>}
+    </div>
+  );
+}
+
+/** «📱 Agregar su WhatsApp» right on a customer of «Quién debe» that has no WhatsApp yet. */
+export function AddWhatsApp({ sheetKey, name }: { sheetKey: string; name: string }) {
+  const [open, setOpen] = useState(false);
+  if (!sheetKey) return null;
+  return open ? (
+    <WhatsAppPicker sheetKey={sheetKey} name={name} />
+  ) : (
+    <Button size="sm" variant="outline" className="mt-2" onClick={() => setOpen(true)}>
+      📱 Agregar su WhatsApp
+    </Button>
   );
 }
 
