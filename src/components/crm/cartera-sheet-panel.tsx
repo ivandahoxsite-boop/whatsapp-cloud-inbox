@@ -4,10 +4,11 @@ import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import type { CarteraClient, CarteraLast, CarteraPlan } from '@/lib/crm/cartera-sheet';
+import type { CarteraClient, CarteraLast, CarteraPlan, SheetClientInvoice } from '@/lib/crm/cartera-sheet';
+import { CALI_COMPANY, MAIN_COMPANY, collectionMessage } from '@/lib/crm/collection-messages';
 import type { ReceivablesFreshness } from '@/lib/crm/receivables';
 import { coDateTime, dayWord } from '@/lib/crm/tasks-info';
-import { api, card, formatPhone, money } from './shared';
+import { WhatsAppLink, api, card, checkCollection, formatPhone, money } from './shared';
 
 type SheetStatus = { configured: boolean; last: CarteraLast | null };
 
@@ -276,9 +277,20 @@ function useLinkAction() {
 }
 
 /** One billing customer to link to its WhatsApp contact. `sales`: the amount is what they bought (last 12 months). */
-export function LinkRow({ client: c, onOpenCustomer, sales }: { client: CarteraClient; onOpenCustomer: (id: number) => void; sales?: boolean }) {
+export function LinkRow({
+  client: c,
+  sales,
+  cali
+}: {
+  client: CarteraClient;
+  onOpenCustomer: (id: number) => void;
+  sales?: boolean;
+  /** A customer of the "Cartera Cali" tab (its invoices and its signature come from there). */
+  cali?: boolean;
+}) {
   const { run, err } = useLinkAction();
   const [open, setOpen] = useState(false);
+  const [showInvoices, setShowInvoices] = useState(false);
   const [q, setQ] = useState('');
   const { data: found } = useQuery({
     queryKey: ['crm-cartera-search', q],
@@ -289,7 +301,11 @@ export function LinkRow({ client: c, onOpenCustomer, sales }: { client: CarteraC
   return (
     <li className="rounded-lg border border-border/60 bg-background/40 p-2 text-xs">
       <div className="flex items-center gap-2">
-        <button onClick={() => c.contactId > 0 && onOpenCustomer(c.contactId)} className="min-w-0 flex-1 text-left">
+        <button
+          onClick={() => !sales && setShowInvoices(!showInvoices)}
+          aria-expanded={sales ? undefined : showInvoices}
+          className="min-w-0 flex-1 text-left"
+        >
           <p className="truncate text-sm font-medium">{c.name}</p>
           <p className="text-muted-foreground">
             {c.key.startsWith('NOM:') ? 'Sin NIT en AnaliX' : `NIT/código ${c.key}`} · {c.invoices}{' '}
@@ -298,6 +314,12 @@ export function LinkRow({ client: c, onOpenCustomer, sales }: { client: CarteraC
         </button>
         <span className="shrink-0 font-medium tabular-nums">{money(c.balance)}</span>
       </div>
+      {!sales && !showInvoices && (
+        <button className="mt-1 mr-3 underline" onClick={() => setShowInvoices(true)}>
+          Ver facturas y mensaje
+        </button>
+      )}
+      {showInvoices && <NoPhoneInvoices client={c} cali={cali} />}
       {c.suggestion && (
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <span className="min-w-0 flex-1">
@@ -345,6 +367,80 @@ export function LinkRow({ client: c, onOpenCustomer, sales }: { client: CarteraC
       )}
       {err && <p className="mt-1 text-destructive">{err}</p>}
     </li>
+  );
+}
+
+const shortDate = (iso: string | null) => (iso ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}` : '');
+
+/**
+ * A customer of the sheet still without WhatsApp: its open invoices and the same collection message as «Quién debe»
+ * (approved text, by days late). It can be sent anyway: WhatsApp opens with the text and the person picks the chat,
+ * after the same collection rules (hours, Sundays and holidays, promises). Or the message is copied.
+ */
+function NoPhoneInvoices({ client: c, cali }: { client: CarteraClient; cali?: boolean }) {
+  const [note, setNote] = useState('');
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['crm-cartera-client-invoices', c.key, !!cali],
+    queryFn: () => api<{ invoices: SheetClientInvoice[] }>(`/api/crm/receivables/links?facturas=${encodeURIComponent(c.key)}${cali ? '&tab=cali' : ''}`)
+  });
+  if (isLoading) return <p className="mt-2 text-muted-foreground">Buscando sus facturas…</p>;
+  if (error) return <p className="mt-2 text-destructive">{(error as Error).message}</p>;
+  const invoices = data?.invoices ?? [];
+  const text = collectionMessage(c.name, invoices, cali ? CALI_COMPANY : MAIN_COMPANY)?.text;
+  const rules = () => checkCollection(c.contactId, { noPhone: true, reminder: cali });
+  const copy = async () => {
+    setNote('');
+    const r = await rules();
+    if (r !== true || !text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      setNote('Mensaje copiado. Pégalo en el chat del cliente en WhatsApp.');
+    } catch {
+      setNote('No se pudo copiar: selecciona el texto del mensaje y cópialo a mano.');
+    }
+  };
+  return (
+    <div className="mt-2 space-y-2" data-testid="sin-whatsapp-facturas">
+      <ul className="divide-y divide-border/50 rounded-md border border-border/60">
+        {invoices.map((i) => (
+          <li key={i.doc} className="flex items-center gap-2 px-2 py-1.5">
+            <span className="min-w-0 flex-1">
+              Fact. <b>{i.doc}</b>
+              <span className="text-muted-foreground"> · vence {shortDate(i.dueAt)}</span>
+            </span>
+            <span className={cn('shrink-0', i.daysLate > 0 ? 'font-medium text-rose-500' : 'text-muted-foreground')}>
+              {i.daysLate > 0 ? `${i.daysLate} días` : 'al día'}
+            </span>
+            <span className="w-24 shrink-0 text-right tabular-nums">{money(i.balance)}</span>
+          </li>
+        ))}
+        {!invoices.length && <li className="px-2 py-1.5 text-muted-foreground">No tiene facturas abiertas.</li>}
+      </ul>
+      {text ? (
+        <>
+          <pre className="whitespace-pre-wrap rounded-md bg-muted/60 p-2 font-sans text-xs">{text}</pre>
+          <div className="flex flex-wrap gap-2">
+            <WhatsAppLink
+              phone=""
+              text={text}
+              beforeOpen={rules}
+              className="inline-flex h-8 items-center rounded-md border border-emerald-500/40 bg-emerald-500/10 px-3 text-xs font-medium text-emerald-500 hover:bg-emerald-500/20"
+            >
+              💬 Enviar por WhatsApp (elegir el chat)
+            </WhatsAppLink>
+            <Button size="sm" variant="outline" onClick={copy}>
+              📋 Copiar mensaje
+            </Button>
+          </div>
+          <p className="text-muted-foreground">Como aún no tiene su WhatsApp en el CRM, WhatsApp te pedirá elegir el chat del cliente.</p>
+        </>
+      ) : (
+        invoices.length > 0 && (
+          <p className="text-muted-foreground">Lleva menos de 30 días de mora: según la regla de cobro todavía no lleva mensaje de cobro.</p>
+        )
+      )}
+      {note && <p className="text-emerald-500">{note}</p>}
+    </div>
   );
 }
 

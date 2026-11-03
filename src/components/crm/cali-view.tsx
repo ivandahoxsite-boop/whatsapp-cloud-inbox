@@ -220,6 +220,7 @@ export function CaliView({ onOpenCustomer }: { onOpenCustomer: (id: number) => v
                     key={c.key}
                     client={{ key: c.key, name: c.name, contactId: c.contactId ?? 0, balance: c.balance, invoices: c.invoices, linked: null, suggestion: null }}
                     onOpenCustomer={onOpenCustomer}
+                    cali
                   />
                 ))}
               </ul>

@@ -319,6 +319,8 @@ export function WhatsAppLink({
   const desktop = device === 'desktop';
   const url = (t?: string) => {
     const q = t ? `text=${encodeURIComponent(t)}` : '';
+    // No phone (customer still without WhatsApp in the CRM): WhatsApp opens with the text and asks which chat.
+    if (!phone) return `https://wa.me/${q ? `?${q}` : ''}`;
     return desktop ? `https://web.whatsapp.com/send?phone=${phone}${q ? `&${q}` : ''}` : `https://wa.me/${phone}${q ? `?${q}` : ''}`;
   };
   const onClick = beforeOpen
@@ -355,9 +357,11 @@ export function WhatsAppLink({
  * promise in force, already contacted today). Returns true to open with the message, '' to open the chat without it,
  * false to cancel. If the check itself fails it does not block.
  */
-export async function checkCollection(contactId: number, opts: { reminder?: boolean } = {}): Promise<boolean | string> {
+export async function checkCollection(contactId: number, opts: { reminder?: boolean; noPhone?: boolean } = {}): Promise<boolean | string> {
   try {
-    const r = await api<{ checks: { allowed: boolean; reasons: string[] }[] }>(`/api/crm/collections/check?customerId=${contactId}${opts.reminder ? '&aviso=1' : ''}`);
+    const r = await api<{ checks: { allowed: boolean; reasons: string[] }[] }>(
+      `/api/crm/collections/check?customerId=${contactId}${opts.reminder ? '&aviso=1' : ''}${opts.noPhone ? '&sinTelefono=1' : ''}`
+    );
     const ch = r.checks[0];
     if (ch && !ch.allowed) {
       return confirm(`No es buen momento para cobrarle:\n\n• ${ch.reasons.join('\n• ')}\n\n¿Abrir el chat SIN el mensaje de cobro?`) ? '' : false;

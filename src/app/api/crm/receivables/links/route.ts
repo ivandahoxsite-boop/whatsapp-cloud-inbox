@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { carteraClients, linkCarteraClient, rejectCarteraSuggestion, searchContacts, unlinkCarteraClient } from '@/lib/crm/cartera-sheet';
+import { carteraClients, linkCarteraClient, rejectCarteraSuggestion, searchContacts, sheetClientInvoices, unlinkCarteraClient } from '@/lib/crm/cartera-sheet';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -7,10 +7,15 @@ export const dynamic = 'force-dynamic';
 const fail = (e: unknown, status = 400) => NextResponse.json({ error: e instanceof Error ? e.message : 'Error' }, { status });
 
 // GET -> the sheet's customers with debt and their WhatsApp contact (or a suggestion). GET ?q=juan -> contacts to pick.
+// GET ?facturas=NIT[&tab=cali] -> the open invoices of that customer.
 export async function GET(request: Request) {
   try {
-    const q = new URL(request.url).searchParams.get('q');
+    const params = new URL(request.url).searchParams;
+    const q = params.get('q');
     if (q !== null) return NextResponse.json({ contacts: searchContacts(q) });
+    // ?facturas=NIT (&tab=cali) -> that customer's open invoices, for the customers still without WhatsApp.
+    const facturas = params.get('facturas');
+    if (facturas !== null) return NextResponse.json({ invoices: sheetClientInvoices(facturas, params.get('tab') === 'cali') });
     return NextResponse.json({ clients: carteraClients() });
   } catch (e) {
     return fail(e, 500);

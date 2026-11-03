@@ -200,7 +200,7 @@ export function hoursOffUntil(now = new Date()): string | null {
 export function checkCustomers(
   by: { customerId?: number; q?: string },
   now = new Date(),
-  options: { ignoreWindow?: boolean; reminder?: boolean } = {}
+  options: { ignoreWindow?: boolean; reminder?: boolean; noPhone?: boolean } = {}
 ) {
   const window = callWindow(now);
   const d = getDb();
@@ -210,6 +210,8 @@ export function checkCustomers(
 
   let rows: { id: number; name: string; phone: string }[];
   if (by.customerId) rows = d.prepare('SELECT id, name, phone FROM contacts WHERE id = ?').all(by.customerId) as unknown as typeof rows;
+  // A Cali customer with no contact at all (noPhone): only the hours apply.
+  else if (options.noPhone && by.customerId === 0) rows = [{ id: 0, name: '', phone: '' }];
   else if (by.q?.trim()) {
     const q = norm(by.q.trim());
     rows = (d.prepare('SELECT id, name, phone FROM contacts').all() as unknown as typeof rows)
@@ -222,7 +224,7 @@ export function checkCustomers(
     const debt = debtors.get(r.id);
     const reasons: string[] = [];
     if (!window.allowed && !options.ignoreWindow) reasons.push(window.reason);
-    if (!/^\d{7,}$/.test(r.phone)) reasons.push('No tiene teléfono');
+    if (!options.noPhone && !/^\d{7,}$/.test(r.phone)) reasons.push('No tiene teléfono');
     // A reminder before the due date ("Por vencer") is fine without overdue debt.
     if (!options.reminder && (!debt || debt.overdue <= 0)) reasons.push('No tiene deuda vencida');
     const why = block.get(r.id);

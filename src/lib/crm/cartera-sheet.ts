@@ -1,6 +1,6 @@
 import { getDb } from './db';
 import { createCustomer, isRealPhone, normalizeNit, normalizePhone, parseAmount, parseDate, placeholderKey } from './customers';
-import { LOAD_TIMES, carteraSheetConfigured, slotMs, upsertReceivables } from './receivables';
+import { LOAD_TIMES, carteraSheetConfigured, daysLate, slotMs, upsertReceivables } from './receivables';
 import { dayProblem, todayCo } from './tasks-info';
 
 /**
@@ -540,6 +540,23 @@ function sheetName(key: string): string {
   if (r?.n) return r.n;
   const s = d.prepare("SELECT json_extract(data, '$.client') AS n FROM sales WHERE json_extract(data, '$.clientKey') = ? LIMIT 1").get(key) as { n: string | null } | undefined;
   return s?.n ?? '';
+}
+
+export type SheetClientInvoice = { doc: string; issuedAt: string | null; dueAt: string | null; balance: number; daysLate: number };
+
+/** The open invoices of one customer of the sheet (by NIT), oldest debt first, for the customers without WhatsApp. */
+export function sheetClientInvoices(key: string, cali = false, now = new Date()): SheetClientInvoice[] {
+  const k = linkKey(key);
+  const list: SheetClientInvoice[] = cali
+    ? (caliStore()?.invoices ?? [])
+        .filter((i) => i.key === k && i.balance > 0)
+        .map((i) => ({ doc: i.doc, issuedAt: i.issuedAt, dueAt: i.dueAt, balance: i.balance, daysLate: daysLate({ issued_at: i.issuedAt, due_at: i.dueAt }, now) }))
+    : (
+        getDb()
+          .prepare("SELECT doc, issued_at, due_at, balance FROM receivables WHERE status = 'open' AND source = ? AND json_extract(data, '$.cliente') = ?")
+          .all(SOURCE, k) as unknown as { doc: string; issued_at: string | null; due_at: string | null; balance: number }[]
+      ).map((r) => ({ doc: r.doc, issuedAt: r.issued_at, dueAt: r.due_at, balance: r.balance, daysLate: daysLate(r, now) }));
+  return list.sort((a, b) => b.daysLate - a.daysLate || (a.dueAt ?? '').localeCompare(b.dueAt ?? ''));
 }
 
 /** The user says which WhatsApp contact a sheet customer is: by contact id or by phone (creating the contact if needed). */
