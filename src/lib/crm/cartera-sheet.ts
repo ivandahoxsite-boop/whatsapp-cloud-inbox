@@ -201,11 +201,22 @@ export function parseCarteraTabs(tabs: SheetTabs): ParsedSheet {
 /** The last good copy of the "Cartera Cali" tab (null if it never came). */
 export function caliStore(): CaliStore | null {
   const r = getDb().prepare('SELECT value FROM settings WHERE key = ?').get(CALI_SETTING) as { value: string } | undefined;
+  let store: CaliStore | null;
   try {
-    return r ? (JSON.parse(r.value) as CaliStore) : null;
+    store = r ? (JSON.parse(r.value) as CaliStore) : null;
   } catch {
     return null;
   }
+  // A copy saved under another seller (the filter changed later) never shows: only the configured seller's invoices.
+  const seller = caliSellerFilter();
+  if (store && seller) {
+    store = {
+      ...store,
+      invoices: store.invoices.filter((i) => sellerKey(i.seller) === seller),
+      credits: (store.credits ?? []).filter((c) => sellerKey(c.seller) === seller)
+    };
+  }
+  return store;
 }
 
 type Contact = { id: number; name: string; phone: string };
