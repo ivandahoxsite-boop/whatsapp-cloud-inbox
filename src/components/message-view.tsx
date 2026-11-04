@@ -37,6 +37,7 @@ import {
 import { MediaMessage } from "@/components/media-message";
 import { TemplateSelectorDialog } from "@/components/template-selector-dialog";
 import { InteractiveMessageDialog } from "@/components/interactive-message-dialog";
+import { QuickRepliesBar } from "@/components/quick-replies-bar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -1199,6 +1200,15 @@ export function MessageView({
                 </div>
               </div>
             )}
+
+            <QuickRepliesBar
+              contactName={contactName}
+              disabled={sending}
+              onSelect={(text) => {
+                setMessageInput(text);
+                requestAnimationFrame(() => messageInputRef.current?.focus());
+              }}
+            />
 
             <form
               onSubmit={handleSendMessage}
