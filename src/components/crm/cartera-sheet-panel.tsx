@@ -65,10 +65,11 @@ export function CarteraSheetBox({ freshness, cali }: { freshness: ReceivablesFre
       setBusy(false);
     }
   };
+  // Everything shown from the cartera is read again: the Extracto (Excel-like) view, "Por vencer" and Cartera Cali
+  // too, so they show the new load at once and not only after reloading the page.
   const refresh = () => {
-    qc.invalidateQueries({ queryKey: ['crm-receivables'] });
-    qc.invalidateQueries({ queryKey: ['crm-cartera-sheet'] });
-    qc.invalidateQueries({ queryKey: ['crm-cartera-links'] });
+    for (const key of ['crm-receivables', 'crm-cartera-sheet', 'crm-cartera-links', 'crm-cartera-extract', 'crm-due', 'crm-due-search', 'crm-cali'])
+      qc.invalidateQueries({ queryKey: [key] });
   };
   const done = (p: CarteraPlan) =>
     `✅ Cartera actualizada: ${p.invoices} facturas por ${money(p.total)}` +
