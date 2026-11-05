@@ -77,11 +77,19 @@ export function collectionMessage(name: string, items: DebtItem[], company = MAI
       `Hola${who ? ` ${who}` : ''} 👋 Te escribimos de *${company}* · cartera.\n\n` +
       `La factura *${overdue[0].doc}* por *${money(overdue[0].balance)}* lleva *${days} días* vencida 🧾\n\n` +
       `Queremos seguir trabajando contigo 🤝 pero necesitamos que te pongas al día. Confírmanos hoy *qué día* realizas el pago 📅🙏`,
-    // Level 4: only the oldest overdue invoice; formal notice before prejudicial collection (confirmed by the user).
+    // Level 4: "último aviso" with the days in mora; no deadline and no prejudicial collection (the user took them out,
+    // 5-nov-2026, for Medellín and Cali).
     4:
-      `${who ? `${who}, t` : 'T'}e contactamos de *${company}* · cartera 🔴\n\n` +
-      `La factura *${overdue[0].doc}* por *${money(overdue[0].balance)}* lleva *${days} días* en mora 🧾\n\n` +
-      `Es un llamado formal 📌 Si en *5 días hábiles* no recibimos el pago o un acuerdo, la cuenta pasa a cobro prejurídico. Respóndenos hoy con la *fecha de pago* 📅`
+      `📌 *Último aviso de cartera* 🔴\n\n` +
+      `Hola${full ? ` ${full}` : ''} 👋\n` +
+      `Te escribimos de *${company}* · cartera.\n\n` +
+      `Tu factura ya lleva *${days} días* en mora:\n` +
+      `🧾 Fact. *${overdue[0].doc}* · *${money(overdue[0].balance)}*\n\n` +
+      `Necesitamos resolver este saldo lo antes posible.\n\n` +
+      `🙏 Por favor, ¿nos confirmas *hoy* para qué día programamos el pago? 📅\n\n` +
+      `Quedamos atentos a tu respuesta ✅\n` +
+      `Cordialmente,\n` +
+      `*${company}* · Cartera`
   };
   return { tier, text: texts[tier.level] };
 }
