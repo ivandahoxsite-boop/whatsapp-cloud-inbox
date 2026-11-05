@@ -47,13 +47,20 @@ export function collectionMessage(name: string, items: DebtItem[], company = MAI
   const tier = collectionTier(days);
   if (!tier) return null;
   const who = greetName(name);
+  const full = fullName(name);
 
   const texts: Record<CollectionTier['level'], string> = {
-    // Level 1: only the oldest overdue invoice, and ask for a payment date (user's choice, 26-oct-2026).
+    // Level 1: the oldest overdue invoice (number and value, no days) and the user's own words to ask for the payment
+    // day; full name, complete with a formal closing (chosen by the user on 5-nov-2026 for Medellín and Cali).
     1:
-      `Hola${who ? ` ${who}` : ''} 👋 Te escribimos de *${company}* · cartera 💼\n\n` +
-      `Tienes pendiente la factura *${overdue[0].doc}* por *${money(overdue[0].balance)}* (vencida hace ${days} días) 🧾\n\n` +
-      `¿Qué fecha te programamos para el pago? 📅 Respóndenos con el día y lo dejamos agendado ✅`,
+      `Hola${full ? ` ${full}` : ''} 👋\n` +
+      `Te saludamos de *${company}* · cartera 💼\n\n` +
+      `Tenemos pendiente la factura:\n` +
+      `🧾 Fact. *${overdue[0].doc}* · *${money(overdue[0].balance)}*\n\n` +
+      `🙏 Por favor, ¿nos puedes decir *para qué día programamos el pago*? 📅\n\n` +
+      `Quedamos atentos a tu respuesta ✅\n` +
+      `Cordialmente,\n` +
+      `*${company}* · Cartera`,
     // Level 2: only the oldest overdue invoice, firmer, asks for the date today (user's choice, 26-oct-2026).
     2:
       `Hola${who ? ` ${who}` : ''} 👋 Te escribimos de *${company}* · cartera ⚠️\n\n` +
