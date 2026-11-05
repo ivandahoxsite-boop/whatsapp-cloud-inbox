@@ -61,11 +61,17 @@ export function collectionMessage(name: string, items: DebtItem[], company = MAI
       `Quedamos atentos a tu respuesta ✅\n` +
       `Cordialmente,\n` +
       `*${company}* · Cartera`,
-    // Level 2: only the oldest overdue invoice, firmer, asks for the date today (user's choice, 26-oct-2026).
+    // Level 2: like level 1 but "de nuevo" and asking for the day *today*; no days, no mention of dispatches (chosen by
+    // the user on 5-nov-2026 for Medellín and Cali).
     2:
-      `Hola${who ? ` ${who}` : ''} 👋 Te escribimos de *${company}* · cartera ⚠️\n\n` +
-      `La factura *${overdue[0].doc}* por *${money(overdue[0].balance)}* ya lleva *${days} días* vencida 🧾\n\n` +
-      `Necesitamos que nos confirmes *hoy* la fecha de pago 📅 para seguir despachando sin inconvenientes 🚚`,
+      `Hola${full ? ` ${full}` : ''} 👋\n` +
+      `Te escribimos de nuevo de *${company}* · cartera ⚠️\n\n` +
+      `Seguimos con pendiente la factura:\n` +
+      `🧾 Fact. *${overdue[0].doc}* · *${money(overdue[0].balance)}*\n\n` +
+      `🙏 Por favor, ¿nos confirmas *hoy* para qué día programamos el pago? 📅\n\n` +
+      `Quedamos atentos a tu respuesta ✅\n` +
+      `Cordialmente,\n` +
+      `*${company}* · Cartera`,
     // Level 3: only the oldest overdue invoice; keep the relationship, ask which day (user's choice, 26-oct-2026).
     3:
       `Hola${who ? ` ${who}` : ''} 👋 Te escribimos de *${company}* · cartera.\n\n` +
