@@ -166,7 +166,12 @@ export function SalesReportView({ onOpenCustomer }: { onOpenCustomer: (id: numbe
 
           <Section title="Productos que más venden">
             <Bars
-              rows={data.topProducts.slice(0, 15).map((p) => ({ key: p.product, label: p.product, value: p.amount, sub: `${p.customers} clientes · ${money(p.qty)} unidades` }))}
+              rows={data.topProducts.slice(0, 15).map((p) => ({
+                key: p.product,
+                label: p.product,
+                value: p.amount,
+                sub: `${p.code && p.code !== p.product ? `Ref. ${p.code} · ` : ''}${p.customers} clientes · ${money(p.qty)} unidades`
+              }))}
             />
           </Section>
 

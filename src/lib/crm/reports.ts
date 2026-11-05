@@ -2,7 +2,7 @@ import { getDb } from './db';
 
 export type SalesReportFilter = { from?: string; to?: string; seller?: string; zone?: string };
 
-type Line = { contactId: number; name: string; soldAt: string; amount: number; product: string; seller: string; zone: string; qty: number };
+type Line = { contactId: number; name: string; soldAt: string; amount: number; product: string; seller: string; zone: string; qty: number; code: string };
 type Bucket = { amount: number; qty: number; sales: number; customers: Set<number> };
 
 export type SalesReport = {
@@ -11,7 +11,8 @@ export type SalesReport = {
   byMonth: { month: string; amount: number; qty: number }[];
   bySeller: { name: string; amount: number; qty: number; customers: number }[];
   byZone: { name: string; amount: number; qty: number; customers: number }[];
-  topProducts: { product: string; amount: number; qty: number; customers: number }[];
+  /** `code`: the product's reference in the billing system (AnaliX), when known. */
+  topProducts: { product: string; code: string; amount: number; qty: number; customers: number }[];
   /** Products bought together by the same customer in the same month (billing data is monthly). */
   combos: { a: string; b: string; times: number }[];
   /** Customers still buying from you who stopped taking a product they used to buy regularly. */
@@ -44,7 +45,8 @@ export function salesReport(filter: SalesReportFilter = {}, now = new Date()): S
       `SELECT s.contact_id AS contactId, c.name AS name, s.sold_at AS soldAt, s.amount AS amount, s.product AS product,
               COALESCE(json_extract(s.data, '$.seller'), '') AS seller,
               COALESCE(json_extract(s.data, '$.zone'), '') AS zone,
-              COALESCE(json_extract(s.data, '$.qty'), 0) AS qty
+              COALESCE(json_extract(s.data, '$.qty'), 0) AS qty,
+              COALESCE(json_extract(s.data, '$.code'), '') AS code
        FROM sales s JOIN contacts c ON c.id = s.contact_id
        WHERE (? = '' OR s.sold_at >= ?) AND (? = '' OR s.sold_at <= ?)`
     )
@@ -88,6 +90,7 @@ export function salesReport(filter: SalesReportFilter = {}, now = new Date()): S
   const seller = new Map<string, Bucket>();
   const zone = new Map<string, Bucket>();
   const product = new Map<string, Bucket>();
+  const codeOf = new Map<string, string>();
   const basket = new Map<string, Set<string>>();
   const perCustomerProduct = new Map<string, { customerId: number; customer: string; product: string; lastAt: string; times: number; amount: number }>();
   const lastBought = new Map<number, string>();
@@ -98,7 +101,10 @@ export function salesReport(filter: SalesReportFilter = {}, now = new Date()): S
     add(get(month, l.soldAt.slice(0, 7)), l);
     add(get(seller, l.seller || 'Sin vendedor'), l);
     add(get(zone, l.zone || 'Sin zona'), l);
-    if (l.product) add(get(product, l.product), l);
+    if (l.product) {
+      add(get(product, l.product), l);
+      if (l.code && !codeOf.has(l.product)) codeOf.set(l.product, String(l.code).trim());
+    }
     // Returns and free items say nothing about what people buy together or stopped buying.
     if (l.product && l.amount > 0) {
       const bk = `${l.contactId}|${l.soldAt.slice(0, 7)}`;
@@ -137,7 +143,7 @@ export function salesReport(filter: SalesReportFilter = {}, now = new Date()): S
     bySeller: ranked(seller),
     byZone: ranked(zone),
     topProducts: [...product]
-      .map(([p, b]) => ({ product: p, amount: b.amount, qty: b.qty, customers: b.customers.size }))
+      .map(([p, b]) => ({ product: p, code: codeOf.get(p) ?? '', amount: b.amount, qty: b.qty, customers: b.customers.size }))
       .sort((a, b) => b.amount - a.amount)
       .slice(0, 30),
     combos: [...pairs]

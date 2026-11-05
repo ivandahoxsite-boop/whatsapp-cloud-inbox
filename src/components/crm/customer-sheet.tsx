@@ -18,7 +18,24 @@ import { WhatsAppLink, checkCollection, twilioCall, useTwilio, QUERY_KEY, Recurr
 /** Purchases of the current year, as in the customer list. */
 const YEAR = todayCo().slice(0, 4);
 
-type Sale = { id: number; soldAt: string; amount: number; product: string };
+/** `data`: what the loader kept with the sale (AnaliX: code = the product's reference, qty = units, client = billing name). */
+type Sale = { id: number; soldAt: string; amount: number; product: string; data?: { code?: unknown; qty?: unknown; client?: unknown } };
+
+/** "Ref. PX-650 · 12 unid. · $1.440.000 · ($120.000 c/u)": a purchase with its reference, units and unit price. */
+function saleLine(s: Sale): string {
+  const code = typeof s.data?.code === 'string' ? s.data.code.trim() : '';
+  const qty = Number(s.data?.qty);
+  const parts = [
+    code && code !== s.product ? `Ref. ${code}` : '',
+    qty > 0 ? `${money(qty)} unid.` : '',
+    `$${money(s.amount)}`,
+    qty > 0 && s.amount > 0 ? `($${money(Math.round(s.amount / qty))} c/u)` : ''
+  ];
+  return parts.filter(Boolean).join(' · ');
+}
+/** AnaliX brings monthly totals (dated the 1st): those purchases show the month, not a day. */
+const monthLabel = (iso: string) =>
+  new Date(`${iso.slice(0, 10)}T12:00:00`).toLocaleDateString('es', { month: 'long', year: 'numeric' });
 type Activity = { id: number; kind: string; text: string; createdAt: string };
 type Owed = { id: number; doc: string; dueAt: string | null; balance: number; daysLate: number };
 type Detail = { sales: Sale[]; activities: Activity[]; receivables?: Owed[] };
@@ -100,8 +117,9 @@ function SheetBody({ c, data, onClose }: { c: Customer; data: CrmData; onClose: 
       icon: ShoppingBag,
       color: '#34d399',
       title: `Compra${s.product ? ` · ${s.product}` : ''}`,
-      text: money(s.amount),
-      withTime: false
+      text: saleLine(s),
+      withTime: false,
+      month: !!s.data?.client
     })),
     ...(detail?.activities ?? []).map((a) => ({
       key: `a${a.id}`,
@@ -110,7 +128,8 @@ function SheetBody({ c, data, onClose }: { c: Customer; data: CrmData; onClose: 
       color: a.kind === 'whatsapp_in' ? '#38bdf8' : a.kind === 'whatsapp_out' ? '#a78bfa' : a.kind === 'note' ? '#fbbf24' : a.kind === 'call' ? '#f472b6' : '#a1a1aa',
       title: a.kind === 'whatsapp_in' ? 'Escribió' : a.kind === 'whatsapp_out' ? 'Le escribiste' : a.kind === 'note' ? 'Nota' : a.kind === 'call' ? 'Llamada de cobro' : a.kind === 'twilio' ? 'Llamada por Twilio' : 'Cambio',
       text: a.text,
-      withTime: true
+      withTime: true,
+      month: false
     }))
   ].sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
 
@@ -411,7 +430,7 @@ function SheetBody({ c, data, onClose }: { c: Customer; data: CrmData; onClose: 
                 </span>
                 <div className="min-w-0">
                   <p className="text-sm font-medium">
-                    {t.title} <span className="font-normal text-muted-foreground">· {t.withTime ? fmtDateTime(t.at) : fmtDate(t.at)}</span>
+                    {t.title} <span className="font-normal text-muted-foreground">· {t.withTime ? fmtDateTime(t.at) : t.month ? monthLabel(t.at) : fmtDate(t.at)}</span>
                   </p>
                   <p className="whitespace-pre-wrap break-words text-sm text-muted-foreground">{t.text}</p>
                 </div>
