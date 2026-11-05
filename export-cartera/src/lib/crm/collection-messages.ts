@@ -47,28 +47,47 @@ export function collectionMessage(name: string, items: DebtItem[], company = MAI
   const tier = collectionTier(days);
   if (!tier) return null;
   const who = greetName(name);
+  const full = fullName(name);
 
   const texts: Record<CollectionTier['level'], string> = {
-    // Level 1: only the oldest overdue invoice, and ask for a payment date (user's choice, 26-oct-2026).
+    // Level 1: the oldest overdue invoice (number and value, no days) and the owner's own words to ask for the payment
+    // day; full name, complete with a formal closing (chosen on 5-nov-2026).
     1:
-      `Hola${who ? ` ${who}` : ''} 👋 Te escribimos de *${company}* · cartera 💼\n\n` +
-      `Tienes pendiente la factura *${overdue[0].doc}* por *${money(overdue[0].balance)}* (vencida hace ${days} días) 🧾\n\n` +
-      `¿Qué fecha te programamos para el pago? 📅 Respóndenos con el día y lo dejamos agendado ✅`,
-    // Level 2: only the oldest overdue invoice, firmer, asks for the date today (user's choice, 26-oct-2026).
+      `Hola${full ? ` ${full}` : ''} 👋\n` +
+      `Te saludamos de *${company}* · cartera 💼\n\n` +
+      `Tenemos pendiente la factura:\n` +
+      `🧾 Fact. *${overdue[0].doc}* · *${money(overdue[0].balance)}*\n\n` +
+      `🙏 Por favor, ¿nos puedes decir *para qué día programamos el pago*? 📅\n\n` +
+      `Quedamos atentos a tu respuesta ✅\n` +
+      `Cordialmente,\n` +
+      `*${company}* · Cartera`,
+    // Level 2: like level 1 but "de nuevo" and asking for the day *today*; no days, no mention of dispatches (5-nov-2026).
     2:
-      `Hola${who ? ` ${who}` : ''} 👋 Te escribimos de *${company}* · cartera ⚠️\n\n` +
-      `La factura *${overdue[0].doc}* por *${money(overdue[0].balance)}* ya lleva *${days} días* vencida 🧾\n\n` +
-      `Necesitamos que nos confirmes *hoy* la fecha de pago 📅 para seguir despachando sin inconvenientes 🚚`,
+      `Hola${full ? ` ${full}` : ''} 👋\n` +
+      `Te escribimos de nuevo de *${company}* · cartera ⚠️\n\n` +
+      `Seguimos con pendiente la factura:\n` +
+      `🧾 Fact. *${overdue[0].doc}* · *${money(overdue[0].balance)}*\n\n` +
+      `🙏 Por favor, ¿nos confirmas *hoy* para qué día programamos el pago? 📅\n\n` +
+      `Quedamos atentos a tu respuesta ✅\n` +
+      `Cordialmente,\n` +
+      `*${company}* · Cartera`,
     // Level 3: only the oldest overdue invoice; keep the relationship, ask which day (user's choice, 26-oct-2026).
     3:
       `Hola${who ? ` ${who}` : ''} 👋 Te escribimos de *${company}* · cartera.\n\n` +
       `La factura *${overdue[0].doc}* por *${money(overdue[0].balance)}* lleva *${days} días* vencida 🧾\n\n` +
       `Queremos seguir trabajando contigo 🤝 pero necesitamos que te pongas al día. Confírmanos hoy *qué día* realizas el pago 📅🙏`,
-    // Level 4: only the oldest overdue invoice; formal notice before prejudicial collection (confirmed by the user).
+    // Level 4: "último aviso" with the days in mora; no deadline and no prejudicial collection (5-nov-2026).
     4:
-      `${who ? `${who}, t` : 'T'}e contactamos de *${company}* · cartera 🔴\n\n` +
-      `La factura *${overdue[0].doc}* por *${money(overdue[0].balance)}* lleva *${days} días* en mora 🧾\n\n` +
-      `Es un llamado formal 📌 Si en *5 días hábiles* no recibimos el pago o un acuerdo, la cuenta pasa a cobro prejurídico. Respóndenos hoy con la *fecha de pago* 📅`
+      `📌 *Último aviso de cartera* 🔴\n\n` +
+      `Hola${full ? ` ${full}` : ''} 👋\n` +
+      `Te escribimos de *${company}* · cartera.\n\n` +
+      `Tu factura ya lleva *${days} días* en mora:\n` +
+      `🧾 Fact. *${overdue[0].doc}* · *${money(overdue[0].balance)}*\n\n` +
+      `Necesitamos resolver este saldo lo antes posible.\n\n` +
+      `🙏 Por favor, ¿nos confirmas *hoy* para qué día programamos el pago? 📅\n\n` +
+      `Quedamos atentos a tu respuesta ✅\n` +
+      `Cordialmente,\n` +
+      `*${company}* · Cartera`
   };
   return { tier, text: texts[tier.level] };
 }

@@ -165,15 +165,17 @@ Cordialmente,
 *{empresa}* · Cartera
 ```
 
-**Por niveles de mora** (botón «💬 WhatsApp» de Quién debe y del Extracto; solo la factura más vieja; saluda con la PRIMERA palabra del nombre, o dos si la primera es muy corta; menos de 30 días = abre el chat sin texto):
+**Por niveles de mora** (botón «💬 WhatsApp» de Quién debe y del Extracto; solo la factura más vieja; menos de 30 días = abre el chat sin texto). Aprobados el 5-nov-2026:
 - 30-45 días:
-  `Hola {nombre} 👋 Te escribimos de *{empresa}* · cartera 💼` / `Tienes pendiente la factura *{doc}* por *${valor}* (vencida hace {días} días) 🧾` / `¿Qué fecha te programamos para el pago? 📅 Respóndenos con el día y lo dejamos agendado ✅`
+  `Hola {NOMBRE COMPLETO} 👋` / `Te saludamos de *{empresa}* · cartera 💼` / `Tenemos pendiente la factura:` / `🧾 Fact. *{doc}* · *${valor}*` / `🙏 Por favor, ¿nos puedes decir *para qué día programamos el pago*? 📅` / `Quedamos atentos a tu respuesta ✅` / `Cordialmente,` / `*{empresa}* · Cartera`
 - 46-55 días:
-  `Hola {nombre} 👋 Te escribimos de *{empresa}* · cartera ⚠️` / `La factura *{doc}* por *${valor}* ya lleva *{días} días* vencida 🧾` / `Necesitamos que nos confirmes *hoy* la fecha de pago 📅 para seguir despachando sin inconvenientes 🚚`
-- 56-65 días:
+  `Hola {NOMBRE COMPLETO} 👋` / `Te escribimos de nuevo de *{empresa}* · cartera ⚠️` / `Seguimos con pendiente la factura:` / `🧾 Fact. *{doc}* · *${valor}*` / `🙏 Por favor, ¿nos confirmas *hoy* para qué día programamos el pago? 📅` / `Quedamos atentos a tu respuesta ✅` / `Cordialmente,` / `*{empresa}* · Cartera`
+- 56-65 días (sin cambios; saluda con la PRIMERA palabra del nombre):
   `Hola {nombre} 👋 Te escribimos de *{empresa}* · cartera.` / `La factura *{doc}* por *${valor}* lleva *{días} días* vencida 🧾` / `Queremos seguir trabajando contigo 🤝 pero necesitamos que te pongas al día. Confírmanos hoy *qué día* realizas el pago 📅🙏`
-- 66 días o más:
-  `{nombre}, te contactamos de *{empresa}* · cartera 🔴` / `La factura *{doc}* por *${valor}* lleva *{días} días* en mora 🧾` / `Es un llamado formal 📌 Si en *5 días hábiles* no recibimos el pago o un acuerdo, la cuenta pasa a cobro prejurídico. Respóndenos hoy con la *fecha de pago* 📅`
+- 66 días o más (sin plazos ni cobro prejurídico):
+  `📌 *Último aviso de cartera* 🔴` / `Hola {NOMBRE COMPLETO} 👋` / `Te escribimos de *{empresa}* · cartera.` / `Tu factura ya lleva *{días} días* en mora:` / `🧾 Fact. *{doc}* · *${valor}*` / `Necesitamos resolver este saldo lo antes posible.` / `🙏 Por favor, ¿nos confirmas *hoy* para qué día programamos el pago? 📅` / `Quedamos atentos a tu respuesta ✅` / `Cordialmente,` / `*{empresa}* · Cartera`
+
+Para poner estos mensajes en un CRM ya montado con una versión anterior de este paquete: `bash deploy/actualizar-mensajes-cobro.sh` (como root). Solo cambia `src/lib/crm/collection-messages.ts`, comprueba que el archivo sea el original del paquete, compila aparte y vuelve solo a como estaba si algo falla.
 
 **Recordar** (va a Aprobaciones; con 30+ días usa el de niveles; con menos, este):
 `Hola {primer nombre}, te escribimos[ de Xsite Group · sede Cali] para recordarte que tienes un saldo pendiente de ${total} ({hasta 3 facturas}[…]), con facturas vencidas hace hasta {días} días. ¿Nos confirmas cuándo podrías realizar el pago? Gracias.` (la parte de «vencidas» solo si tiene).
