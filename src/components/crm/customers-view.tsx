@@ -10,6 +10,7 @@ import { isEmptyFilter, matchesFilter, type CustomerFilter } from '@/lib/crm/fil
 import type { Customer } from '@/lib/crm/customers';
 import { FilterBar } from './filter-bar';
 import { todayCo } from '@/lib/crm/tasks-info';
+import { TagCell } from './tag-cell';
 import { Pill, QUERY_KEY, RecurrencePill, SegmentPill, TagPill, ago, api, card, cityOptions, cop, displayName, downloadCustomersCsv, formatPhone, relativeDays, type CrmData } from './shared';
 
 /** Purchases and totals on this screen are of the current year (the user asked for it). */
@@ -235,9 +236,13 @@ export function CustomersView({
                   </div>
                 </td>
                 <td className="p-3">
-                  <div className="flex max-w-48 flex-wrap gap-1">
-                    {c.tags.map((id) => tagById.get(id)).filter(Boolean).map((t) => <TagPill key={t!.id} tag={t!} />)}
-                  </div>
+                  {selecting ? (
+                    <div className="flex max-w-48 flex-wrap gap-1">
+                      {c.tags.map((id) => tagById.get(id)).filter(Boolean).map((t) => <TagPill key={t!.id} tag={t!} />)}
+                    </div>
+                  ) : (
+                    <TagCell customerId={c.id} tagIds={c.tags} tags={data.tags} filter={filter} setFilter={setFilter} />
+                  )}
                 </td>
                 <td className="p-3 text-right tabular-nums">{c.yearSales}</td>
                 <td className="whitespace-nowrap p-3 text-right tabular-nums">{cop(c.yearSpent)}</td>
