@@ -68,3 +68,9 @@ def test_prompt_no_filtra_datos_de_la_deuda(cartera):
     texto = instrucciones(d, "Empresa X", "Valentina", True, date(2026, 11, 10))
     assert d.cedula not in texto and "850" not in texto and d.acreedor not in texto
     assert "grabada" in texto and "Valentina" in texto
+
+
+def test_digitos_incompletos_no_gastan_intento(sesion):
+    assert not sesion.verificar_identidad("seis")["verificado"]
+    sesion.verificar_identidad("0000")
+    assert sesion.verificar_identidad("6789")["verificado"]

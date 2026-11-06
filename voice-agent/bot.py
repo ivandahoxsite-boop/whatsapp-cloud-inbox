@@ -30,6 +30,7 @@ from pipecat.services.deepgram.stt import DeepgramSTTService
 from pipecat.services.elevenlabs.tts import ElevenLabsTTSService
 from pipecat.services.llm_service import FunctionCallParams
 from pipecat.services.minimax.tts import MiniMaxHttpTTSService
+from pipecat.services.whisper.stt import WhisperSTTService
 from pipecat.transcriptions.language import Language
 from pipecat.transports.websocket.fastapi import FastAPIWebsocketParams
 from pipecat.workers.runner import WorkerRunner
@@ -103,10 +104,7 @@ async def conversar(websocket: WebSocket) -> None:
     )
     sesion = Sesion(deudor=deudor, cartera=cartera)
 
-    stt = DeepgramSTTService(
-        api_key=os.environ["DEEPGRAM_API_KEY"],
-        settings=DeepgramSTTService.Settings(model="nova-3", language=Language.ES),
-    )
+    stt = crear_oido()
     http = aiohttp.ClientSession(trust_env=True)
     tts = crear_voz(http)
     llm = AnthropicLLMService(
@@ -164,6 +162,23 @@ async def conversar(websocket: WebSocket) -> None:
         await runner.run()
     finally:
         await http.close()
+
+
+def crear_oido():
+    if config.OIDO_PROVEEDOR == "whisper":
+        return WhisperSTTService(
+            device="cpu",
+            compute_type="int8",
+            settings=WhisperSTTService.Settings(
+                model=config.WHISPER_MODELO,
+                language=Language.ES,
+                hotwords="cédula pesos consignar abono Bancolombia Nequi Daviplata",
+            ),
+        )
+    return DeepgramSTTService(
+        api_key=os.environ["DEEPGRAM_API_KEY"],
+        settings=DeepgramSTTService.Settings(model="nova-3", language=Language.ES),
+    )
 
 
 def crear_voz(http: aiohttp.ClientSession):

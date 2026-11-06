@@ -37,10 +37,12 @@ class Sesion:
 
     def verificar_identidad(self, ultimos_cuatro_digitos: str) -> dict:
         digitos = "".join(c for c in ultimos_cuatro_digitos if c.isdigit())
+        if len(digitos) != 4:
+            return {"verificado": False, "motivo": "No son 4 dígitos. Pídele que los repita completos; esto no cuenta como intento."}
         if self.intentos_verificacion >= MAX_INTENTOS_VERIFICACION:
             return {"verificado": False, "motivo": "Se agotaron los intentos. No reveles información de la deuda."}
         self.intentos_verificacion += 1
-        if len(digitos) == 4 and self.deudor.cedula.endswith(digitos):
+        if self.deudor.cedula.endswith(digitos):
             self.verificado = True
             return {
                 "verificado": True,
