@@ -188,7 +188,10 @@ def crear_voz(http: aiohttp.ClientSession):
             group_id=config.MINIMAX_GROUP_ID,
             aiohttp_session=http,
             settings=MiniMaxHttpTTSService.Settings(
-                model="speech-2.8-turbo", voice=config.MINIMAX_VOICE_ID, language_boost="Spanish"
+                model=config.MINIMAX_MODELO,
+                voice=config.MINIMAX_VOICE_ID,
+                language_boost="Spanish",
+                speed=config.MINIMAX_VELOCIDAD,
             ),
         )
     return ElevenLabsTTSService(
