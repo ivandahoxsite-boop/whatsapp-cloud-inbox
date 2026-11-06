@@ -7,6 +7,7 @@ load_dotenv()
 CLAUDE_MODEL = os.getenv("CLAUDE_MODEL", "claude-haiku-5-5")
 EMPRESA = os.getenv("EMPRESA", "Cartera Ejemplo S.A.S.")
 NOMBRE_AGENTE = os.getenv("NOMBRE_AGENTE", "Valentina")
+TELEFONO_CONTACTO = os.getenv("TELEFONO_CONTACTO", "")
 DEUDORES_ARCHIVO = os.getenv("DEUDORES_ARCHIVO", "datos/deudores.ejemplo.json")
 RESULTADOS_ARCHIVO = os.getenv("RESULTADOS_ARCHIVO", "datos/resultados.jsonl")
 GRABAR_LLAMADAS = os.getenv("GRABAR_LLAMADAS", "true").lower() == "true"

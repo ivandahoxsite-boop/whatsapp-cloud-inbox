@@ -117,7 +117,12 @@ async def conversar(websocket: WebSocket) -> None:
             model=config.CLAUDE_MODEL,
             max_tokens=400,
             system_instruction=instrucciones(
-                deudor, config.EMPRESA, config.NOMBRE_AGENTE, config.GRABAR_LLAMADAS, ahora_colombia().date()
+                deudor,
+                config.EMPRESA,
+                config.NOMBRE_AGENTE,
+                config.GRABAR_LLAMADAS,
+                ahora_colombia().date(),
+                config.TELEFONO_CONTACTO,
             ),
         ),
     )

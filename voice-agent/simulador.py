@@ -26,7 +26,12 @@ def main() -> None:
 
     sesion = Sesion(deudor=deudor, cartera=cartera)
     sistema = instrucciones(
-        deudor, config.EMPRESA, config.NOMBRE_AGENTE, config.GRABAR_LLAMADAS, ahora_colombia().date()
+        deudor,
+        config.EMPRESA,
+        config.NOMBRE_AGENTE,
+        config.GRABAR_LLAMADAS,
+        ahora_colombia().date(),
+        config.TELEFONO_CONTACTO,
     )
     cliente = anthropic.Anthropic()
     mensajes = [{"role": "user", "content": "(La persona acaba de contestar el teléfono.)"}]
