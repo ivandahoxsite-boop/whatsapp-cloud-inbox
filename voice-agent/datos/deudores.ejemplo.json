@@ -1,0 +1,22 @@
+[
+  {
+    "id": "D001",
+    "nombre": "Carlos Andrés Rodríguez",
+    "cedula": "1110456789",
+    "telefono": "+573001234567",
+    "saldo": 850000,
+    "dias_mora": 45,
+    "acreedor": "Almacén La 15 de Ibagué",
+    "referencia": "CR-2024-0193"
+  },
+  {
+    "id": "D002",
+    "nombre": "María Fernanda López",
+    "cedula": "65789123",
+    "telefono": "+573157654321",
+    "saldo": 1320500,
+    "dias_mora": 92,
+    "acreedor": "Cooperativa del Tolima",
+    "referencia": "CT-7781"
+  }
+]
