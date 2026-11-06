@@ -8,11 +8,16 @@ informa el saldo y busca un compromiso de pago. Está construido sobre
 
 | Pieza | Servicio | Para qué |
 |---|---|---|
-| Cerebro | Claude (console.anthropic.com) | Entiende y decide qué decir |
+| Cerebro | MiniMax (platform.minimax.io) o Claude (console.anthropic.com) | Entiende y decide qué decir |
 | Oído | Deepgram (deepgram.com) | Convierte la voz del deudor en texto |
-| Voz | ElevenLabs (elevenlabs.io) | La voz paisa de Valentina |
+| Voz | MiniMax o ElevenLabs (elevenlabs.io) | La voz paisa de Valentina |
 | Teléfono | Twilio (twilio.com), con número colombiano | Hace las llamadas |
 | Servidor | Cualquier VPS con dominio público (o ngrok para probar) | Corre este código |
+
+**Usar MiniMax:** en `.env` apunta `ANTHROPIC_BASE_URL` a `https://api.minimax.io/anthropic`,
+pon tu llave de MiniMax en `ANTHROPIC_API_KEY` y en `MINIMAX_API_KEY`, `CLAUDE_MODEL=MiniMax-M2.7`
+y `VOZ_PROVEEDOR=minimax`. MiniMax también deja **diseñar una voz** describiéndola
+(endpoint `voice_design`); el `voice_id` que devuelve (`ttv-voice-...`) va en `MINIMAX_VOICE_ID`.
 
 **La voz paisa:** en ElevenLabs puedes crear la voz con *Voice Design* (describes
 "mujer joven de Medellín, cálida, acento paisa") o clonarla a partir de grabaciones

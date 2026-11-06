@@ -11,6 +11,7 @@ Endpoints:
 import os
 from xml.sax.saxutils import quoteattr
 
+import aiohttp
 from fastapi import FastAPI, HTTPException, WebSocket
 from loguru import logger
 from pipecat.audio.vad.silero import SileroVADAnalyzer
@@ -28,6 +29,7 @@ from pipecat.services.anthropic.llm import AnthropicLLMService
 from pipecat.services.deepgram.stt import DeepgramSTTService
 from pipecat.services.elevenlabs.tts import ElevenLabsTTSService
 from pipecat.services.llm_service import FunctionCallParams
+from pipecat.services.minimax.tts import MiniMaxHttpTTSService
 from pipecat.transcriptions.language import Language
 from pipecat.transports.websocket.fastapi import FastAPIWebsocketParams
 from pipecat.workers.runner import WorkerRunner
@@ -105,12 +107,8 @@ async def conversar(websocket: WebSocket) -> None:
         api_key=os.environ["DEEPGRAM_API_KEY"],
         settings=DeepgramSTTService.Settings(model="nova-3", language=Language.ES),
     )
-    tts = ElevenLabsTTSService(
-        api_key=os.environ["ELEVENLABS_API_KEY"],
-        settings=ElevenLabsTTSService.Settings(
-            voice=config.ELEVENLABS_VOICE_ID, model="eleven_flash_v2_5", language=Language.ES
-        ),
-    )
+    http = aiohttp.ClientSession(trust_env=True)
+    tts = crear_voz(http)
     llm = AnthropicLLMService(
         api_key=os.environ["ANTHROPIC_API_KEY"],
         settings=AnthropicLLMService.Settings(
@@ -162,7 +160,28 @@ async def conversar(websocket: WebSocket) -> None:
             cartera.registrar(deudor.id, "resultado", resultado="colgo_sin_resultado", verificado=sesion.verificado)
         await runner.cancel()
 
-    await runner.run()
+    try:
+        await runner.run()
+    finally:
+        await http.close()
+
+
+def crear_voz(http: aiohttp.ClientSession):
+    if config.VOZ_PROVEEDOR == "minimax":
+        return MiniMaxHttpTTSService(
+            api_key=os.environ["MINIMAX_API_KEY"],
+            group_id=config.MINIMAX_GROUP_ID,
+            aiohttp_session=http,
+            settings=MiniMaxHttpTTSService.Settings(
+                model="speech-2.8-turbo", voice=config.MINIMAX_VOICE_ID, language_boost="Spanish"
+            ),
+        )
+    return ElevenLabsTTSService(
+        api_key=os.environ["ELEVENLABS_API_KEY"],
+        settings=ElevenLabsTTSService.Settings(
+            voice=config.ELEVENLABS_VOICE_ID, model="eleven_flash_v2_5", language=Language.ES
+        ),
+    )
 
 
 @app.websocket("/ws")
