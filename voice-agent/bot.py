@@ -59,6 +59,12 @@ async def verificar_identidad(params: FunctionCallParams, ultimos_cuatro_digitos
     await params.result_callback(sesion.verificar_identidad(ultimos_cuatro_digitos))
 
 
+async def confirmar_titular(params: FunctionCallParams):
+    """Úsala solo cuando la persona confirmó claramente que es el titular. Devuelve los datos de la deuda."""
+    sesion: Sesion = params.app_resources
+    await params.result_callback(sesion.confirmar_titular())
+
+
 async def registrar_resultado(
     params: FunctionCallParams,
     resultado: str,
@@ -119,10 +125,12 @@ async def conversar(websocket: WebSocket) -> None:
                 config.GRABAR_LLAMADAS,
                 ahora_colombia().date(),
                 config.TELEFONO_CONTACTO,
+                config.VERIFICACION,
             ),
         ),
     )
-    context = LLMContext(tools=[verificar_identidad, registrar_resultado, terminar_llamada])
+    verificacion = verificar_identidad if config.VERIFICACION == "cedula" else confirmar_titular
+    context = LLMContext(tools=[verificacion, registrar_resultado, terminar_llamada])
     user_aggregator, assistant_aggregator = LLMContextAggregatorPair(
         context, user_params=LLMUserAggregatorParams(vad_analyzer=SileroVADAnalyzer())
     )

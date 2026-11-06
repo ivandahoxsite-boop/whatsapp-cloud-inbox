@@ -7,6 +7,8 @@ load_dotenv()
 CLAUDE_MODEL = os.getenv("CLAUDE_MODEL", "claude-haiku-5-5")
 EMPRESA = os.getenv("EMPRESA", "Xsite Group")
 NOMBRE_AGENTE = os.getenv("NOMBRE_AGENTE", "Valentina")
+# nombre: confirma con el nombre completo; cedula: pide los últimos 4 dígitos
+VERIFICACION = os.getenv("VERIFICACION", "nombre")
 TELEFONO_CONTACTO = os.getenv("TELEFONO_CONTACTO", "")
 DEUDORES_ARCHIVO = os.getenv("DEUDORES_ARCHIVO", "datos/deudores.ejemplo.json")
 RESULTADOS_ARCHIVO = os.getenv("RESULTADOS_ARCHIVO", "datos/resultados.jsonl")

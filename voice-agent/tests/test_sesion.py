@@ -74,3 +74,17 @@ def test_digitos_incompletos_no_gastan_intento(sesion):
     assert not sesion.verificar_identidad("seis")["verificado"]
     sesion.verificar_identidad("0000")
     assert sesion.verificar_identidad("6789")["verificado"]
+
+
+def test_modo_nombre_no_pide_cedula(cartera):
+    from agente.sesion import herramientas_claude
+
+    d = cartera.obtener("D001")
+    texto = instrucciones(d, "Xsite Group", "Valentina", True, date(2026, 11, 10))
+    assert "No pidas la cédula" in texto and "850" not in texto
+    assert [h["name"] for h in herramientas_claude("nombre")][0] == "confirmar_titular"
+
+
+def test_confirmar_titular_entrega_deuda(sesion):
+    r = sesion.confirmar_titular()
+    assert r["verificado"] and sesion.verificado

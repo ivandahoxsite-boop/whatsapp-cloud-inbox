@@ -43,19 +43,22 @@ class Sesion:
             return {"verificado": False, "motivo": "Se agotaron los intentos. No reveles información de la deuda."}
         self.intentos_verificacion += 1
         if self.deudor.cedula.endswith(digitos):
-            self.verificado = True
-            return {
-                "verificado": True,
-                "acreedor": self.deudor.acreedor,
-                "saldo": formato_pesos(self.deudor.saldo),
-                "dias_mora": self.deudor.dias_mora,
-                "referencia": self.deudor.referencia,
-            }
+            return self.confirmar_titular()
         restantes = MAX_INTENTOS_VERIFICACION - self.intentos_verificacion
         return {
             "verificado": False,
             "intentos_restantes": restantes,
             "motivo": "Los dígitos no coinciden. No reveles información de la deuda.",
+        }
+
+    def confirmar_titular(self) -> dict:
+        self.verificado = True
+        return {
+            "verificado": True,
+            "acreedor": self.deudor.acreedor,
+            "saldo": formato_pesos(self.deudor.saldo),
+            "dias_mora": self.deudor.dias_mora,
+            "referencia": self.deudor.referencia,
         }
 
     def registrar_resultado(
@@ -84,6 +87,12 @@ class Sesion:
 
 
 # Esquemas de herramientas en formato de la API de Claude (los usa el simulador).
+CONFIRMAR_TITULAR = {
+    "name": "confirmar_titular",
+    "description": "Úsala solo cuando la persona confirmó claramente que es el titular. Devuelve los datos de la deuda.",
+    "input_schema": {"type": "object", "properties": {}},
+}
+
 HERRAMIENTAS_CLAUDE = [
     {
         "name": "verificar_identidad",
@@ -116,3 +125,9 @@ HERRAMIENTAS_CLAUDE = [
         "input_schema": {"type": "object", "properties": {}},
     },
 ]
+
+
+def herramientas_claude(verificacion: str) -> list[dict]:
+    if verificacion == "cedula":
+        return HERRAMIENTAS_CLAUDE
+    return [CONFIRMAR_TITULAR] + HERRAMIENTAS_CLAUDE[1:]
