@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 CLAUDE_MODEL = os.getenv("CLAUDE_MODEL", "claude-haiku-5-5")
-EMPRESA = os.getenv("EMPRESA", "Cartera Ejemplo S.A.S.")
+EMPRESA = os.getenv("EMPRESA", "Xsite Group")
 NOMBRE_AGENTE = os.getenv("NOMBRE_AGENTE", "Valentina")
 TELEFONO_CONTACTO = os.getenv("TELEFONO_CONTACTO", "")
 DEUDORES_ARCHIVO = os.getenv("DEUDORES_ARCHIVO", "datos/deudores.ejemplo.json")
